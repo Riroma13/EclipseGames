@@ -5,7 +5,7 @@ Future features belong in `ROADMAP.md`.
 
 ## KI-001 — Technical stack not selected
 
-**Status:** Open  
+**Status:** Resolved by SPEC-0001  
 **Severity:** Expected / non-blocking  
 **Area:** Architecture
 
@@ -16,7 +16,24 @@ The project starts without code or an approved implementation stack.
 No product implementation should begin until SPEC-0001 selects the architecture.
 
 ### Resolution
-SPEC-0001.
+Resolved by the archived SPEC-0001 platform foundation Design.
+
+---
+
+## KI-009 — Encrypted restic execution unavailable on archive host
+
+**Status:** Open / production gate  
+**Severity:** High before production  
+**Area:** Operations / recoverability
+
+### Problem
+The archive host does not provide `restic`, so encrypted restic backup/restore execution has not been demonstrated.
+
+### Impact
+The local fixture restore drill is not encrypted-restic proof. Real student data and production use remain blocked by C-01.
+
+### Resolution
+Complete the approved SPEC-0014/0016 retention/deletion, backup-expiry, and quarterly encrypted-restic restore verification work.
 
 ---
 

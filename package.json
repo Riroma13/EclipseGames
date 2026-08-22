@@ -1,0 +1,24 @@
+{
+  "name": "eclipse-games",
+  "private": true,
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "configure": "pnpm --filter @eclipse/api exec tsx scripts/configure.ts",
+    "migrate": "pnpm --filter @eclipse/api exec tsx scripts/migrate.ts",
+    "bootstrap": "pnpm --filter @eclipse/api exec tsx scripts/bootstrap.ts",
+    "dev": "pnpm --parallel --filter web dev --filter api dev",
+    "build": "pnpm --recursive build",
+    "typecheck": "pnpm --recursive typecheck",
+    "test": "pnpm exec vitest run"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "4.7.0",
+    "@types/node": "22.15.30",
+    "@types/better-sqlite3": "7.6.13",
+    "@types/react": "19.1.10",
+    "@types/react-dom": "19.1.7",
+    "@playwright/test": "1.54.2",
+    "typescript": "5.9.2",
+    "vitest": "3.2.4"
+  }
+}
