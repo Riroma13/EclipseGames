@@ -29,6 +29,7 @@ Choose:
 
 ### SPEC-0002 — Academic years, groups and students
 **Priority:** P0
+**Status:** Complete / archived 2026-08-22 (`PASS WITH CONDITIONS`; C-01 remains a production gate)
 
 Includes:
 - school year;
@@ -39,6 +40,8 @@ Includes:
 - specialty assignment.
 
 **Depends on:** SPEC-0001.
+
+**Next:** SPEC-0003 — Teacher classroom workspace.
 
 ### SPEC-0003 — Teacher classroom workspace
 **Priority:** P0

@@ -1,8 +1,14 @@
 # SESSION.md — Protocole Éclipse
 
-**Current phase:** SPEC-0001 Repository Ready — `YES`.
-**SPEC status:** SPEC-0001 is archived.
-**Verify:** `PASS WITH CONDITIONS`; no unresolved BLOCKER remains.
-**Health Report:** `PASS WITH CONDITIONS`; no unresolved BLOCKER remains.
-**Production condition:** C-01 remains production-only because encrypted restic execution was not demonstrated. This does not block Repository Ready for the foundation.
-**Exact next step:** `Maintainer-controlled Git review; commit only when explicitly authorized.`
+**Current phase:** SPEC-0002 Repository Ready — YES.
+**SPEC status:** SPEC-0001 and SPEC-0002 are archived. SPEC-0002 Verify and Health are `PASS WITH CONDITIONS` with C-01 as the sole production-only condition.
+**Design and Architecture Review state:** Scoped correction-pass Architecture Review result: APPROVED WITH CONDITIONS. No BLOCKER; C-01 is the only CONDITION.
+**Production condition:** C-01 remains production-only because encrypted restic execution was not demonstrated. This does not block the foundation, but blocks real student data and production use until SPEC-0014/0016 conditions are complete.
+**Conditions:** Preserve C-01 in downstream acceptance criteria: before real student data or production use, SPEC-0014/0016 must define/implement retention and deletion including backup expiry and demonstrate quarterly encrypted-restic restore verification.
+**Tasks Review conditions:** Before Apply, make `0001_foundation → 0002_auth_projection → 0003_academic_roster` ordering explicit and test registered order/repeatability, fixture isolation, and fail-closed startup; preserve RED-first coverage for correction-lock idempotency/all correction failures and safe `500`; name exact `/api/v1` endpoints and assert no client-side filtering/private fallback. These are implementation-evidence conditions, not architecture changes.
+**Work Unit 2 evidence:** Contracts, repository/service, authenticated `/api/v1` routes, terminal archive, atomic batch creation, correction safeguards, stable IDs, and idempotent correction lock are implemented. Full Vitest passes 10 files / 30 tests; typecheck passes. Runtime Fastify inject covers authenticated year → group → batch creation. Rollback boundary is `apps/api/src/roster/`, `apps/api/src/http/validation.ts`, `apps/api/src/server.ts`, `packages/contracts/src/index.ts`, and `apps/api/test/integration/roster-core.test.ts`.
+**Apply Summary/evidence:** `docs/specs/SPEC-0002-academic-years-groups-students/APPLY-SUMMARY.md` records the cumulative Working Set, migration order and fail-closed evidence, AC-01–AC-08 mapping, privacy/security evidence, rollback boundary, deviations, C-01, known issues, and validation results. Build, typecheck, full Vitest (11 files / 37 tests), focused privacy/API suite (4 files / 22 tests), migration-failure tests, and Fastify runtime harness all pass. Playwright is N/A because no minimal teacher roster screen was introduced; API integration is the Design-approved workflow proof.
+**Final Verify result:** PASS WITH CONDITIONS. Independent rerun confirms the server catalog, Zod validation, SQLite `CHECK`, and authenticated runtime persistence coverage agree on `default`, `fox`, `owl`, `cat`, and `wolf`. `pnpm build`, `pnpm typecheck`, full Vitest (11 files / 38 tests), focused migration/API/privacy/integration tests (5 files / 26 tests), avatar regression, and Fastify runtime harness pass. No new normal defect was found; C-01 remains the sole production-only condition.
+**Archive result:** SPEC-0002 is archived. AC-01–AC-08 are complete; the avatar catalog persistence mismatch was remediated and independently reverified. No CRITICAL findings or unresolved BLOCKER remain.
+**Health Report:** Complete. `docs/HEALTH-REPORT.md` records fresh PASS WITH CONDITIONS evidence; no repository-health BLOCKER was found.
+**Exact next step:** Maintainer-controlled Git review; commit only when explicitly authorized.

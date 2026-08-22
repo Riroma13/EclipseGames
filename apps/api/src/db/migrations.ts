@@ -12,4 +12,8 @@ export const migrations: Migration[] = [
     id: '0002_auth_projection',
     sql: readFileSync(fileURLToPath(new URL('../../drizzle/0002_auth_projection.sql', import.meta.url)), 'utf8'),
   },
+  {
+    id: '0003_academic_roster',
+    sql: readFileSync(fileURLToPath(new URL('../../drizzle/0003_academic_roster.sql', import.meta.url)), 'utf8'),
+  },
 ];
