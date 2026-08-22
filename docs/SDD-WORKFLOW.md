@@ -18,32 +18,26 @@ Downstream phases should consume the approved decisions rather than repeatedly r
 ```text
 Design
 → Architecture Review
-→ Design Refinement only if there is a real blocker
+→ maintainer approval
 → Tasks
 → Tasks Review
-→ Tasks Refinement only if there is a real blocker
 → Apply
-→ Apply Summary
 → Verify
 → Archive
 → Health Report
 → Repository Ready
+→ Automated Git Handoff
+→ Repository Ready on synchronized main
 → STOP
 ```
 
-The workflow stops at **Repository Ready**.
+The normal path above includes the explicit maintainer approval gate between Architecture Review and Tasks. The existing Design Refinement and Tasks Refinement rules remain available only for real blockers or concrete required corrections, and the Apply Summary remains the required record after Apply and before Verify; neither changes the canonical phase order.
 
-The following are separate maintainer-controlled actions:
+For a future SPEC cycle, `Repository Ready: YES` is the explicit workflow authorization to enter the routine Automated Git Handoff defined in Section 13. Routine successful Git/GitHub steps do not require an additional confirmation.
 
-```text
-Commit
-Push
-Merge
-Release
-Tag
-```
+Outside that future-SPEC handoff, do not perform Commit, Push, Pull request, CI, Merge, Release, Tag, or other VCS delivery actions unless explicitly authorized.
 
-Do not perform them unless explicitly requested.
+Editing this workflow does not authorize or execute the handoff for the current SPEC or this documentation task. The current task remains documentation-only and performs no Git handoff.
 
 ---
 
@@ -414,17 +408,132 @@ Repository Ready means:
 - no unresolved BLOCKER remains;
 - build/test health is acceptable;
 - SESSION contains the exact next step;
-- repository is ready for maintainer-controlled version-control actions.
+- repository has passed the gate for the active SPEC's Automated Git Handoff.
+
+For a future SPEC cycle, the next transition is:
+
+`Repository Ready` → `Automated Git Handoff`
+
+The successful terminal state after that handoff is exactly:
+
+`Repository Ready on synchronized main`
 
 Then:
 
 `STOP`
 
-Do not automatically commit, push, merge, release or tag.
+The current documentation edit does not enter this transition and does not authorize any Git action for the current SPEC.
 
 ---
 
-# 13. Working Set discipline
+# 13. Automated Git Handoff
+
+The Automated Git Handoff is a deterministic post-Repository-Ready state machine for future SPEC cycles. It uses normal Git/GitHub operations; it does not authorize a custom script, a stacked delivery model, or a new SDD phase. It begins only after the active SPEC is `Repository Ready: YES` and ends only at the exact successful terminal state `Repository Ready on synchronized main`.
+
+This section is not retroactive. Editing `docs/SDD-WORKFLOW.md` does not trigger the handoff, and this current documentation task must not apply it to the current SPEC.
+
+## 13.1 State machine
+
+| State | Entry guard | Action | Success transition |
+|---|---|---|---|
+| `Repository Ready` | All preconditions pass | Enter the handoff without a routine confirmation | `Commit` |
+| `Commit` | Approved current-SPEC change set is known | Stage only approved changes and create one commit | `Push` |
+| `Push` | Active SPEC branch is the only target | Push the active SPEC branch and set upstream when needed | `Pull request` |
+| `Pull request` | No existing active-SPEC PR, or an existing PR can be reused | Create or reuse one PR targeting `main` | `CI` |
+| `CI` | Required checks are available | Wait for required GitHub checks | `Merge` |
+| `Merge` | Required checks pass and no conflicts exist | Squash-merge the PR into `main` | `Synchronization` |
+| `Synchronization` | The merge completed | Synchronize local `main` and verify repository state | `Repository Ready on synchronized main` |
+| Any state | A listed exception occurs | Stop, preserve the state, report evidence, and request maintainer input | `STOP` |
+
+## 13.2 Preconditions
+
+All of these conditions must hold before staging:
+
+- The current branch is the active SPEC branch.
+- Never operate directly on `main`.
+- Verify is `PASS` or `PASS WITH CONDITIONS` with no `BLOCKER`.
+- Repository Ready is `YES`.
+- The working tree contains only repository files.
+- `git diff --check` passes.
+- No unexpected unrelated project files will be staged.
+
+If any precondition fails, do not begin the Commit state.
+
+## 13.3 Commit
+
+- Stage only approved current-SPEC changes.
+- Create one concise conventional commit based on the SPEC title and scope.
+- Do not rewrite unrelated history or amend unrelated commits.
+
+## 13.4 Push
+
+- Push only the active SPEC branch.
+- Set the upstream when needed.
+
+## 13.5 Pull request
+
+- Create one PR targeting `main` when no active-SPEC PR exists; otherwise reuse the existing PR.
+- The PR body summarizes the SPEC, the Verify result, and any remaining conditions.
+- Do not use stacked PRs or alternate bases unless a future approved workflow explicitly requires them.
+
+## 13.6 CI
+
+- Wait for all required GitHub checks.
+- A CI failure stops automation with the failing check and available evidence recorded.
+- Never weaken tests to obtain green CI.
+- Merge conflicts stop automation and request maintainer input.
+
+## 13.7 Merge
+
+- Merge only after required checks pass and no conflicts exist.
+- Squash-merge into `main`.
+- Use a concise conventional squash message based on the SPEC title.
+- Do not use merge commits or rebase merge by default.
+
+## 13.8 Synchronization
+
+- Switch the local repository to `main`.
+- Fetch and pull with `--ff-only`.
+- Verify that local `main` equals `origin/main`.
+- Verify a clean working tree.
+- Optionally delete the merged local SPEC branch only when it is safe, including that it is no longer current, is merged, and has no unpushed work.
+- Never delete remote branches unless GitHub deletes them automatically or an explicit policy permits it.
+
+Only after every synchronization check passes, report the successful terminal state exactly as:
+
+`Repository Ready on synchronized main`
+
+Then:
+
+`STOP`
+
+## 13.9 Stop/exception policy
+
+Automation must stop immediately and request maintainer input for:
+
+- CI failure;
+- merge conflicts;
+- unexpected files;
+- wrong branch or base;
+- ambiguous Git state;
+- a force-push requirement;
+- history rewriting beyond the normal squash merge;
+- credentials or authentication failure;
+- any material decision.
+
+On an exception, do not bypass checks, improvise a workaround, continue to a later state, rewrite history, force-push, or delete branches to hide the problem. Report the current branch, PR/base state, relevant check or Git evidence, and the exact reason for stopping. No further handoff action occurs until the maintainer resolves the exception.
+
+## 13.10 Still maintainer-controlled
+
+Release, Tag, production deployment, destructive Git operations, force push, and branch-history rewriting outside the normal squash merge remain maintainer-controlled.
+
+## 13.11 Human-on-exception principle
+
+Do not request confirmation at routine successful Git steps. Involve the maintainer only for exceptions or material decisions.
+
+---
+
+# 14. Working Set discipline
 
 Design predicts the likely implementation surface.
 
@@ -455,7 +564,7 @@ Do not repeatedly scan the whole repository after Design without evidence.
 
 ---
 
-# 14. Review-loop minimization
+# 15. Review-loop minimization
 
 Default target:
 - one Architecture Review;
@@ -475,7 +584,7 @@ Avoid reviewer churn caused by:
 
 ---
 
-# 15. Project-specific safety checks
+# 16. Project-specific safety checks
 
 Any SPEC touching these areas requires explicit tests:
 
@@ -516,7 +625,7 @@ Verify:
 
 ---
 
-# 16. Automation policy
+# 17. Automation policy
 
 Automation should remain thin.
 
@@ -524,11 +633,15 @@ Do not create custom orchestration, agent frameworks, metrics pipelines or workf
 
 Automate only after repeated manual friction demonstrates a real need.
 
+The Automated Git Handoff in Section 13 is the approved policy response to repeated post-Repository-Ready Git friction. It describes normal Git/GitHub operations and does not require a custom orchestration script, agent framework, metrics pipeline, or repository workflow file.
+
 Repository documents and normal development commands should remain understandable without the automation layer.
 
 ---
 
-# 17. Stop conditions
+# 18. Stop conditions
+
+These are SDD phase-level stop conditions. Automated Git Handoff exceptions are governed by Section 13 and stop delivery while requesting maintainer input, even when they do not indicate an implementation BLOCKER.
 
 Stop and surface a BLOCKER when:
 - the requested implementation contradicts an approved Design;
