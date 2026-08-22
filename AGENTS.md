@@ -57,6 +57,9 @@ If two sources conflict, stop only when the conflict affects correctness, privac
 - Apply executes approved Tasks.
 - Verify checks implementation against approved Design and acceptance criteria.
 - Archive records outcomes and learning.
-- Commit, Push, Merge, Release and Tag remain maintainer-controlled unless explicitly requested.
+- Normal post-Repository-Ready Commit, Push, PR, CI, Squash-Merge and Synchronization are performed by the Automated Git Handoff defined in `docs/SDD-WORKFLOW.md`.
+- Release, Tag, production deployment, destructive Git operations, force push, and history rewriting outside normal squash merge remain maintainer-controlled.
+- Exceptions and material decisions always return to the maintainer.
+- Editing this workflow does not trigger it or apply it retroactively to the current SPEC. No commit, push, PR, CI, merge, release, tag, branch change, or other VCS action is authorized for the current documentation task.
 
 Detailed workflow rules live only in `docs/SDD-WORKFLOW.md`.
