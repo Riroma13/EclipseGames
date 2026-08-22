@@ -1,0 +1,57 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "git commit -m *": "allow",
+      "git push -u origin spec/*": "allow",
+      "git push --set-upstream origin spec/*": "allow",
+      "git push origin spec/*": "allow",
+      "git switch main": "allow",
+      "git commit -m * --amend*": "deny",
+      "git commit -m * --no-verify*": "deny",
+      "git push* origin spec/* ?*": "deny",
+      "git push* origin spec/*:*": "deny",
+      "gh pr merge * --merge*": "deny",
+      "gh pr merge * --rebase*": "deny",
+      "gh pr merge * --admin*": "deny",
+      "gh release *": "deny",
+      "npm publish*": "deny",
+      "pnpm publish*": "deny",
+      "docker push *": "deny",
+      "docker compose up -d*": "deny",
+      "docker compose up *--detach*": "deny",
+      "kubectl apply *": "deny",
+      "helm upgrade *": "deny",
+      "gh workflow run *": "deny"
+    }
+  },
+  "agent": {
+    "sdd-orchestrator": {
+      "permission": {
+        "bash": {
+          "git commit -m *": "allow",
+          "git push -u origin spec/*": "allow",
+          "git push --set-upstream origin spec/*": "allow",
+          "git push origin spec/*": "allow",
+          "git switch main": "allow",
+          "git commit -m * --amend*": "deny",
+          "git commit -m * --no-verify*": "deny",
+          "git push* origin spec/* ?*": "deny",
+          "git push* origin spec/*:*": "deny",
+          "gh pr merge * --merge*": "deny",
+          "gh pr merge * --rebase*": "deny",
+          "gh pr merge * --admin*": "deny"
+        }
+      }
+    },
+    "sdd-apply": {
+      "permission": {
+        "bash": {
+          "git commit *": "deny",
+          "git push*": "deny",
+          "git switch *": "deny"
+        }
+      }
+    }
+  }
+}
