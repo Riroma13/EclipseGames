@@ -10,6 +10,7 @@ import { registerAuthRoutes } from './auth/routes.js';
 import { ensureProjectionFixture } from './projection/repository.js';
 import { registerProjectionRoutes } from './projection/routes.js';
 import { databasePathFromEnv } from './db/path.js';
+import { registerRosterRoutes } from './roster/routes.js';
 
 type ServerOptions = {
   logger?: boolean;
@@ -37,6 +38,7 @@ export function createServer(databaseUrl = databasePathFromEnv(), options: Serve
     if (teacher) ensureProjectionFixture(db.database, teacher.id);
     registerAuthRoutes(instance, db.database);
     registerProjectionRoutes(instance, db.database);
+    registerRosterRoutes(instance, db.database);
   });
   const webRoot = resolve(process.cwd(), 'apps/web/dist');
   if (existsSync(webRoot)) {

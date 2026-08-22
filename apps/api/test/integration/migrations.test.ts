@@ -18,10 +18,16 @@ function database() {
 describe('SQLite migrations', () => {
   it('applies migrations in order and is repeatable', () => {
     const db = database();
-    expect(migrateDatabase(db, migrations)).toEqual({ applied: ['0001_foundation', '0002_auth_projection'] });
+    expect(migrateDatabase(db, migrations)).toEqual({ applied: ['0001_foundation', '0002_auth_projection', '0003_academic_roster'] });
     expect(migrateDatabase(db, migrations)).toEqual({ applied: [] });
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'app_metadata'").get()).toBeTruthy();
-    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 2 });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 3 });
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'projection_students'").get()).toBeTruthy();
+    expect(db.prepare('SELECT id FROM schema_migrations ORDER BY rowid').all()).toEqual([
+      { id: '0001_foundation' },
+      { id: '0002_auth_projection' },
+      { id: '0003_academic_roster' },
+    ]);
   });
 
   it('fails closed when a migration fails', () => {
