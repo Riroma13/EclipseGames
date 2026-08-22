@@ -68,3 +68,84 @@ No coverage command is configured or required by the archived Design; no coverag
 - [SPEC-0001 verification evidence](specs/SPEC-0001-platform-foundation/VERIFY-REPORT.md)
 
 **Exact next SDD step:** Repository Ready determination.
+
+---
+
+# SPEC-0003 Health Report — Teacher Classroom Workspace
+
+**Date:** 2026-08-22
+**Project:** eclipsegames
+**Scope:** Archived SPEC-0003 — Teacher Classroom Workspace
+**Branch observed:** `spec/0003-teacher-classroom-workspace`
+**Artifact store:** both (repository-native documentation plus Engram)
+**Health result:** **PASS WITH CONDITIONS**
+
+Fresh repository-native health checks pass for the SPEC-0003 workspace, including focused and full Vitest, typecheck, build, and the complete 12-test built-artifact Fastify Playwright suite. No repository-health BLOCKER or CRITICAL finding was found. C-01 remains the sole production-only condition; the current working tree also contains untracked `.opencode/` files outside the SPEC-0003 Working Set and they require scope review before any handoff. This report assesses health and does not perform Repository Ready or Git handoff.
+
+## Command evidence
+
+| Check | Exact command | Exit | Output SHA-256 | Result |
+|---|---|---:|---|---|
+| Focused workspace Vitest | `pnpm exec vitest run apps/web/src/workspace/*.test.ts` | 0 | `sha256:54441c1d6072b41e0cf4e730379f25e355e4a7eda6786c81bf95c4b278ea3894` | PASS — 2 files, 13 tests |
+| Full Vitest | `pnpm exec vitest run` | 0 | `sha256:1afb8279916d1f753017dfe32476e22f74da3fa84d8d0424524c2720b14fe790` | PASS — 13 files, 51 tests; authoritative roster/projection privacy tests included |
+| Typecheck | `pnpm typecheck` | 0 | `sha256:2a4cd59fcbfb0ee2607d161aac1d9132fd78062e5364f1d57157a9df3f4c324` | PASS — web and API |
+| Build | `pnpm build` | 0 | `sha256:1dfcc8a89b2a267e2109d8b9fc303c4358b569158487791a4cf57230b40ad8bd` | PASS — web Vite and API TypeScript builds |
+| Complete built-artifact workspace suite | `pnpm exec playwright test apps/web/e2e/teacher-workspace.spec.ts` | 0 | `sha256:91317752c5963d676fab8b9c8d97d18c42268c27b85d65fb0075c7ab48d1c272` | PASS — 12 Chromium tests against Fastify serving the built artifact |
+
+The Playwright configuration rebuilds and serves the built artifact, and the fresh run passed all 12 tests. No coverage command or threshold is configured; no coverage claim is made.
+
+## Health checks
+
+### Lint
+
+**N/A.** No `lint` script or repository-defined lint framework is present in the root or workspace manifests. No lint command was invented or run.
+
+### Migration and schema state
+
+- SPEC-0003 introduced no migration, schema, database, API, contract, or server changes.
+- `apps/api/drizzle/0001_foundation.sql`, `0002_auth_projection.sql`, and `0003_academic_roster.sql` remain the existing migration set.
+- The current Git diff has no changed files under `apps/api/src/**`, `apps/api/drizzle/**`, `packages/**`, manifests, or `pnpm-lock.yaml`.
+- This matches the archived Design, Apply Summary, Verify Report, and Archive Report.
+
+### Privacy boundary regressions
+
+- The fresh full Vitest run passed the canonical `TeacherStudentDto` and projection privacy tests.
+- Workspace source uses canonical authenticated roster data and does not read `projection_students` or projection endpoints.
+- `/#/workspace` remains separate from `/`; the root projection smoke remains green in the built-artifact Playwright suite.
+- No browser storage, private URL payload, private logging, client-side projection filter, or private DTO fallback was found in the SPEC-0003 workspace implementation or E2E suite.
+- No private roster data is placed in the runtime harness beyond controlled fixture values.
+
+### Dependency and architecture drift
+
+- No new dependency, manifest, or lockfile change is present.
+- React/Vite, Fastify, SQLite/Drizzle, pure TypeScript domain boundaries, HashRouter, and built Fastify topology remain as designed in DEC-011 and SPEC-0003.
+- No API composition route, server fallback, migration, mutation, persistence, history, or global undo mechanism was added.
+- Archived SPEC context is coherent: Design, Tasks (12/12), Apply Summary, Verify Report, Archive Report, ROADMAP, and SESSION all identify SPEC-0003 as archived and C-01 as the remaining production-only condition.
+
+### Working tree and branch health
+
+- Branch: `spec/0003-teacher-classroom-workspace` (unchanged).
+- `git diff --check`: PASS.
+- Expected current-SPEC/project-policy files are present, including `apps/web/src/workspace/**`, `apps/web/e2e/teacher-workspace.spec.ts`, `main.tsx`, `styles.css`, `vitest.config.ts`, `playwright.config.ts`, SPEC-0003 phase artifacts, and the documented context updates.
+- Unexpected/unowned for this SPEC: untracked `.opencode/agents/sdd-apply.md`, `.opencode/commands/sdd-apply.md`, and `.opencode/skills/sdd-apply/SKILL.md`. They were not modified by this Health phase and are not included in the SPEC-0003 Working Set; review their ownership before staging or handoff.
+- No files were staged or modified by Git commands in this phase.
+
+## Conditions, warnings, and blockers
+
+**BLOCKERS:** None found.
+
+**CONDITION — C-01 (production-only):** Before real student data or production use, SPEC-0014/0016 must define and implement retention/deletion including backup expiry and demonstrate quarterly encrypted-restic restore verification. This Health phase did not rerun the unavailable production backup tool; `KNOWN_ISSUES.md` remains the source of the open host limitation. C-01 is not a repository-health blocker for SPEC-0003.
+
+**NON-BLOCKING:** The untracked `.opencode/` files listed above are outside the SPEC-0003 Working Set and need ownership/scope review before delivery. No application-code, Design, Tasks, Verify, API/contract, manifest, migration, or deployment changes were made by Health.
+
+## Evidence references and next step
+
+- [SPEC-0003 Design](specs/SPEC-0003-teacher-classroom-workspace/DESIGN.md)
+- [Tasks](specs/SPEC-0003-teacher-classroom-workspace/TASKS.md)
+- [Apply Summary](specs/SPEC-0003-teacher-classroom-workspace/APPLY-SUMMARY.md)
+- [Verify Report](specs/SPEC-0003-teacher-classroom-workspace/VERIFY-REPORT.md)
+- [Archive Report](specs/SPEC-0003-teacher-classroom-workspace/ARCHIVE-REPORT.md)
+- [Project context](../.ai/context/PROJECT.md)
+- [Session context](../.ai/context/SESSION.md)
+
+**Exact next SDD step:** Repository Ready determination. Do not perform Repository Ready or Automated Git Handoff in this phase.
