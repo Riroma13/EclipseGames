@@ -45,6 +45,7 @@ Includes:
 
 ### SPEC-0003 — Teacher classroom workspace
 **Priority:** P0
+**Status:** Complete / archived 2026-08-22 (`PASS WITH WARNINGS`; C-01 remains a non-blocking production-only condition)
 
 Includes:
 - group selector;
@@ -55,6 +56,8 @@ Includes:
 - undo foundation.
 
 **Depends on:** SPEC-0002.
+
+**Next:** Health Report for SPEC-0003.
 
 ---
 

@@ -1,7 +1,10 @@
 import * as React from 'react';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { HashRouter, Route, Routes } from 'react-router-dom';
 import './styles.css';
+import { WorkspaceApp } from './workspace/WorkspaceApp';
+import { RuntimePresentationHarness } from './workspace/RuntimePresentationHarness';
 
 type ProjectionStudent = {
   avatar: string;
@@ -51,4 +54,5 @@ function App() {
   return <main className="shell"><header className="masthead"><div><p className="eyebrow">CLASSROOM VIEW · SAFE FIELDS ONLY</p><h1>Classroom signal</h1></div><span className="live-dot">LIVE</span></header><section className="signal-grid" aria-label="Classroom projection">{students.map((student) => <article className="student-card" data-testid="projection-card" key={student.alias}><div className="avatar" aria-hidden="true">{student.avatar === 'default' ? '◌' : '•'}</div><div className="student-copy"><h2>{student.alias}</h2><p>{student.specialty}</p><div className="student-meta"><span>Level {student.xpLevel}</span><span>{student.energyVisualState}</span></div></div></article>)}</section></main>;
 }
 
-createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);
+const runtimeHarnessEnabled = window.location.hostname === '127.0.0.1' || import.meta.env.VITE_WORKSPACE_RUNTIME_TEST === 'true';
+createRoot(document.getElementById('root')!).render(<StrictMode><HashRouter><Routes><Route path="/" element={<App />} /><Route path="/workspace" element={<WorkspaceApp />} /><Route path="/workspace-runtime-test" element={runtimeHarnessEnabled ? <RuntimePresentationHarness /> : <App />} /></Routes></HashRouter></StrictMode>);
