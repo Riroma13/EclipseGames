@@ -134,12 +134,27 @@ Do not introduce multi-tenancy, organization hierarchies or enterprise administr
 
 ---
 
-## DEC-010 — Technical stack is intentionally undecided before SPEC-0001
+## DEC-010 — Technical stack was intentionally undecided before SPEC-0001
 
-**Status:** Accepted
+**Status:** Historical / Superseded by DEC-011
 
 ### Decision
 No frontend, backend, database, deployment or repository stack is chosen in the SDD foundation.
 
 ### Rationale
 The project has no existing codebase. Stack selection belongs in the first Design so it can be reasoned about once and then treated as settled.
+
+---
+
+## DEC-011 — SPEC-0001 platform foundation stack and boundaries
+
+**Status:** Accepted
+
+### Decision
+The platform uses a React/Vite web app with a Fastify REST API, SQLite managed by Drizzle, opaque revocable cookie sessions, pure TypeScript domain modules, server-side projection allowlists, and layered Vitest plus Playwright testing. It runs as one Docker-deployed service with explicit web, API, domain, and contract package boundaries.
+
+### Rationale
+This topology keeps the single-teacher MVP operationally small while preserving privacy, testability, and clear ownership for downstream SPECs.
+
+### Consequences
+Server DTO mapping is the privacy authority; domain modules do not perform I/O; downstream work must preserve the selected stack and boundaries unless contradictory evidence creates a Design blocker.

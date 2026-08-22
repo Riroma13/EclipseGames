@@ -7,6 +7,7 @@ SPEC numbering is provisional until each SPEC is created.
 
 ### SPEC-0001 — Platform foundation and architecture
 **Priority:** P0
+**Status:** Complete / archived 2026-08-21 (`PASS WITH CONDITIONS`; C-01 remains a production gate)
 
 Choose:
 - stack;
@@ -19,6 +20,8 @@ Choose:
 - baseline UI approach.
 
 **Depends on:** none.
+
+**Next:** SPEC-0002 — Academic years, groups and students.
 
 ---
 
