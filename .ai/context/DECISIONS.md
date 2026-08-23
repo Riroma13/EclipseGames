@@ -158,3 +158,21 @@ This topology keeps the single-teacher MVP operationally small while preserving 
 
 ### Consequences
 Server DTO mapping is the privacy authority; domain modules do not perform I/O; downstream work must preserve the selected stack and boundaries unless contradictory evidence creates a Design blocker.
+
+---
+
+## DEC-012 — Product simplicity is the default
+
+**Status:** Accepted
+
+### Decision
+
+EclipseGames uses the simplest reliable solution for the teacher's classroom workflow as its default product and engineering bias. Complexity requires a concrete current requirement and remains bounded by privacy, authentication, correctness, data integrity, recoverability and testing.
+
+### Rationale
+
+The product is used live by teachers with classroom-sized groups, so unnecessary configuration, abstraction and scale-oriented infrastructure would obstruct the workflow without present value.
+
+### Consequences
+
+`.ai/context/PROJECT.md` is the canonical source for the operational rules. Every future Design includes a short **Simplicity Check**.
