@@ -143,6 +143,82 @@ test('search clear, no-match, ordered cards, keyboard selection, and panel focus
   await expect(cards.nth(0)).toBeFocused();
 });
 
+test('AC-11 tablet dialog traps Tab focus in both directions', async ({ page }) => {
+  const { yearId, groupId } = await seedRoster(page, `${Date.now()}-focus-trap`);
+  await page.setViewportSize({ width: 800, height: 800 });
+  await signIn(page, `/#/workspace?year=${yearId}&group=${groupId}`);
+  await page.getByRole('button', { name: /Ada Lovelace/ }).click();
+  await page.getByRole('button', { name: 'COMMUNICATION' }).click();
+  const close = page.getByRole('button', { name: 'Close student panel' });
+  await close.focus();
+  await expect(close).toBeFocused();
+  const firstValue = page.getByRole('button', { name: '+1' });
+  await firstValue.focus();
+  await page.keyboard.press('Shift+Tab');
+  await expect(close).toBeFocused();
+  await page.locator('summary').focus();
+  await expect(page.locator('summary')).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(close).toBeFocused();
+});
+
+test('AC-06 real Register XP path exposes pending, failure, retry, and authoritative success', async ({ page }) => {
+  const { yearId, groupId } = await seedRoster(page, `${Date.now()}-xp-retry`);
+  const xpUrl = `**/api/v1/students/*/xp-evidence`;
+  let attempts = 0;
+  await page.route(xpUrl, async route => {
+    attempts += 1;
+    if (attempts === 1) {
+      await new Promise(resolve => setTimeout(resolve, 250));
+      await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'Temporary XP failure.' }) });
+      return;
+    }
+    await route.continue();
+  });
+  await signIn(page, `/#/workspace?year=${yearId}&group=${groupId}`);
+  await page.getByRole('button', { name: /Ada Lovelace/ }).click();
+  await page.getByRole('button', { name: 'COMMUNICATION' }).click();
+  await page.getByRole('button', { name: '+3' }).click();
+  await expect(page.getByRole('button', { name: '+3' })).toBeDisabled();
+  await expect(page.getByText('Could not register XP. Try again.')).toBeVisible();
+  await page.getByRole('button', { name: '+3' }).click();
+  await expect(page.getByText(/Base XP \+3 · No specialty bonus · Effective XP \+3/)).toBeVisible();
+  await expect(page.getByText('Annual XP: 3 · Level 1')).toBeVisible();
+  expect(attempts).toBe(2);
+});
+
+test('AC-14 proves the contiguous teacher journey through real XP and reversal', async ({ page }) => {
+  const { yearId, groupId } = await seedRoster(page, `${Date.now()}-journey`);
+  const login = await page.request.post('/api/v1/auth/session', { data: { email: 'teacher@example.test', password: 'change-me-in-development' } });
+  expect(login.status()).toBe(204);
+  const cookie = login.headers()['set-cookie']?.split(';')[0];
+  const secondGroup = await page.request.post(`/api/v1/academic-years/${yearId}/groups`, { headers: cookie ? { cookie } : undefined, data: { name: 'Continue teaching group' } });
+  expect(secondGroup.status()).toBe(200);
+  const secondGroupId = (await secondGroup.json()).id as string;
+
+  await signIn(page, `/#/workspace?year=${yearId}&group=${groupId}`);
+  await expect(page.getByText(/E2E .*journey · Group .*journey/)).toBeVisible();
+  await page.getByLabel('Search students').fill('zoe');
+  await page.getByRole('button', { name: /Zoë Durand/ }).click();
+  await expect(page.getByRole('heading', { name: 'Zoë Durand' })).toBeVisible();
+  await expect(page.getByText('Analyst', { exact: true })).toBeVisible();
+  for (let index = 0; index < 4; index += 1) {
+    await page.getByRole('button', { name: 'PRECISION' }).click();
+    await page.getByRole('button', { name: '+3' }).click();
+    await expect(page.getByText(/Base XP \+3 · Specialty bonus \+1 · Effective XP \+4/)).toBeVisible();
+  }
+  await expect(page.getByText('Annual XP: 16 · Level 2')).toBeVisible();
+  await expect(page.getByText('Badge unlocked: Ojo clínico')).toBeVisible();
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect(page.getByText('XP registration undone.')).toBeVisible();
+  await expect(page.getByText('Annual XP: 12 · Level 2')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Zoë Durand' })).toBeVisible();
+  await page.getByRole('combobox', { name: 'Group' }).selectOption({ label: 'Continue teaching group' });
+  await expect(page.getByRole('combobox', { name: 'Group' })).toHaveValue(secondGroupId);
+  await expect(page.locator('.context-line')).toContainText('Continue teaching group');
+  await expect(page.getByText('No students in this group.')).toBeVisible();
+});
+
 test('group authentication expiry clears the private workspace and shows recovery', async ({ page }) => {
   const { yearId } = await seedRoster(page, `${Date.now()}-auth`);
   await page.route('**/api/v1/academic-years/*/groups', async (route) => { await route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ code: 'AUTH_REQUIRED', message: 'Sign-in required.' }) }); });
@@ -214,6 +290,21 @@ test('selected student removed by refresh clears the panel, URL selection, and a
   await expect(page.getByText('The selected student is no longer available.')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Refresh Student' })).toHaveCount(0);
   expect(new URL(page.url()).hash).not.toContain('student=');
+});
+
+test('AC-03 approved 30-record scan fixture stays scannable without changing the demo seed', async ({ page }) => {
+  const yearId = '00000000-0000-4000-8000-000000000301'; const groupId = '00000000-0000-4000-8000-000000000302';
+  const fixture = Array.from({ length: 30 }, (_, index) => ({ id: `00000000-0000-4000-8000-${String(index + 303).padStart(12, '0')}`, groupId, realName: `Fixture Student ${index + 1}`, alias: `Student ${index + 1}`, avatar: 'default', specialty: index % 2 ? 'Analyst' : 'Leader', archivedAt: null }));
+  await page.route('**/api/v1/academic-years*', async route => { if (!new URL(route.request().url()).pathname.endsWith('/academic-years')) return route.continue(); await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: yearId, label: 'Approved scan fixture', startsOn: '1900-09-01', endsOn: '1901-07-01', archivedAt: null }]) }); });
+  await page.route(`**/api/v1/academic-years/${yearId}/groups`, async route => { await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: groupId, academicYearId: yearId, name: '30 students' }]) }); });
+  await page.route(`**/api/v1/groups/${groupId}/students*`, async route => { await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fixture) }); });
+  await signIn(page, `/#/workspace?year=${yearId}&group=${groupId}`);
+  await expect(page.locator('.workspace-student-card')).toHaveCount(30);
+  await page.getByLabel('Search students').fill('Student 30');
+  await expect(page.getByRole('button', { name: /Fixture Student 30/ })).toBeVisible();
+  await page.getByRole('button', { name: /Fixture Student 30/ }).click();
+  await expect(page.getByRole('heading', { name: 'Fixture Student 30' })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 });
 
 test('post-401 sign-in recovery reloads context without stale private cards', async ({ page }) => {

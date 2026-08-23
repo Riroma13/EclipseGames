@@ -362,10 +362,10 @@ Narrative events do not automatically modify grades, XP, RT or behaviour.
 The primary operational requirement is speed.
 
 Target interaction:
-`Find student → register action → continue teaching`.
+`Find the student → perform the classroom action → continue teaching`.
 
 Guidelines:
-- common actions should take 1–2 taps/clicks where practical;
+- common classroom actions should require approximately 1–2 interactions after context/student selection where practical;
 - no mandatory comments for routine events;
 - RT must support whole-class bulk entry plus exception editing;
 - autosave or equivalent safe persistence is desirable;
@@ -417,6 +417,34 @@ The first architecture Design must explicitly choose and justify:
 Do not invent or silently assume a stack before that Design is approved.
 
 ## 11. Engineering philosophy
+
+### Product simplicity principle
+
+> EclipseGames should be the simplest product that reliably solves the teacher's classroom workflow. Complexity requires justification; simplicity does not.
+
+- Optimize first for teachers actively teaching a class.
+- Product north star: `Find the student → perform the classroom action → continue teaching.`
+- Common classroom actions should require approximately 1–2 interactions after context/student selection when practical.
+- Prefer obvious workflows over configurable workflows.
+- Prefer sensible defaults over settings.
+- Prefer explicit small domain modules over generic engines/frameworks.
+- Avoid enterprise architecture for hypothetical scale.
+- Optimize for normal academy/classroom-sized groups, not internet-scale workloads.
+- Do not introduce microservices, event buses, generic workflow engines, generic reward engines, complex role systems, or infrastructure abstractions without a concrete approved requirement.
+- Do not implement future SPEC functionality early merely for extensibility.
+- Reuse existing concepts and infrastructure before creating new abstractions.
+- Keep teacher-facing language classroom-oriented and understandable.
+- Minimize administrative data entry.
+- Routine classroom actions must not require comments, confirmation dialogs, or long forms unless correctness genuinely requires them.
+- Prefer progressive disclosure so detail does not obstruct frequent actions.
+- Simplicity must never weaken privacy, authentication, correctness, data integrity, backups, recoverability, or automated testing.
+- Prefer derived state over additional mutable state when cheap and clear.
+- Prefer synchronous/local/simple mechanisms appropriate to the existing single-service SQLite architecture.
+- A new runtime dependency requires concrete present value.
+- A new abstraction requires at least one concrete current use case.
+- A new persistent concept requires a clear authoritative purpose.
+- A new user-facing setting requires a real decision that cannot reasonably be defaulted.
+- Every future Design must include a short **Simplicity Check** validating its major concepts against this principle.
 
 - Small, cohesive modules.
 - Explicit domain rules.

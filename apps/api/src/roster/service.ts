@@ -42,3 +42,68 @@ export function updateStudent(db: Database.Database, teacherId: string, id: stri
 export function archiveStudentRecord(db: Database.Database, teacherId: string, id: string) { const { student, year } = ownedStudentContext(db, id, teacherId); if (student.archivedAt || year.archivedAt) validation('Archived students and years are read-only.'); repository.archiveStudent(db, id, now()); }
 export function correctStudentGroup(db: Database.Database, teacherId: string, studentId: string, targetGroupId: string) { try { return repository.withTransaction(db, () => { const { student, group: currentGroup, year: currentYear } = ownedStudentContext(db, studentId, teacherId); const target = ownedGroup(db, targetGroupId, teacherId); const targetYear = ownedYear(db, target.academicYearId, teacherId); if (student.archivedAt || currentYear.archivedAt || targetYear.archivedAt || currentGroup.id === target.id || currentYear.id !== targetYear.id || student.groupCorrectionLockedAt) validation('Student group correction is not allowed.'); repository.moveStudent(db, student.id, target.id); return { ...student, groupId: target.id }; }); } catch (error) { return conflict(error); } }
 export function lockStudentGroupCorrection(db: Database.Database, teacherId: string, studentId: string) { const { student } = ownedStudentContext(db, studentId, teacherId); repository.lockStudent(db, student.id, now()); return repository.findStudent(db, student.id)!; }
+
+export type DemoRosterStudent = Readonly<{
+  id: string;
+  realName: string;
+  alias: string;
+  avatar: typeof AVATARS[number];
+  specialty: typeof SPECIALTIES[number];
+}>;
+
+export type DemoRoster = Readonly<{
+  year: repository.AcademicYearRecord;
+  group: repository.GroupRecord;
+  students: repository.StudentRecord[];
+}>;
+
+function demoConflict(message: string): never { throw new ApiError('CONFLICT', 409, `Demo roster collision: ${message}`); }
+function same(value: unknown, expected: unknown, field: string) { if (value !== expected) demoConflict(field); }
+
+/**
+ * Development-only seed seam. All fixed IDs are preflighted before the first
+ * insert so a collision cannot result in a partially adopted roster.
+ */
+export function ensureOwnedDemoRoster(db: Database.Database, teacherId: string, input: {
+  year: { id: string; label: string; startsOn: string; endsOn: string };
+  group: { id: string; name: string };
+  students: readonly DemoRosterStudent[];
+}): DemoRoster {
+  return repository.withTransaction(db, () => {
+    const existingYear = repository.findYear(db, input.year.id);
+    if (existingYear) {
+      same(existingYear.ownerTeacherId, teacherId, 'academic year owner');
+      same(existingYear.label, input.year.label, 'academic year label');
+      same(existingYear.startsOn, input.year.startsOn, 'academic year start');
+      same(existingYear.endsOn, input.year.endsOn, 'academic year end');
+      same(existingYear.archivedAt, null, 'academic year archive state');
+    }
+
+    const existingGroup = repository.findGroup(db, input.group.id);
+    if (existingGroup) {
+      same(existingGroup.ownerTeacherId, teacherId, 'group owner');
+      same(existingGroup.academicYearId, input.year.id, 'group parent');
+      same(existingGroup.name, input.group.name, 'group name');
+    }
+
+    const existingStudents = input.students.map((student) => repository.findStudent(db, student.id));
+    existingStudents.forEach((existing, index) => {
+      if (!existing) return;
+      const expected = input.students[index];
+      same(existing.groupId, input.group.id, `student ${expected.id} parent`);
+      same(existing.realName, expected.realName, `student ${expected.id} name`);
+      same(existing.alias, expected.alias, `student ${expected.id} alias`);
+      same(existing.avatar, expected.avatar, `student ${expected.id} avatar`);
+      same(existing.specialty, expected.specialty, `student ${expected.id} specialty`);
+      same(existing.archivedAt, null, `student ${expected.id} archive state`);
+    });
+
+    const year = existingYear ?? repository.insertYear(db, { ownerTeacherId: teacherId, ...input.year, archivedAt: null, createdAt: now() });
+    const group = existingGroup ?? repository.insertGroup(db, { id: input.group.id, ownerTeacherId: teacherId, academicYearId: input.year.id, name: input.group.name, createdAt: now() });
+    const students = input.students.map((student, index) => existingStudents[index] ?? repository.insertStudent(db, {
+      id: student.id, groupId: input.group.id, realName: student.realName, alias: student.alias,
+      avatar: student.avatar, specialty: student.specialty, archivedAt: null, groupCorrectionLockedAt: null, createdAt: now(),
+    }));
+    return { year, group, students };
+  });
+}

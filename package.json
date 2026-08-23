@@ -6,6 +6,7 @@
     "configure": "pnpm --filter @eclipse/api exec tsx scripts/configure.ts",
     "migrate": "pnpm --filter @eclipse/api exec tsx scripts/migrate.ts",
     "bootstrap": "pnpm --filter @eclipse/api exec tsx scripts/bootstrap.ts",
+    "seed:demo": "pnpm --filter @eclipse/api exec tsx scripts/seed-demo.ts",
     "dev": "pnpm --parallel --filter web dev --filter api dev",
     "build": "pnpm --recursive build",
     "typecheck": "pnpm --recursive typecheck",
