@@ -65,6 +65,7 @@ Includes:
 
 ### SPEC-0004 — XP, specialties, annual levels and badges
 **Priority:** P0
+**Status:** Complete / archived 2026-08-22 (`PASS WITH CONDITIONS`; C-01 remains a production gate)
 
 Includes:
 - XP events;
@@ -74,6 +75,9 @@ Includes:
 - badge progress and unlock.
 
 **Depends on:** SPEC-0002, SPEC-0003.
+
+**Repository Ready:** YES
+**Next:** Automated Git Handoff.
 
 ### SPEC-0005 — Coins and assessment advantages
 **Priority:** P0

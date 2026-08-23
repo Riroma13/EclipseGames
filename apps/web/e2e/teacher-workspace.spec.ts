@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
-async function signIn(page: Page) {
-  await page.goto('/#/workspace');
+async function signIn(page: Page, target = '/#/workspace') {
+  await page.goto(target);
   if (await page.getByLabel('Email').count()) {
     await page.getByLabel('Email').fill('teacher@example.test');
     await page.getByLabel('Password').fill('change-me-in-development');
@@ -125,8 +125,7 @@ test('root without a hash remains the fixture-backed projection route', async ({
 
 test('search clear, no-match, ordered cards, keyboard selection, and panel focus work on canonical roster data', async ({ page }) => {
   const { yearId, groupId } = await seedRoster(page, `${Date.now()}`);
-  await signIn(page);
-  await page.goto(`/#/workspace?year=${yearId}&group=${groupId}`);
+  await signIn(page, `/#/workspace?year=${yearId}&group=${groupId}`);
   const cards = page.locator('.workspace-student-card');
   await expect(cards).toHaveCount(2);
   await expect(cards.nth(0)).toBeVisible();
@@ -155,11 +154,13 @@ test('group authentication expiry clears the private workspace and shows recover
 
 test('stale opaque student context reconciles without exposing private values in the URL', async ({ page }) => {
   const { yearId, groupId } = await seedRoster(page, `${Date.now()}`);
-  await signIn(page);
-  await page.goto(`/#/workspace?year=${yearId}&group=${groupId}&student=not-a-uuid`);
+  await signIn(page, `/#/workspace?year=${yearId}&group=${groupId}&student=not-a-uuid`);
   await expect(page.getByText('Ada Lovelace')).toBeVisible();
-  await expect(page.locator('body')).not.toContainText('XP');
-  await expect(page.locator('body')).not.toContainText('RT');
+  await expect.poll(() => new URL(page.url()).hash).not.toContain('student=');
+  const hash = new URL(page.url()).hash;
+  const context = new URLSearchParams(hash.split('?')[1] ?? '');
+  expect([...context.keys()]).toEqual(['year', 'group']);
+  for (const value of context.values()) expect(value).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
 });
 
 test('valid stale year and group contexts reconcile and one group auto-selects', async ({ page }) => {

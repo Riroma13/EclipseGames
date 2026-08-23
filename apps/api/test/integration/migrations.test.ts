@@ -18,16 +18,19 @@ function database() {
 describe('SQLite migrations', () => {
   it('applies migrations in order and is repeatable', () => {
     const db = database();
-    expect(migrateDatabase(db, migrations)).toEqual({ applied: ['0001_foundation', '0002_auth_projection', '0003_academic_roster'] });
+    expect(migrateDatabase(db, migrations)).toEqual({ applied: ['0001_foundation', '0002_auth_projection', '0003_academic_roster', '0004_xp_specialties_levels_badges'] });
     expect(migrateDatabase(db, migrations)).toEqual({ applied: [] });
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'app_metadata'").get()).toBeTruthy();
-    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 3 });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 4 });
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'projection_students'").get()).toBeTruthy();
     expect(db.prepare('SELECT id FROM schema_migrations ORDER BY rowid').all()).toEqual([
       { id: '0001_foundation' },
       { id: '0002_auth_projection' },
       { id: '0003_academic_roster' },
+      { id: '0004_xp_specialties_levels_badges' },
     ]);
+    const table = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='xp_level_grant_transitions'").get() as {sql:string};
+    expect(table.sql).toContain('UNIQUE (sequence)');
   });
 
   it('fails closed when a migration fails', () => {

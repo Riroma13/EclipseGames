@@ -1,0 +1,4 @@
+import type { XpAnnualSummaryDto } from '@eclipse/contracts';
+export type EventRecord = { id: string; studentId: string; academicYearId: string; category: string; baseXp: number; specialtyBonusXp: number; effectiveXp: number; specialtyAtAward: string|null; comment: string|null; createdAt: string; reversedAt: string|null };
+export function toXpEvidenceDto(event: EventRecord) { return { id: event.id, studentId: event.studentId, academicYearId: event.academicYearId, category: event.category, baseXp: event.baseXp, specialtyBonusXp: event.specialtyBonusXp, effectiveXp: event.effectiveXp, specialtyAtAward: event.specialtyAtAward, comment: event.comment, createdAt: event.createdAt, reversedAt: event.reversedAt }; }
+export function toXpSummaryDto(summary: XpAnnualSummaryDto): XpAnnualSummaryDto { return summary; }

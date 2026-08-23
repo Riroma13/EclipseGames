@@ -16,6 +16,17 @@ function ownedGroup(db: Database.Database, id: string, teacherId: string) { retu
 function groupYear(db: Database.Database, group: repository.GroupRecord, teacherId: string) { const year = ownedYear(db, group.academicYearId, teacherId); return { group, year }; }
 function ownedStudentContext(db: Database.Database, id: string, teacherId: string) { const student = repository.findOwnedStudent(db, id, teacherId) ?? notFound('Student not found.'); const group = ownedGroup(db, student.groupId, teacherId); return { student, ...groupYear(db, group, teacherId) }; }
 
+/** Minimal cross-domain adapter. XP must not depend on roster table details. */
+export function getOwnedStudentAcademicYearContext(db: Database.Database, teacherId: string, studentId: string) {
+  const context = ownedStudentContext(db, studentId, teacherId);
+  return { student: context.student, group: context.group, year: context.year };
+}
+export function getOwnedStudentAcademicYearContextForYear(db: Database.Database, teacherId: string, studentId: string, academicYearId: string) {
+  const student = db.prepare(`SELECT s.id, s.group_id AS groupId, s.real_name AS realName, s.alias, s.avatar, s.specialty, s.archived_at AS archivedAt, s.group_correction_locked_at AS groupCorrectionLockedAt, s.created_at AS createdAt FROM students s JOIN groups g ON g.id=s.group_id JOIN academic_years y ON y.id=g.academic_year_id WHERE s.id=? AND y.id=? AND y.owner_teacher_id=?`).get(studentId, academicYearId, teacherId) as repository.StudentRecord | undefined;
+  if (!student) throw new ApiError('NOT_FOUND', 404, 'Student not found.');
+  const group = ownedGroup(db, student.groupId, teacherId); const year = ownedYear(db, academicYearId, teacherId); return { student, group, year };
+}
+
 export function createYear(db: Database.Database, teacherId: string, input: { label: string; startsOn: string; endsOn: string }) { const value = { label: input.label.trim(), startsOn: input.startsOn.trim(), endsOn: input.endsOn.trim() }; if (!value.label || value.startsOn >= value.endsOn) validation('Academic year values are invalid.'); try { return repository.insertYear(db, { id: randomUUID(), ownerTeacherId: teacherId, ...value, archivedAt: null, createdAt: now() }); } catch (error) { return conflict(error); } }
 export function listAcademicYears(db: Database.Database, teacherId: string, includeArchived: boolean) { return repository.listYears(db, teacherId, includeArchived); }
 export function updateYear(db: Database.Database, teacherId: string, id: string, input: { label: string; startsOn: string; endsOn: string }) { const year = ownedYear(db, id, teacherId); const value = { label: input.label.trim(), startsOn: input.startsOn.trim(), endsOn: input.endsOn.trim() }; if (year.archivedAt) validation('Archived academic years are read-only.'); if (!value.label || value.startsOn >= value.endsOn) validation('Academic year values are invalid.'); try { repository.updateYear(db, id, value); return { ...year, ...value }; } catch (error) { return conflict(error); } }
