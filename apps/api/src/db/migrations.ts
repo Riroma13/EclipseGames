@@ -16,4 +16,8 @@ export const migrations: Migration[] = [
     id: '0003_academic_roster',
     sql: readFileSync(fileURLToPath(new URL('../../drizzle/0003_academic_roster.sql', import.meta.url)), 'utf8'),
   },
+  {
+    id: '0004_xp_specialties_levels_badges',
+    sql: readFileSync(fileURLToPath(new URL('../../drizzle/0004_xp_specialties_levels_badges.sql', import.meta.url)), 'utf8'),
+  },
 ];

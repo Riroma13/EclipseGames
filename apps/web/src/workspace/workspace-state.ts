@@ -19,7 +19,7 @@ export type WorkspaceEvent =
   | { type: 'context-changed' }
   | { type: 'request-started' }
   | { type: 'action-pending'; id: string }
-  | { type: 'action-result'; actionId?: string; message: string; undo: UndoOpportunity | null }
+  | { type: 'action-result'; actionId?: string; message?: string; undo: UndoOpportunity | null }
   | { type: 'undo-expired' }
   | { type: 'undo-pending' }
   | { type: 'undo-result'; message: string }
@@ -36,7 +36,7 @@ export function reducer(state: WorkspaceState, event: WorkspaceEvent): Workspace
     case 'action-pending': return { ...state, pendingActionId: event.id, feedback: '', undo: null };
     case 'action-result':
       if (event.actionId && state.pendingActionId !== event.actionId) return state;
-      return { ...state, pendingActionId: null, feedback: event.message, undo: event.undo };
+      return { ...state, pendingActionId: null, feedback: event.message ?? state.feedback, undo: event.undo };
     case 'undo-expired': return { ...state, undo: null, feedback: 'Undo period ended.' };
     case 'undo-pending': return { ...state, pendingActionId: '__undo__' };
     case 'undo-result': return { ...state, pendingActionId: null, undo: null, feedback: event.message };

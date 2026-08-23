@@ -11,6 +11,7 @@ import { ensureProjectionFixture } from './projection/repository.js';
 import { registerProjectionRoutes } from './projection/routes.js';
 import { databasePathFromEnv } from './db/path.js';
 import { registerRosterRoutes } from './roster/routes.js';
+import { registerXpRoutes } from './xp/routes.js';
 
 type ServerOptions = {
   logger?: boolean;
@@ -39,6 +40,7 @@ export function createServer(databaseUrl = databasePathFromEnv(), options: Serve
     registerAuthRoutes(instance, db.database);
     registerProjectionRoutes(instance, db.database);
     registerRosterRoutes(instance, db.database);
+    registerXpRoutes(instance, db.database);
   });
   const webRoot = resolve(process.cwd(), 'apps/web/dist');
   if (existsSync(webRoot)) {

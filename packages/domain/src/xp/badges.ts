@@ -1,0 +1,4 @@
+import { xpCategories, type XpCategory } from './rules.js';
+export const badgeLabels: Record<XpCategory, string> = { COMMUNICATION: 'Voz activa', PRECISION: 'Ojo clínico', CONSISTENCY: 'Paso firme', COLLABORATION: 'Buen aliado' };
+export function qualifyingEventCount(events: readonly { category: XpCategory; specialtyCategoryAtAward: XpCategory | null; active: boolean }[], category: XpCategory) { return events.filter((event) => event.active && event.category === category && event.specialtyCategoryAtAward === category).length; }
+export function badgeActivity(events: readonly { id: string; category: XpCategory; specialtyCategoryAtAward: XpCategory | null; active: boolean }[]) { return xpCategories.map((category) => ({ category, unlocked: qualifyingEventCount(events, category) >= 3, sourceEventId: [...events].reverse().find((event) => event.active && event.category === category && event.specialtyCategoryAtAward === category)?.id ?? null })); }
