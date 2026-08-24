@@ -98,6 +98,7 @@ Includes:
 
 ### SPEC-0005 — Coins and assessment advantages
 **Priority:** P0
+**Status:** Complete / archived 2026-08-24 (`PASS WITH WARNINGS`; C-01 remains a production-only gate)
 
 Includes:
 - coin ledger;
@@ -107,6 +108,9 @@ Includes:
 - balance rules.
 
 **Depends on:** SPEC-0004.
+
+**Repository Ready:** YES (final gate passed; Health PASS WITH CONDITIONS and no blocker; C-01 remains production-only). Automated Git Handoff remains separate and was not executed.
+**Next:** Stop before Automated Git Handoff.
 
 ---
 

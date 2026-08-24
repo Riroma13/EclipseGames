@@ -13,4 +13,10 @@ describe('workspace XP idempotency', () => {
       { 'content-type': 'application/json', 'Idempotency-Key': '00000000-0000-4000-8000-000000000001' },
     ]);
   });
+
+  it('keeps the same idempotency key for a coin redemption retry', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ id: 'redemption' }), { status: 201, headers: { 'content-type': 'application/json' } }));
+    await workspaceApi.redeemAdvantage('student', 'context', 'standard-assessment-advantage', undefined, '00000000-0000-4000-8000-000000000009');
+    expect((fetchMock.mock.calls[0][1] as RequestInit).headers).toEqual({ 'content-type': 'application/json', 'Idempotency-Key': '00000000-0000-4000-8000-000000000009' });
+  });
 });

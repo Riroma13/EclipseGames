@@ -32,4 +32,15 @@ export const xpReverseBodySchema = z.object({ reason: z.string().trim().max(500)
 export type XpCategory = (typeof xpCategories)[number];
 export type XpAnnualSummaryDto = { studentId: string; academicYearId: string; annualEffectiveXp: number; level: 1|2|3|4|5|6|7|8; progress: { current: number; required: number; nextLevel: number|null; isMaxLevel: boolean }; badges: Array<{ category: XpCategory; label: string; unlockedAt: string }> };
 
+export const coinSourceSchema = z.enum(['LEVEL_ENTITLEMENT', 'PERSONAL_IMPROVEMENT', 'EXCEPTIONAL_FRENCH', 'EXCEPTIONAL_COLLABORATION', 'SPECIAL_CHALLENGE']);
+export const coinSummarySchema = z.object({ studentId: z.string(), academicYearId: z.string(), balance: z.number().int().nonnegative() });
+export type CoinSummaryDto = z.infer<typeof coinSummarySchema>;
+export type CoinLedgerEntryDto = { id: string; amount: number; source: string; createdAt: string; correctionOfId: string | null };
+export const coinRewardSchema = z.object({ id: z.string(), name: z.string(), cost: z.union([z.literal(2), z.literal(3)]), type: z.literal('ASSESSMENT_ADVANTAGE') });
+export type CoinRewardDto = z.infer<typeof coinRewardSchema>;
+export const assessmentContextSchema = z.object({ id: z.string(), groupId: z.string(), name: z.string(), archivedAt: z.string().nullable() });
+export type AssessmentContextDto = z.infer<typeof assessmentContextSchema>;
+export type AdvantageRedemptionDto = { id: string; studentId: string; assessmentContextId: string; rewardId: string; cost: 2 | 3; createdAt: string; reversedAt: string | null };
+export type AutomaticReversalDto = { redemptionId: string; rewardId: string; cost: 2 | 3; trigger: 'ENTITLEMENT_REVOKED'; refundLedgerEntryId: string; reversedAt: string };
+
 export { z };
