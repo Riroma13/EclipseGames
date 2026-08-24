@@ -12,6 +12,7 @@ import { registerProjectionRoutes } from './projection/routes.js';
 import { databasePathFromEnv } from './db/path.js';
 import { registerRosterRoutes } from './roster/routes.js';
 import { registerXpRoutes } from './xp/routes.js';
+import { registerCoinRoutes } from './coins/routes.js';
 
 type ServerOptions = {
   logger?: boolean;
@@ -41,6 +42,7 @@ export function createServer(databaseUrl = databasePathFromEnv(), options: Serve
     registerProjectionRoutes(instance, db.database);
     registerRosterRoutes(instance, db.database);
     registerXpRoutes(instance, db.database);
+    registerCoinRoutes(instance, db.database);
   });
   const webRoot = resolve(process.cwd(), 'apps/web/dist');
   if (existsSync(webRoot)) {

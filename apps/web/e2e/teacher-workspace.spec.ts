@@ -187,6 +187,91 @@ test('AC-06 real Register XP path exposes pending, failure, retry, and authorita
   expect(attempts).toBe(2);
 });
 
+test('SPEC-0005 real teacher redemption flow preserves balance and teaching context', async ({ page }) => {
+  const { yearId, groupId } = await seedRoster(page, `${Date.now()}-coins`);
+  const login = await page.request.post('/api/v1/auth/session', { data: { email: 'teacher@example.test', password: 'change-me-in-development' } });
+  expect(login.status()).toBe(204);
+  const cookie = login.headers()['set-cookie']?.split(';')[0];
+  const headers = cookie ? { cookie } : undefined;
+  const studentResponse = await page.request.get(`/api/v1/groups/${groupId}/students`, { headers });
+  const studentId = (await studentResponse.json())[0].id as string;
+  const contextResponse = await page.request.post('/api/v1/assessment-contexts', { headers, data: { groupId, name: 'Coins assessment' } });
+  expect(contextResponse.status()).toBe(201);
+  const assessmentContextId = (await contextResponse.json()).id as string;
+  for (const source of ['PERSONAL_IMPROVEMENT', 'EXCEPTIONAL_FRENCH', 'EXCEPTIONAL_COLLABORATION', 'SPECIAL_CHALLENGE', 'PERSONAL_IMPROVEMENT']) {
+    const grant = await page.request.post(`/api/v1/students/${studentId}/coin-grants`, { headers, data: { academicYearId: yearId, source } });
+    expect(grant.status()).toBe(201);
+  }
+
+  await signIn(page, `/#/workspace?year=${yearId}&group=${groupId}`);
+  await page.getByRole('button', { name: /Ada Lovelace/ }).click();
+  await expect(page.getByRole('heading', { name: 'Ada Lovelace' })).toBeVisible();
+  await expect(page.getByLabel('Coin balance')).toHaveText('5 coins');
+  await expect(page.getByRole('combobox', { name: /Assessment/ })).toBeVisible();
+  const standard = page.getByRole('button', { name: /Standard assessment advantage/ });
+  await standard.click();
+  await expect(standard).toBeDisabled();
+  await expect(page.getByLabel('Coin balance')).toHaveText('3 coins');
+
+  const duplicate = await page.request.post(`/api/v1/students/${studentId}/advantages`, { data: { assessmentContextId, rewardId: 'exceptional-assessment-advantage' }, headers: { ...headers, 'Idempotency-Key': '00000000-0000-4000-8000-000000000701' } });
+  expect(duplicate.status()).toBe(409);
+  const unchangedBalance = await page.request.get(`/api/v1/students/${studentId}/coins`, { headers });
+  expect(await unchangedBalance.json()).toMatchObject({ balance: 3 });
+
+  await page.getByRole('button', { name: 'Undo assessment advantage' }).click();
+  await expect(page.getByText('Assessment advantage undone.')).toBeVisible();
+  await expect(page.getByLabel('Coin balance')).toHaveText('5 coins');
+  await expect(page.getByRole('heading', { name: 'Ada Lovelace' })).toBeVisible();
+  await expect(page.getByRole('combobox', { name: /Assessment/ })).toHaveValue(assessmentContextId);
+});
+
+test('SPEC-0005 coin action proves pending, failure, retry, and privacy boundaries', async ({ page }) => {
+  const { yearId, groupId } = await seedRoster(page, `${Date.now()}-coin-failure`);
+  const login = await page.request.post('/api/v1/auth/session', { data: { email: 'teacher@example.test', password: 'change-me-in-development' } });
+  expect(login.status()).toBe(204);
+  const cookie = login.headers()['set-cookie']?.split(';')[0];
+  const headers = cookie ? { cookie } : undefined;
+  const studentResponse = await page.request.get(`/api/v1/groups/${groupId}/students`, { headers });
+  const studentId = (await studentResponse.json())[0].id as string;
+  const contextResponse = await page.request.post('/api/v1/assessment-contexts', { headers, data: { groupId, name: 'Retry assessment' } });
+  expect(contextResponse.status()).toBe(201);
+  for (const source of ['PERSONAL_IMPROVEMENT', 'EXCEPTIONAL_FRENCH', 'EXCEPTIONAL_COLLABORATION', 'SPECIAL_CHALLENGE', 'PERSONAL_IMPROVEMENT']) {
+    expect((await page.request.post(`/api/v1/students/${studentId}/coin-grants`, { headers, data: { academicYearId: yearId, source } })).status()).toBe(201);
+  }
+
+  let attempts = 0;
+  await page.route('**/api/v1/students/*/advantages', async route => {
+    attempts += 1;
+    if (attempts === 1) {
+      await new Promise(resolve => setTimeout(resolve, 250));
+      await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ code: 'TEMPORARY_FAILURE', message: 'Coin service temporarily unavailable. Try again.' }) });
+      return;
+    }
+    await route.continue();
+  });
+  await signIn(page, `/#/workspace?year=${yearId}&group=${groupId}`);
+  await page.getByRole('button', { name: /Ada Lovelace/ }).click();
+  const coinSection = page.getByRole('region', { name: 'Assessment advantages' });
+  const standard = coinSection.getByRole('button', { name: /Standard assessment advantage/ });
+  await expect(page.getByLabel('Coin balance')).toHaveText('5 coins');
+  const contextId = (await contextResponse.json()).id as string;
+  expect(page.url()).not.toContain('coin');
+  expect(page.url()).not.toContain('reward');
+  expect(page.url()).not.toContain('balance');
+  await standard.click();
+  await expect(standard).toBeDisabled();
+  await expect(page.getByText('Coin service temporarily unavailable. Try again.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Classroom workspace' })).toBeVisible();
+  await expect(page.getByLabel('Coin balance')).toHaveText('5 coins');
+  await expect(standard).toBeEnabled();
+  await standard.click();
+  await expect(page.getByText('Standard assessment advantage reserved.')).toBeVisible();
+  await expect(page.getByLabel('Coin balance')).toHaveText('3 coins');
+  await expect(page.getByRole('combobox', { name: /Assessment/ })).toHaveValue(contextId);
+  await expect(coinSection).not.toContainText(/XP|RT|rubric|grade/i);
+  expect(page.url()).not.toMatch(/(coin|reward|balance|privateValue|cost)=/i);
+});
+
 test('AC-14 proves the contiguous teacher journey through real XP and reversal', async ({ page }) => {
   const { yearId, groupId } = await seedRoster(page, `${Date.now()}-journey`);
   const login = await page.request.post('/api/v1/auth/session', { data: { email: 'teacher@example.test', password: 'change-me-in-development' } });
