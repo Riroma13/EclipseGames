@@ -24,4 +24,8 @@ export const migrations: Migration[] = [
     id: '0005_coins_assessment_advantages',
     sql: readFileSync(fileURLToPath(new URL('../../drizzle/0005_coins_assessment_advantages.sql', import.meta.url)), 'utf8'),
   },
+  {
+    id: '0006_assessment_context_name_uniqueness',
+    sql: readFileSync(fileURLToPath(new URL('../../drizzle/0006_assessment_context_name_uniqueness.sql', import.meta.url)), 'utf8'),
+  },
 ];

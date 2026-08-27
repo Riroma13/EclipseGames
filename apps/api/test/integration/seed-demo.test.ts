@@ -21,7 +21,7 @@ describe('service-owned demo seed', () => {
     expect(existsSync(filename)).toBe(false);
   }, 15_000);
 
-  it('creates the fixed fictional roster through the roster and XP services and replays safely', () => {
+  it('creates the fixed fictional roster and points through owned services and replays safely', () => {
     const value = db();
     const first = seedDemo(value, 'teacher-demo');
     const counts = () => ({ years: value.prepare('SELECT COUNT(*) AS count FROM academic_years').get(), groups: value.prepare('SELECT COUNT(*) AS count FROM groups').get(), students: value.prepare('SELECT COUNT(*) AS count FROM students').get(), events: value.prepare('SELECT COUNT(*) AS count FROM xp_evidence_events').get() });
@@ -32,7 +32,10 @@ describe('service-owned demo seed', () => {
     expect(first.roster.students).toHaveLength(16);
     expect(new Set(first.roster.students.map((student) => student.specialty)).size).toBe(8);
     expect(second.events.every((event) => event.replay)).toBe(true);
+    expect(second.coinGrants.every((grant) => grant.replay)).toBe(true);
     expect(counts()).toEqual(before);
+    expect(value.prepare('SELECT COUNT(*) AS count FROM coin_rewards').get()).toEqual({ count: 2 });
+    expect(value.prepare('SELECT SUM(amount) AS balance FROM coin_ledger WHERE student_id=? AND academic_year_id=?').get(DEMO_STUDENTS[0].id, DEMO_YEAR.id)).toEqual({ balance: 2 });
     expect(value.prepare('SELECT COUNT(*) AS count FROM xp_badge_unlocks WHERE active=1').get()).toEqual({ count: 1 });
     expect(value.prepare('SELECT COUNT(*) AS count FROM xp_evidence_events WHERE specialty_bonus_xp=1').get()).toEqual({ count: 23 });
   });
@@ -44,5 +47,16 @@ describe('service-owned demo seed', () => {
     expect(() => ensureOwnedDemoRoster(value, 'teacher-demo', { year: DEMO_YEAR, group: DEMO_GROUP, students: DEMO_STUDENTS })).toThrow(/academic year owner/);
     expect(value.prepare('SELECT COUNT(*) AS count FROM groups').get()).toEqual({ count: 0 });
     expect(value.prepare('SELECT COUNT(*) AS count FROM students').get()).toEqual({ count: 0 });
+  });
+
+  it('fails closed when a fixed points grant identity is occupied', () => {
+    const value = db();
+    value.prepare('INSERT INTO academic_years VALUES (?, ?, ?, ?, ?, ?, ?)').run(DEMO_YEAR.id, 'teacher-demo', DEMO_YEAR.label, DEMO_YEAR.startsOn, DEMO_YEAR.endsOn, null, '2026-01-01');
+    value.prepare('INSERT INTO groups VALUES (?, ?, ?, ?, ?)').run(DEMO_GROUP.id, 'teacher-demo', DEMO_YEAR.id, DEMO_GROUP.name, '2026-01-01');
+    value.prepare('INSERT INTO students VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(DEMO_STUDENTS[0].id, DEMO_GROUP.id, DEMO_STUDENTS[0].realName, DEMO_STUDENTS[0].alias, DEMO_STUDENTS[0].avatar, DEMO_STUDENTS[0].specialty, null, null, '2026-01-01');
+    value.prepare('INSERT INTO coin_ledger (id,student_id,academic_year_id,amount,source,created_at) VALUES (?,?,?,?,?,?)').run('7c2f1a90-5d44-4c61-8f20-202620270001', DEMO_STUDENTS[0].id, DEMO_YEAR.id, 1, 'SPECIAL_CHALLENGE', '2026-01-01');
+    expect(() => seedDemo(value, 'teacher-demo')).toThrow(/Demo coin collision/);
+    expect(value.prepare('SELECT COUNT(*) AS count FROM academic_years').get()).toEqual({ count: 1 });
+    expect(value.prepare('SELECT COUNT(*) AS count FROM coin_ledger').get()).toEqual({ count: 1 });
   });
 });

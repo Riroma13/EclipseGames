@@ -65,6 +65,74 @@ function authoritativeSnapshot(db: ReturnType<typeof openDatabase>['database'], 
 }
 
 describe('coin allocation lifecycle', () => {
+  it('trims and reuses active contexts, replaces archived names, and renames by stable id', async () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'eclipsegames-contexts-')), 'api.sqlite');
+    databasePaths.push(path);
+    const app = createServer(path, { logger: false, bootstrapTeacher: { email: 'teacher@example.test', password: 'correct horse battery staple' } }); apps.push(app);
+    const inspector = openDatabase(path); inspectors.push(inspector);
+    const headers = { origin: 'http://localhost:5173' };
+    const login = await app.inject({ method: 'POST', url: '/api/v1/auth/session', headers, payload: { email: 'teacher@example.test', password: 'correct horse battery staple' } });
+    const auth = { ...headers, cookie: login.headers['set-cookie'] };
+    const year = await app.inject({ method: 'POST', url: '/api/v1/academic-years', headers: auth, payload: { label: 'Contexts', startsOn: '2026-09-01', endsOn: '2027-07-01' } });
+    const group = await app.inject({ method: 'POST', url: `/api/v1/academic-years/${year.json().id}/groups`, headers: auth, payload: { name: 'A' } });
+    const groupId = group.json().id;
+    const otherGroup = await app.inject({ method: 'POST', url: `/api/v1/academic-years/${year.json().id}/groups`, headers: auth, payload: { name: 'B' } });
+    const otherGroupId = otherGroup.json().id;
+    const first = await app.inject({ method: 'POST', url: '/api/v1/assessment-contexts', headers: auth, payload: { groupId, name: '  Quiz  ' } });
+    expect(first.statusCode).toBe(201);
+    expect(first.json()).toMatchObject({ groupId, name: 'Quiz', archivedAt: null });
+    const retry = await app.inject({ method: 'POST', url: '/api/v1/assessment-contexts', headers: auth, payload: { groupId, name: ' quiz ' } });
+    expect(retry.statusCode).toBe(200);
+    expect(retry.json()).toEqual(first.json());
+    const independent = await app.inject({ method: 'POST', url: '/api/v1/assessment-contexts', headers: auth, payload: { groupId: otherGroupId, name: ' quiz ' } });
+    expect(independent.statusCode).toBe(201);
+    expect(independent.json()).toMatchObject({ groupId: otherGroupId, name: 'quiz', archivedAt: null });
+    expect(independent.json().id).not.toBe(first.json().id);
+    expect((await app.inject({ method: 'POST', url: '/api/v1/assessment-contexts', headers: auth, payload: { groupId, name: '   ' } })).statusCode).toBe(422);
+    const renamed = await app.inject({ method: 'PATCH', url: `/api/v1/assessment-contexts/${first.json().id}`, headers: auth, payload: { name: ' Final ' } });
+    expect(renamed.statusCode).toBe(200);
+    expect(renamed.json()).toMatchObject({ id: first.json().id, name: 'Final' });
+    expect((await app.inject({ method: 'PATCH', url: `/api/v1/assessment-contexts/${first.json().id}`, headers: auth, payload: { name: '   ' } })).statusCode).toBe(422);
+    inspector.database.prepare('UPDATE assessment_contexts SET archived_at=? WHERE id=?').run('2026-09-02T00:00:00.000Z', first.json().id);
+    const replacement = await app.inject({ method: 'POST', url: '/api/v1/assessment-contexts', headers: auth, payload: { groupId, name: ' quiz ' } });
+    expect(replacement.statusCode).toBe(201);
+    expect(replacement.json().id).not.toBe(first.json().id);
+    const other = await app.inject({ method: 'POST', url: '/api/v1/assessment-contexts', headers: auth, payload: { groupId, name: 'Final' } });
+    expect(other.statusCode).toBe(201);
+    const collision = await app.inject({ method: 'PATCH', url: `/api/v1/assessment-contexts/${replacement.json().id}`, headers: auth, payload: { name: ' final ' } });
+    expect(collision.statusCode).toBe(409);
+    await app.inject({ method: 'POST', url: `/api/v1/academic-years/${year.json().id}/archive`, headers: auth });
+    expect((await app.inject({ method: 'PATCH', url: `/api/v1/assessment-contexts/${first.json().id}`, headers: auth, payload: { name: 'Archived' } })).statusCode).toBe(422);
+  });
+  it('converges concurrent creates from separate app connections on one canonical context', async () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'eclipsegames-context-race-')), 'api.sqlite');
+    databasePaths.push(path);
+    const firstApp = createServer(path, { logger: false, bootstrapTeacher: { email: 'teacher@example.test', password: 'correct horse battery staple' } });
+    apps.push(firstApp);
+    const headers = { origin: 'http://localhost:5173' };
+    const firstLogin = await firstApp.inject({ method: 'POST', url: '/api/v1/auth/session', headers, payload: { email: 'teacher@example.test', password: 'correct horse battery staple' } });
+    const firstAuth = { ...headers, cookie: firstLogin.headers['set-cookie'] };
+    const year = await firstApp.inject({ method: 'POST', url: '/api/v1/academic-years', headers: firstAuth, payload: { label: 'Concurrent contexts', startsOn: '2026-09-01', endsOn: '2027-07-01' } });
+    const group = await firstApp.inject({ method: 'POST', url: `/api/v1/academic-years/${year.json().id}/groups`, headers: firstAuth, payload: { name: 'Race group' } });
+    const groupId = group.json().id;
+
+    const secondApp = createServer(path, { logger: false });
+    apps.push(secondApp);
+    const secondLogin = await secondApp.inject({ method: 'POST', url: '/api/v1/auth/session', headers, payload: { email: 'teacher@example.test', password: 'correct horse battery staple' } });
+    const secondAuth = { ...headers, cookie: secondLogin.headers['set-cookie'] };
+    const [first, second] = await Promise.all([
+      firstApp.inject({ method: 'POST', url: '/api/v1/assessment-contexts', headers: firstAuth, payload: { groupId, name: '  Concurrent Quiz  ' } }),
+      secondApp.inject({ method: 'POST', url: '/api/v1/assessment-contexts', headers: secondAuth, payload: { groupId, name: 'concurrent quiz' } }),
+    ]);
+
+    expect([first.statusCode, second.statusCode].sort()).toEqual([200, 201]);
+    expect(first.json()).toEqual(second.json());
+    const inspector = openDatabase(path);
+    inspectors.push(inspector);
+    const rows = inspector.database.prepare('SELECT id,group_id AS groupId,name,archived_at AS archivedAt FROM assessment_contexts WHERE group_id=? AND archived_at IS NULL AND lower(trim(name))=lower(trim(?))').all(groupId, 'concurrent quiz');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toEqual(first.json());
+  });
   it('allocates exactly cost grants, reverses once, and reuses released grants', async () => {
     const app = createServer(':memory:', { logger: false, bootstrapTeacher: { email: 'teacher@example.test', password: 'correct horse battery staple' } }); apps.push(app);
     const headers = { origin: 'http://localhost:5173' };

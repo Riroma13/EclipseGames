@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3';
 import { ensureOwnedDemoRoster, type DemoRosterStudent } from '../roster/service.js';
 import * as xp from '../xp/service.js';
 import type { XpCategory } from '../xp/service.js';
+import * as coins from '../coins/repository.js';
 
 export const DEMO_YEAR = { id: '9b6f3b9e-3d0f-4b1e-9b1e-202620270001', label: '2026–2027', startsOn: '2026-09-01', endsOn: '2027-07-01' } as const;
 export const DEMO_GROUP = { id: '9b6f3b9e-3d0f-4b1e-9b1e-202620270002', name: 'Demo · Groupe principal' } as const;
@@ -18,13 +19,39 @@ const names = [
 ] as const;
 const studentIds = names.map((_, index) => `9b6f3b9e-3d0f-4b1e-9b1e-20262027${String(index + 10).padStart(4, '0')}`);
 const requestIds = Array.from({ length: 23 }, (_, index) => `8a5d2c71-6e4f-4c20-9a1b-20262027${String(index + 1).padStart(4, '0')}`);
+const coinGrantIds = [
+  '7c2f1a90-5d44-4c61-8f20-202620270001',
+  '7c2f1a90-5d44-4c61-8f20-202620270002',
+] as const;
+const coinGrantSources = ['PERSONAL_IMPROVEMENT', 'EXCEPTIONAL_FRENCH'] as const;
 
 export const DEMO_STUDENTS: readonly DemoRosterStudent[] = names.map((value, index) => ({ id: studentIds[index], realName: value[0], alias: value[1], avatar: value[2], specialty: value[3] })) as readonly DemoRosterStudent[];
 
 const categories = ['COMMUNICATION', 'PRECISION', 'CONSISTENCY', 'COLLABORATION'] as const;
 const categoryFor = (specialty: string | null): XpCategory => categories[['Leader', 'Diplomat'].includes(specialty ?? '') ? 0 : ['Strategist', 'Analyst'].includes(specialty ?? '') ? 1 : ['Disciplined', 'Perseverant'].includes(specialty ?? '') ? 2 : 3];
 
+function existingDemoCoins(database: Database.Database, studentId: string) {
+  const existing = coinGrantIds.map((id) => database.prepare('SELECT id,student_id AS studentId,academic_year_id AS academicYearId,amount,source,correction_of_id AS correctionOfId,redemption_id AS redemptionId FROM coin_ledger WHERE id=?').get(id) as any);
+  existing.forEach((entry, index) => {
+    if (!entry) return;
+    if (entry.studentId !== studentId || entry.academicYearId !== DEMO_YEAR.id || entry.amount !== 1 || entry.source !== coinGrantSources[index] || entry.correctionOfId !== null || entry.redemptionId !== null) {
+      throw new Error(`Demo coin collision: grant ${coinGrantIds[index]}`);
+    }
+  });
+  return existing;
+}
+
+function seedDemoCoins(database: Database.Database, studentId: string) {
+  const existing = existingDemoCoins(database, studentId);
+  return database.transaction(() => coinGrantIds.map((id, index) => {
+    if (existing[index]) return { id, replay: true };
+    coins.grant(database, { id, studentId, academicYearId: DEMO_YEAR.id, source: coinGrantSources[index] });
+    return { id, replay: false };
+  }))();
+}
+
 export function seedDemo(database: Database.Database, teacherId: string) {
+  existingDemoCoins(database, DEMO_STUDENTS[0].id);
   const roster = ensureOwnedDemoRoster(database, teacherId, { year: DEMO_YEAR, group: DEMO_GROUP, students: DEMO_STUDENTS });
   let keyIndex = 0;
   const events = roster.students.flatMap((student, index) => {
@@ -33,5 +60,6 @@ export function seedDemo(database: Database.Database, teacherId: string) {
       category: categoryFor(student.specialty), baseXp: (index + eventIndex) % 3 + 1 as 1 | 2 | 3,
     }, requestIds[keyIndex++]));
   });
-  return { roster, events };
+  const coinGrants = seedDemoCoins(database, roster.students[0].id);
+  return { roster, events, coinGrants };
 }
