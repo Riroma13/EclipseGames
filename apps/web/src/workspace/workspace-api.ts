@@ -8,6 +8,7 @@ export type CoinSummary = { studentId:string; academicYearId:string; balance:num
 export type CoinReward = { id:string; name:string; cost:2|3; type:'ASSESSMENT_ADVANTAGE' };
 export type AdvantageRedemption = { id:string; studentId:string; assessmentContextId:string; rewardId:string; cost:2|3; createdAt:string; reversedAt:string|null };
 export type AssessmentContext = { id:string; groupId:string; name:string; archivedAt:string|null };
+export const activeAssessmentContexts = (contexts: AssessmentContext[]) => contexts.filter(context => !context.archivedAt);
 
 async function get<T>(url: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(url, { credentials: 'same-origin', signal });
@@ -32,6 +33,7 @@ export const workspaceApi = {
   coins: (studentId:string, signal?:AbortSignal) => get<CoinSummary>(`/api/v1/students/${studentId}/coins`,signal),
   coinRewards: (signal?:AbortSignal) => get<CoinReward[]>('/api/v1/coin-rewards',signal),
   assessmentContexts: (groupId:string, signal?:AbortSignal) => get<AssessmentContext[]>(`/api/v1/groups/${groupId}/assessment-contexts`,signal),
+  createAssessmentContext: (groupId:string, name:string, signal?:AbortSignal) => post<AssessmentContext>('/api/v1/assessment-contexts',{groupId,name},undefined,signal),
   redeemAdvantage: (studentId:string, assessmentContextId:string, rewardId:string, signal?:AbortSignal, idempotencyKey?:string) => post<AdvantageRedemption>(`/api/v1/students/${studentId}/advantages`,{assessmentContextId,rewardId},idempotencyKey ?? newKey(),signal),
   reverseAdvantage: (redemptionId:string, signal?:AbortSignal) => post<unknown>(`/api/v1/advantage-redemptions/${redemptionId}/reversal`,{},newKey(),signal),
 };

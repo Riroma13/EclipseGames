@@ -96,6 +96,23 @@ Includes:
 
 ---
 
+### SPEC-DEMO-002 — Teacher MVP Usability Polish
+**Priority:** P0
+**Status:** Archived after maintainer correction on 2026-08-25 (`PASS WITH CONDITIONS`; C-01 remains a production-only condition). Fresh Verify and refreshed Archive are complete; refreshed Health is `PASS WITH CONDITIONS` with no blocker; Repository Ready: YES.
+
+Includes:
+- deterministic assessment-context create/reuse and uniqueness;
+- workspace hierarchy and inline Create/select Assessment flow;
+- unified feedback, responsive/accessibility/privacy evidence;
+- canonical authenticated teacher journey and Verify remediation evidence.
+
+**Depends on:** SPEC-0003, SPEC-0004, SPEC-0005, SPEC-DEMO-001.
+
+**Repository Ready:** YES (`PASS WITH CONDITIONS`; no blocker; C-01 remains production-only). No Git/VCS handoff was executed.
+**Next:** STOP — maintainer review before Git handoff. C-01 remains production-only.
+
+---
+
 ### SPEC-0005 — Coins and assessment advantages
 **Priority:** P0
 **Status:** Complete / archived 2026-08-24 (`PASS WITH WARNINGS`; C-01 remains a production-only gate)

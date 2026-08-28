@@ -7,6 +7,33 @@ const databases: Database.Database[] = [];
 afterEach(() => { for (const db of databases.splice(0)) db.close(); });
 
 describe('coin schema', () => {
+  it('fails closed when legacy active normalized context names duplicate', () => {
+    const db = new Database(':memory:');
+    databases.push(db);
+    db.pragma('foreign_keys = ON');
+    migrateDatabase(db, migrations.slice(0, 5));
+    const at = '2026-09-01T00:00:00.000Z';
+    db.prepare('INSERT INTO teacher_accounts (id,email,password_hash,created_at) VALUES (?,?,?,?)').run('teacher', 'legacy@example.test', 'x', at);
+    db.prepare('INSERT INTO academic_years (id,owner_teacher_id,label,starts_on,ends_on,created_at) VALUES (?,?,?,?,?,?)').run('year', 'teacher', 'Legacy', '2026-09-01', '2027-07-01', at);
+    db.prepare('INSERT INTO groups (id,owner_teacher_id,academic_year_id,name,created_at) VALUES (?,?,?,?,?)').run('group', 'teacher', 'year', 'Legacy', at);
+    db.prepare('INSERT INTO assessment_contexts (id,group_id,name,created_at) VALUES (?,?,?,?)').run('context-1', 'group', ' Quiz ', at);
+    db.prepare('INSERT INTO assessment_contexts (id,group_id,name,created_at) VALUES (?,?,?,?)').run('context-2', 'group', 'quiz', at);
+
+    expect(() => migrateDatabase(db, migrations)).toThrow(/0006_assessment_context_name_uniqueness/);
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='uq_assessment_contexts_active_group_normalized_name'").get()).toBeUndefined();
+    expect(db.prepare("SELECT id FROM schema_migrations WHERE id='0006_assessment_context_name_uniqueness'").get()).toBeUndefined();
+    expect(db.prepare('SELECT COUNT(*) AS count FROM assessment_contexts').get()).toEqual({ count: 2 });
+  });
+
+  it('creates exact partial normalized active-name uniqueness', () => {
+    const db = new Database(':memory:');
+    databases.push(db);
+    db.pragma('foreign_keys = ON');
+    migrateDatabase(db, migrations);
+    const index = db.prepare("SELECT sql FROM sqlite_master WHERE type='index' AND name='uq_assessment_contexts_active_group_normalized_name'").get() as { sql: string };
+    expect(index.sql.replace(/\s+/g, ' ').trim()).toBe('CREATE UNIQUE INDEX uq_assessment_contexts_active_group_normalized_name ON assessment_contexts (group_id, lower(trim(name))) WHERE archived_at IS NULL');
+  });
+
   it('enables foreign keys and creates restricted allocation invariants', () => {
     const db = new Database(':memory:');
     databases.push(db);

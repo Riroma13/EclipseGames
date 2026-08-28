@@ -11,8 +11,8 @@ function ownedStudent(db: Database.Database, teacherId: string, studentId: strin
   if(!row) throw new ApiError('NOT_FOUND',404,'Student not found.'); return row;
 }
 function writableContext(db: Database.Database, teacherId: string, contextId: string) {
-  const row=db.prepare(`SELECT c.id,c.group_id AS groupId,c.name,c.archived_at AS archivedAt,g.owner_teacher_id AS ownerTeacherId,g.academic_year_id AS academicYearId FROM assessment_contexts c JOIN groups g ON g.id=c.group_id WHERE c.id=? AND g.owner_teacher_id=?`).get(contextId,teacherId) as any;
-  if(!row) throw new ApiError('NOT_FOUND',404,'Assessment context not found.'); if(row.archivedAt) throw new ApiError('VALIDATION_FAILED',422,'Archived assessment contexts are read-only.'); return row;
+  const row=db.prepare(`SELECT c.id,c.group_id AS groupId,c.name,c.archived_at AS archivedAt,g.owner_teacher_id AS ownerTeacherId,g.academic_year_id AS academicYearId,y.archived_at AS yearArchivedAt FROM assessment_contexts c JOIN groups g ON g.id=c.group_id JOIN academic_years y ON y.id=g.academic_year_id WHERE c.id=? AND g.owner_teacher_id=?`).get(contextId,teacherId) as any;
+  if(!row) throw new ApiError('NOT_FOUND',404,'Assessment context not found.'); if(row.archivedAt || row.yearArchivedAt) throw new ApiError('VALIDATION_FAILED',422,'Archived assessment contexts are read-only.'); return row;
 }
 export function rewards(db: Database.Database) { return db.prepare("SELECT id,name,cost,type FROM coin_rewards WHERE id IN (?,?) ORDER BY cost").all(...fixedRewards); }
 export function summary(db: Database.Database, teacherId: string, studentId: string) { const student=ownedStudent(db,teacherId,studentId); return { studentId, academicYearId:student.academicYearId, balance:repository.balance(db,studentId,student.academicYearId) }; }
@@ -21,8 +21,22 @@ export function createContext(db: Database.Database, teacherId: string, groupId:
   const group=db.prepare('SELECT g.id,g.academic_year_id AS academicYearId,y.archived_at AS yearArchivedAt FROM groups g JOIN academic_years y ON y.id=g.academic_year_id WHERE g.id=? AND g.owner_teacher_id=?').get(groupId,teacherId) as any;
   if(!group) throw new ApiError('NOT_FOUND',404,'Group not found.');
   if(group.yearArchivedAt) throw new ApiError('VALIDATION_FAILED',422,'Archived academic years are read-only.');
-  const id=randomUUID(); const createdAt=now(); db.prepare('INSERT INTO assessment_contexts (id,group_id,name,created_at) VALUES (?,?,?,?)').run(id,groupId,name.trim(),createdAt);
-  return {id,groupId,name:name.trim(),archivedAt:null};
+  const canonicalName=name.trim();
+  const existing=db.prepare('SELECT id,group_id AS groupId,name,archived_at AS archivedAt FROM assessment_contexts WHERE group_id=? AND archived_at IS NULL AND lower(trim(name))=lower(trim(?)) ORDER BY created_at,id LIMIT 1').get(groupId,canonicalName) as any;
+  if(existing) return { ...existing, replay:true };
+  const id=randomUUID(); const createdAt=now();
+  try { db.prepare('INSERT INTO assessment_contexts (id,group_id,name,created_at) VALUES (?,?,?,?)').run(id,groupId,canonicalName,createdAt); }
+  catch (error) { if ((error as { code?: string }).code !== 'SQLITE_CONSTRAINT_UNIQUE') throw error; const concurrent=db.prepare('SELECT id,group_id AS groupId,name,archived_at AS archivedAt FROM assessment_contexts WHERE group_id=? AND archived_at IS NULL AND lower(trim(name))=lower(trim(?)) ORDER BY created_at,id LIMIT 1').get(groupId,canonicalName) as any; if(concurrent) return { ...concurrent, replay:true }; throw error; }
+  return {id,groupId,name:canonicalName,archivedAt:null,replay:false};
+}
+
+export function renameContext(db: Database.Database, teacherId: string, contextId: string, name: string) {
+  const context=writableContext(db,teacherId,contextId);
+  const canonicalName=name.trim();
+  const collision=db.prepare('SELECT id FROM assessment_contexts WHERE group_id=? AND id<>? AND archived_at IS NULL AND lower(trim(name))=lower(trim(?))').get(context.groupId,contextId,canonicalName);
+  if(collision) throw new ApiError('CONFLICT',409,'An active assessment context already uses that name.');
+  db.prepare('UPDATE assessment_contexts SET name=? WHERE id=?').run(canonicalName,contextId);
+  return {id:contextId,groupId:context.groupId,name:canonicalName,archivedAt:null};
 }
 export function grantManual(db: Database.Database, teacherId: string, studentId: string, academicYearId: string, source: string) {
   const student=ownedStudent(db,teacherId,studentId);

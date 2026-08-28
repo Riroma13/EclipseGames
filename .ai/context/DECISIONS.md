@@ -176,3 +176,37 @@ The product is used live by teachers with classroom-sized groups, so unnecessary
 ### Consequences
 
 `.ai/context/PROJECT.md` is the canonical source for the operational rules. Every future Design includes a short **Simplicity Check**.
+
+---
+
+## DEC-013 — Assessment-context names are unique within an active group
+
+**Status:** Accepted / archived with SPEC-DEMO-002
+
+### Decision
+Assessment contexts use trimmed display names and one active normalized name per group. Create-or-reuse is canonical: a new context returns `201`, an equivalent active retry returns `200` with the canonical DTO, and concurrent creates converge through the database invariant. Archived contexts may be replaced by a new active context; rename preserves stable identity and rejects active normalized collisions.
+
+### Rationale
+The teacher MVP has no assessment-management surface, so deterministic context identity is required to preserve the one-advantage-per-student/context rule without introducing a lifecycle engine or generic idempotency layer.
+
+### Consequences
+- The invariant is scoped to `group_id` and active contexts only.
+- Migration preflight fails closed on legacy normalized duplicates.
+- C-01 remains unrelated and production-only. D-06 was later updated by DEC-014 after maintainer runtime evidence; the change is limited to minimal deterministic point grants.
+
+---
+
+## DEC-014 — Minimal deterministic demo points for the verified journey
+
+**Status:** Accepted / archived with SPEC-DEMO-002
+
+### Decision
+The normal service-owned deterministic demo seed includes two minimal fixed-ID, fixed-source, idempotent, fail-closed point grants for the seeded first student, producing a 2-point balance for the canonical local journey.
+
+### Rationale
+Maintainer runtime review proved the previous seed could not demonstrate the intended redemption and reversal journey without a manual point grant.
+
+### Consequences
+- The seed extension uses the existing coin repository grant only and preserves backend `coin` terminology.
+- No automatic XP-route reconciliation, wallet/shop/dashboard/history mechanic, or new subsystem is introduced.
+- Collision preflight, transactional insertion, replay idempotency, reward catalogue, redemption, and reversal remain tested.

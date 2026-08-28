@@ -9,7 +9,7 @@ async function main() {
   try {
     const teacher = await bootstrapTeacher(database.database, process.env.BOOTSTRAP_TEACHER_EMAIL ?? 'teacher@example.test', process.env.BOOTSTRAP_TEACHER_PASSWORD ?? 'change-me-in-development');
     const result = seedDemo(database.database, teacher.id);
-    console.log(`Demo roster ready: ${result.roster.students.length} students, ${result.events.length} XP requests checked.`);
+    console.log(`Demo roster ready: ${result.roster.students.length} students, ${result.events.length} XP requests checked, ${result.coinGrants.length} Eclipse Points grants checked.`);
   } finally { database.close(); }
 }
 
