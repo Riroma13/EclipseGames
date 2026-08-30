@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { activeAssessmentContexts, workspaceApi } from './workspace-api';
+import { activeAssessmentContexts, mapXpEvidence, workspaceApi } from './workspace-api';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -33,5 +33,26 @@ describe('assessment context workspace contract', () => {
       { id: 'active', groupId: 'group', name: 'Quiz', archivedAt: null },
       { id: 'archived', groupId: 'group', name: 'Old quiz', archivedAt: '2026-01-01' },
     ])).toEqual([{ id: 'active', groupId: 'group', name: 'Quiz', archivedAt: null }]);
+  });
+});
+
+describe('classroom setup workspace contract', () => {
+  it('uses the existing year, group, and one atomic student batch endpoints', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => new Response(JSON.stringify(input.toString().includes('/students') ? [{ id: 'student' }] : { id: 'resource' }), { status: 201, headers: { 'content-type': 'application/json' } }));
+    await workspaceApi.createYear({ label: '2026–2027', startsOn: '2026-09-01', endsOn: '2027-07-01' });
+    await workspaceApi.createGroup('year', 'Group A');
+    await workspaceApi.createStudents('group', [{ realName: 'Ada Lovelace', alias: 'Ada' }]);
+    expect(fetchMock.mock.calls.map(call => call[0])).toEqual(['/api/v1/academic-years', '/api/v1/academic-years/year/groups', '/api/v1/groups/group/students']);
+    expect(JSON.parse((fetchMock.mock.calls[2][1] as RequestInit).body as string)).toEqual({ students: [{ realName: 'Ada Lovelace', alias: 'Ada' }] });
+  });
+});
+
+describe('workspace XP evidence contract', () => {
+  it('loads exactly three factual fields from the owned evidence endpoint', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ items: [{ id: 'event', category: 'PRECISION', baseXp: 2, specialtyBonusXp: 1, effectiveXp: 3, comment: 'private note', createdAt: '2026-09-01T10:00:00Z', reversedAt: null }], nextCursor: null }), { status: 200 }));
+
+    await expect(workspaceApi.xpEvidence('student', 'year', 3)).resolves.toEqual({ items: [{ id: 'event', category: 'PRECISION', baseXp: 2, bonusXp: 1, effectiveXp: 3, reversedAt: null, createdAt: '2026-09-01T10:00:00Z' }], nextCursor: null });
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/students/student/xp-evidence?academicYearId=year&limit=3');
+    expect(mapXpEvidence({ id: 'event', category: 'PRECISION', baseXp: 2, specialtyBonusXp: 1, effectiveXp: 3, createdAt: '2026-09-01T10:00:00Z', reversedAt: null })).not.toHaveProperty('comment');
   });
 });

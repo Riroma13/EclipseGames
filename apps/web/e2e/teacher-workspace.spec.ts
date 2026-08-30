@@ -84,6 +84,38 @@ test('canonical roster runtime matrix covers no years and an empty group', async
   await expect(page.getByText('No groups in this year.')).toBeVisible();
 });
 
+test('minimal classroom setup creates owned roster data, refreshes visibility, and keeps an invalid rejection visible', async ({ page }) => {
+  const login = await page.request.post('/api/v1/auth/session', { data: { email: 'teacher@example.test', password: 'change-me-in-development' } });
+  expect(login.status()).toBe(204);
+  const cookie = login.headers()['set-cookie']?.split(';')[0];
+  const headers = cookie ? { cookie } : undefined;
+  const suffix = `${Date.now()}-setup`;
+  const year = await page.request.post('/api/v1/academic-years', { headers, data: { label: `A ${suffix}`, startsOn: '1000-09-01', endsOn: '1001-07-01' } });
+  expect(year.status()).toBe(200);
+  const yearId = (await year.json()).id as string;
+  await page.route('**/api/v1/academic-years', async route => {
+    if (route.request().method() !== 'GET') return route.continue();
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: yearId, label: `A ${suffix}`, startsOn: '1000-09-01', endsOn: '1001-07-01', archivedAt: null }]) });
+  });
+
+  await page.goto(`/#/workspace?year=${yearId}`);
+  await expect(page.getByRole('button', { name: 'Set up a classroom' })).toBeVisible();
+  await page.getByRole('button', { name: 'Set up a classroom' }).click();
+  await page.getByLabel('Group name').fill('Owned setup group');
+  await page.locator('#setup-student-name-0').fill('Setup Student');
+  await page.locator('#setup-student-alias-0').fill('Setup');
+  await page.route('**/api/v1/academic-years/*/groups', async route => {
+    if (route.request().method() !== 'POST') return route.continue();
+    await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ message: 'Alias already exists.' }) });
+  });
+  await page.getByRole('button', { name: 'Create classroom' }).click();
+  await expect(page.getByRole('alert')).toContainText('This classroom value already exists');
+  await page.unroute('**/api/v1/academic-years/*/groups');
+  await page.getByRole('button', { name: 'Create classroom' }).click();
+  await expect(page.getByText('Setup Student')).toBeVisible();
+  await expect(page.getByText('Owned setup group')).toBeVisible();
+});
+
 test('historical-only and group cardinality states are read-only and selectable', async ({ page }) => {
   const login = await page.request.post('/api/v1/auth/session', { data: { email: 'teacher@example.test', password: 'change-me-in-development' } });
   expect(login.status()).toBe(204);
@@ -389,6 +421,56 @@ test('AC-14 proves the contiguous teacher journey through real XP and reversal',
   await expect(page.getByRole('combobox', { name: 'Group' })).toHaveValue(secondGroupId);
   await expect(page.locator('.context-line')).toContainText('Continue teaching group');
   await expect(page.getByText('No students in this group.')).toBeVisible();
+});
+
+test('labelled fixture Projection handoff stays separate from the complete teacher journey', async ({ page }) => {
+  const { yearId, groupId } = await seedRoster(page, `${Date.now()}-projection-journey`);
+  const login = await page.request.post('/api/v1/auth/session', { data: { email: 'teacher@example.test', password: 'change-me-in-development' } });
+  expect(login.status()).toBe(204);
+  const cookie = login.headers()['set-cookie']?.split(';')[0];
+  const headers = cookie ? { cookie } : undefined;
+  const students = await page.request.get(`/api/v1/groups/${groupId}/students`, { headers });
+  const roster = await students.json() as Array<{ id: string; realName: string }>;
+  const firstStudent = roster.find(student => student.realName === 'Zoë Durand');
+  expect(firstStudent).toBeTruthy();
+  if (!firstStudent) throw new Error('Projection journey roster is missing Zoë Durand.');
+  for (const source of ['PERSONAL_IMPROVEMENT', 'EXCEPTIONAL_FRENCH', 'EXCEPTIONAL_COLLABORATION', 'SPECIAL_CHALLENGE', 'PERSONAL_IMPROVEMENT']) {
+    expect((await page.request.post(`/api/v1/students/${firstStudent.id}/coin-grants`, { headers, data: { academicYearId: yearId, source } })).status()).toBe(201);
+  }
+
+  await signIn(page, `/#/workspace?year=${yearId}&group=${groupId}`);
+  await page.getByLabel('Search students').fill('zoe');
+  await page.getByRole('button', { name: /Zoë Durand/ }).click();
+  await expect(page.getByRole('heading', { name: 'Zoë Durand' })).toBeVisible();
+  await page.getByRole('button', { name: 'PRECISION' }).click();
+  await page.getByRole('button', { name: '+3' }).click();
+  await expect(page.getByText(/Base XP \+3 · Specialty bonus \+1 · Effective XP \+4/)).toBeVisible();
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect(page.getByText('XP registration undone.')).toBeVisible();
+  await expect(page.getByLabel('Eclipse Points balance')).toHaveText('5 points');
+
+  const assessmentName = page.getByLabel('Create/select Assessment');
+  await assessmentName.fill('Projection journey assessment');
+  await page.getByRole('button', { name: 'Create/select Assessment' }).click();
+  await expect(page.getByText('Projection journey assessment created and selected.')).toBeVisible();
+  const standard = page.getByRole('button', { name: /Standard assessment advantage/ });
+  await expect(standard).toBeEnabled();
+  await standard.click();
+  await expect(page.getByLabel('Eclipse Points balance')).toHaveText('3 points');
+  await page.getByRole('button', { name: 'Undo assessment advantage' }).click();
+  await expect(page.getByLabel('Eclipse Points balance')).toHaveText('5 points');
+  expect(await page.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length }))).toEqual({ local: 0, session: 0 });
+  expect(page.url()).not.toMatch(/(Zoë|Projection|comment|xp|coin|assessment)=/i);
+
+  const handoff = page.getByRole('link', { name: 'Open separate fixture Projection' });
+  await expect(handoff).toHaveAttribute('href', '/');
+  await handoff.click();
+  await expect(page.getByRole('heading', { name: 'Classroom signal' })).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe('/');
+  expect(new URL(page.url()).search).toBe('');
+  expect(new URL(page.url()).hash).toBe('');
+  await expect(page.locator('body')).toContainText('Demo Student');
+  await expect(page.locator('body')).not.toContainText(/Zoë Durand|Ada Lovelace|Projection journey assessment|RT average|rubric|comments|incidents|history/i);
 });
 
 test('clean demo seed supports the normal Eclipse Points assessment journey', async ({ page }) => {

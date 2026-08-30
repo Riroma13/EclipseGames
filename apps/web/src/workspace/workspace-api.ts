@@ -8,7 +8,15 @@ export type CoinSummary = { studentId:string; academicYearId:string; balance:num
 export type CoinReward = { id:string; name:string; cost:2|3; type:'ASSESSMENT_ADVANTAGE' };
 export type AdvantageRedemption = { id:string; studentId:string; assessmentContextId:string; rewardId:string; cost:2|3; createdAt:string; reversedAt:string|null };
 export type AssessmentContext = { id:string; groupId:string; name:string; archivedAt:string|null };
+export type XpEvidence = { id:string; category:XpCategory; baseXp:number; bonusXp:number; effectiveXp:number; reversedAt:string|null; createdAt:string };
+export type XpEvidenceResponse = { items:XpEvidence[]; nextCursor:string|null };
 export const activeAssessmentContexts = (contexts: AssessmentContext[]) => contexts.filter(context => !context.archivedAt);
+export function mapXpEvidence(event: { id:string; category:XpCategory; baseXp:number; specialtyBonusXp:number; effectiveXp:number; createdAt:string; reversedAt:string|null }): XpEvidence { return { id:event.id, category:event.category, baseXp:event.baseXp, bonusXp:event.specialtyBonusXp, effectiveXp:event.effectiveXp, reversedAt:event.reversedAt, createdAt:event.createdAt }; }
+export type ActivityState = { kind:'zero' } | { kind:'available'; items:XpEvidence[] } | { kind:'unavailable'; message:string };
+export function activityState(response: XpEvidenceResponse|null): ActivityState { if (!response) return { kind:'unavailable', message:'Recent activity is unavailable. Retry.' }; return response.items.length ? { kind:'available', items:response.items.slice(0, 3) } : { kind:'zero' }; }
+export function deriveClassSummary(students: TeacherStudent[], summaries: Record<string, XpSummary>) { return { students:students.length, activeEvidence:students.filter(student => (summaries[student.id]?.annualEffectiveXp ?? 0) > 0).length, badges:students.reduce((total, student) => total + (summaries[student.id]?.badges.length ?? 0), 0) }; }
+export type ClassSummaryState = { kind:'available'; summary:ReturnType<typeof deriveClassSummary> } | { kind:'unavailable'; message:string };
+export function classSummaryState(students: TeacherStudent[], summaries: Record<string, XpSummary>, available = true): ClassSummaryState { return available ? { kind:'available', summary:deriveClassSummary(students, summaries) } : { kind:'unavailable', message:'Class summary is unavailable. Retry.' }; }
 
 async function get<T>(url: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(url, { credentials: 'same-origin', signal });
@@ -25,9 +33,13 @@ const newKey=()=>crypto.randomUUID();
 
 export const workspaceApi = {
   years: (includeArchived = false, signal?: AbortSignal) => get<AcademicYear[]>(`/api/v1/academic-years${includeArchived ? '?includeArchived=true' : ''}`, signal),
+  createYear: (input: { label: string; startsOn: string; endsOn: string }, signal?: AbortSignal) => post<AcademicYear>('/api/v1/academic-years', input, undefined, signal),
   groups: (yearId: string, signal?: AbortSignal) => get<Group[]>(`/api/v1/academic-years/${yearId}/groups`, signal),
+  createGroup: (yearId: string, name: string, signal?: AbortSignal) => post<Group>(`/api/v1/academic-years/${yearId}/groups`, { name }, undefined, signal),
   students: (groupId: string, archived: boolean, signal?: AbortSignal) => get<TeacherStudent[]>(`/api/v1/groups/${groupId}/students${archived ? '?includeArchived=true' : ''}`, signal),
+  createStudents: (groupId: string, students: Array<{ realName: string; alias: string }>, signal?: AbortSignal) => post<TeacherStudent[]>(`/api/v1/groups/${groupId}/students`, { students }, undefined, signal),
   xpSummaries: (groupId:string, yearId:string, signal?:AbortSignal) => get<{groupId:string;academicYearId:string;summaries:Array<{studentId:string;summary:XpSummary}>}>(`/api/v1/groups/${groupId}/xp-summaries?academicYearId=${yearId}`,signal),
+  xpEvidence: async (studentId:string, academicYearId:string, limit = 3, signal?:AbortSignal) => { const response = await get<{items:Array<{id:string;category:XpCategory;baseXp:number;specialtyBonusXp:number;effectiveXp:number;createdAt:string;reversedAt:string|null}>;nextCursor:string|null}>(`/api/v1/students/${studentId}/xp-evidence?academicYearId=${academicYearId}&limit=${limit}`, signal); return { items:response.items.map(mapXpEvidence), nextCursor:response.nextCursor }; },
   registerXp: (studentId:string, input:{category:XpCategory;baseXp:1|2|3;comment?:string}, signal?:AbortSignal, idempotencyKey?:string) => post<{event:{id:string;baseXp:number;specialtyBonusXp:number;effectiveXp:number};summary:XpSummary}>(`/api/v1/students/${studentId}/xp-evidence`,input,idempotencyKey ?? newKey(),signal),
   reverseXp: (eventId:string, signal?:AbortSignal) => post<{reversal:{targetEventId:string};summary:XpSummary}>(`/api/v1/xp-evidence/${eventId}/reversal`,{},newKey(),signal),
   coins: (studentId:string, signal?:AbortSignal) => get<CoinSummary>(`/api/v1/students/${studentId}/coins`,signal),
