@@ -113,6 +113,22 @@ Includes:
 
 ---
 
+### SPEC-DEMO-003 — Presentable Teacher MVP
+**Priority:** P0
+**Status:** Complete / archived 2026-08-30 (`PASS WITH WARNINGS`; 8/8 requirements, 9/9 scenarios, 13/13 tasks; no CRITICAL issues). Health complete 2026-08-30 (`PASS WITH CONDITIONS`; no CRITICAL/BLOCKER). C-01 remains a production-only condition.
+
+Includes:
+- coherent authenticated teacher context, roster, student detail and action feedback;
+- factual XP activity, Eclipse Points advantage/reversal, and create-only classroom setup;
+- clearly labelled separate fixture-backed `/` Projection handoff;
+- varied synthetic deterministic seed with fixed preflight, transaction, replay, and production-refusal proof;
+- responsive, accessibility, recovery, and privacy evidence.
+
+**Repository Ready:** YES (`PASS WITH WARNINGS` Verify; `PASS WITH CONDITIONS` Health; no CRITICAL/BLOCKER). The distinct Health full-suite 29/30 shared-fixture warning is preserved and accepted as non-blocking against fresh Verify 30/30 evidence; C-01 remains production-only.
+**Next:** STOP — maintainer review before Git handoff. No Git/VCS handoff was executed or authorized.
+
+---
+
 ### SPEC-0005 — Coins and assessment advantages
 **Priority:** P0
 **Status:** Complete / archived 2026-08-24 (`PASS WITH WARNINGS`; C-01 remains a production-only gate)
