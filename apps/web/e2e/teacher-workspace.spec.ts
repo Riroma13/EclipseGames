@@ -437,8 +437,12 @@ test('coin loading keeps a genuine initial failure visible', async ({ page }) =>
   });
   const target = '/#/workspace?year=9b6f3b9e-3d0f-4b1e-9b1e-202620270001&group=9b6f3b9e-3d0f-4b1e-9b1e-202620270002';
   await signIn(page, target);
+  await expect(page.getByRole('heading', { name: 'Classroom workspace', exact: true })).toBeVisible();
+  await page.goto('about:blank');
   await page.goto(target);
-  await page.getByRole('button', { name: /Camille Martin/ }).click();
+  const camille = page.getByRole('button', { name: /Camille Martin/ });
+  await expect(camille).toBeVisible();
+  await camille.click();
   const advantages = page.getByRole('region', { name: 'Assessment advantages' });
   await expect(advantages).toContainText('Could not load coin advantages.');
   expect(rewardRouteHits).toBeGreaterThan(0);
