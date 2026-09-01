@@ -18,11 +18,14 @@ function database() {
 describe('SQLite migrations', () => {
   it('applies migrations in order and is repeatable', () => {
     const db = database();
-    expect(migrateDatabase(db, migrations)).toEqual({ applied: ['0001_foundation', '0002_auth_projection', '0003_academic_roster', '0004_xp_specialties_levels_badges', '0005_coins_assessment_advantages', '0006_assessment_context_name_uniqueness'] });
+    expect(migrateDatabase(db, migrations)).toEqual({ applied: ['0001_foundation', '0002_auth_projection', '0003_academic_roster', '0004_xp_specialties_levels_badges', '0005_coins_assessment_advantages', '0006_assessment_context_name_uniqueness', '0007_classroom_gameplay'] });
     expect(migrateDatabase(db, migrations)).toEqual({ applied: [] });
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'app_metadata'").get()).toBeTruthy();
-    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 6 });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 7 });
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'projection_students'").get()).toBeTruthy();
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'classroom_events'").get()).toBeTruthy();
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'classroom_challenges'").get()).toBeTruthy();
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'minigame_sessions'").get()).toBeTruthy();
     expect(db.prepare('SELECT id FROM schema_migrations ORDER BY rowid').all()).toEqual([
       { id: '0001_foundation' },
       { id: '0002_auth_projection' },
@@ -30,6 +33,7 @@ describe('SQLite migrations', () => {
       { id: '0004_xp_specialties_levels_badges' },
       { id: '0005_coins_assessment_advantages' },
       { id: '0006_assessment_context_name_uniqueness' },
+      { id: '0007_classroom_gameplay' },
     ]);
     const table = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='xp_level_grant_transitions'").get() as {sql:string};
     expect(table.sql).toContain('UNIQUE (sequence)');

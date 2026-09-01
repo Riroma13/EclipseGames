@@ -146,13 +146,14 @@ test('authenticated canonical roster exposes many groups through the group selec
   await expect(page.getByRole('combobox', { name: 'Group' }).locator('option')).toHaveCount(2);
 });
 
-test('root without a hash remains the fixture-backed projection route', async ({ page }) => {
+test('root without a hash opens the Home command center', async ({ page }) => {
   await page.goto('/');
   await page.getByLabel('Email').fill('teacher@example.test');
   await page.getByLabel('Password').fill('change-me-in-development');
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByRole('heading', { name: 'Classroom signal' })).toBeVisible();
-  await expect(page.locator('[data-testid="projection-card"]')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Home / Command Center' })).toBeVisible();
+  await expect(page.locator('.home-header').getByRole('link', { name: 'Open Classroom Preview' })).toBeVisible();
+  await expect(page.locator('[data-testid="projection-card"]')).toHaveCount(0);
 });
 
 test('search clear, no-match, ordered cards, keyboard selection, and panel focus work on canonical roster data', async ({ page }) => {
@@ -210,7 +211,7 @@ test('AC-06 real Register XP path exposes pending, failure, retry, and authorita
   await signIn(page, `/#/workspace?year=${yearId}&group=${groupId}`);
   await page.getByRole('button', { name: /Ada Lovelace/ }).click();
   await page.getByRole('button', { name: 'COMMUNICATION' }).click();
-  await page.getByRole('button', { name: '+3' }).click();
+  await page.getByRole('button', { name: '+3 Spontaneous or developed French' }).click();
   await expect(page.getByRole('button', { name: '+3' })).toBeDisabled();
   await expect(page.getByText('Could not register XP. Try again.')).toBeVisible();
   await page.getByRole('button', { name: '+3' }).click();
@@ -307,7 +308,7 @@ test('AC-01–AC-17 canonical teacher journey stays in the workspace', async ({ 
   await expect(page.getByRole('heading', { name: 'Zoë Durand' })).toBeVisible();
   await expect(page.getByText('Analyst', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'PRECISION' }).click();
-  await page.getByRole('button', { name: '+3' }).click();
+  await page.getByRole('button', { name: '+4 Especially precise work' }).click();
   await expect(page.getByText(/Base XP \+3 · Specialty bonus \+1 · Effective XP \+4/)).toBeVisible();
   await expect(page.getByText('Annual XP: 4 · Level 1')).toBeVisible();
   await expect(page.getByLabel('Eclipse Points balance')).toHaveText('5 points');
@@ -408,7 +409,7 @@ test('AC-14 proves the contiguous teacher journey through real XP and reversal',
   await expect(page.getByText('Analyst', { exact: true })).toBeVisible();
   for (let index = 0; index < 4; index += 1) {
     await page.getByRole('button', { name: 'PRECISION' }).click();
-    await page.getByRole('button', { name: '+3' }).click();
+    await page.getByRole('button', { name: '+4 Especially precise work' }).click();
     await expect(page.getByText(/Base XP \+3 · Specialty bonus \+1 · Effective XP \+4/)).toBeVisible();
   }
   await expect(page.getByText('Annual XP: 16 · Level 2')).toBeVisible();
@@ -443,7 +444,7 @@ test('labelled fixture Projection handoff stays separate from the complete teach
   await page.getByRole('button', { name: /Zoë Durand/ }).click();
   await expect(page.getByRole('heading', { name: 'Zoë Durand' })).toBeVisible();
   await page.getByRole('button', { name: 'PRECISION' }).click();
-  await page.getByRole('button', { name: '+3' }).click();
+  await page.getByRole('button', { name: '+4 Especially precise work' }).click();
   await expect(page.getByText(/Base XP \+3 · Specialty bonus \+1 · Effective XP \+4/)).toBeVisible();
   await page.getByRole('button', { name: 'Undo' }).click();
   await expect(page.getByText('XP registration undone.')).toBeVisible();
@@ -462,14 +463,14 @@ test('labelled fixture Projection handoff stays separate from the complete teach
   expect(await page.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length }))).toEqual({ local: 0, session: 0 });
   expect(page.url()).not.toMatch(/(Zoë|Projection|comment|xp|coin|assessment)=/i);
 
-  const handoff = page.getByRole('link', { name: 'Open separate fixture Projection' });
-  await expect(handoff).toHaveAttribute('href', '/');
+  const handoff = page.getByRole('link', { name: 'Open Classroom Preview' });
+  await expect(handoff).toHaveAttribute('href', /^\/#\/projection(?:\?group=.*)?$/);
   await handoff.click();
-  await expect(page.getByRole('heading', { name: 'Classroom signal' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'The room is ready for its next chapter.' })).toBeVisible();
   expect(new URL(page.url()).pathname).toBe('/');
   expect(new URL(page.url()).search).toBe('');
-  expect(new URL(page.url()).hash).toBe('');
-  await expect(page.locator('body')).toContainText('Demo Student');
+  expect(new URL(page.url()).hash).toMatch(/^#\/projection(?:\?group=.*)?$/);
+  await expect(page.locator('body')).toContainText('Zoe');
   await expect(page.locator('body')).not.toContainText(/Zoë Durand|Ada Lovelace|Projection journey assessment|RT average|rubric|comments|incidents|history/i);
 });
 

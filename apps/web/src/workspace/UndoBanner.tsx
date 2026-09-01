@@ -6,6 +6,7 @@ export function UndoBanner({ opportunity, onResult }: { opportunity: UndoOpportu
   const [result, setResult] = useState<{ kind: 'undone' | 'invalid' | 'failure'; message: string } | null>(null);
   const current = useRef(opportunity);
   const onResultRef = useRef(onResult);
+  current.current = opportunity;
   onResultRef.current = onResult;
   useEffect(() => {
     current.current = opportunity; setPending(false); setResult(null);
@@ -17,10 +18,21 @@ export function UndoBanner({ opportunity, onResult }: { opportunity: UndoOpportu
   const activeOpportunity = opportunity;
   async function undo() {
     if (pending || result) return;
+    const capturedOpportunity = activeOpportunity;
     setPending(true);
-    try { const value = await activeOpportunity.undo(); setResult({ kind: value.kind, message: value.message }); onResultRef.current(value.message); }
-    catch { const message = `Could not undo ${activeOpportunity.label}.`; setResult({ kind: 'failure', message }); onResultRef.current(message); }
-    finally { setPending(false); }
+    try {
+      const value = await capturedOpportunity.undo();
+      if (current.current !== capturedOpportunity) return;
+      setResult({ kind: value.kind, message: value.message });
+      onResultRef.current(value.message);
+    } catch {
+      const message = `Could not undo ${capturedOpportunity.label}.`;
+      if (current.current !== capturedOpportunity) return;
+      setResult({ kind: 'failure', message });
+      onResultRef.current(message);
+    } finally {
+      if (current.current === capturedOpportunity) setPending(false);
+    }
   }
   return <div className="undo-banner" role="status" aria-live="polite"><span>{result?.message ?? opportunity.label}</span>{!result && <button type="button" disabled={pending} onClick={undo}>{pending ? 'Undoing…' : 'Undo'}</button>}</div>;
 }

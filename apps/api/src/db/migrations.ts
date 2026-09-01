@@ -28,4 +28,8 @@ export const migrations: Migration[] = [
     id: '0006_assessment_context_name_uniqueness',
     sql: readFileSync(fileURLToPath(new URL('../../drizzle/0006_assessment_context_name_uniqueness.sql', import.meta.url)), 'utf8'),
   },
+  {
+    id: '0007_classroom_gameplay',
+    sql: readFileSync(fileURLToPath(new URL('../../drizzle/0007_classroom_gameplay.sql', import.meta.url)), 'utf8'),
+  },
 ];

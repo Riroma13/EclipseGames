@@ -3,9 +3,12 @@ import { ensureOwnedDemoRoster, type DemoRosterStudent } from '../roster/service
 import * as xp from '../xp/service.js';
 import type { XpCategory } from '../xp/service.js';
 import * as coins from '../coins/repository.js';
+import * as game from '../game/repository.js';
 
 export const DEMO_YEAR = { id: '9b6f3b9e-3d0f-4b1e-9b1e-202620270001', label: '2026–2027', startsOn: '2026-09-01', endsOn: '2027-07-01' } as const;
 export const DEMO_GROUP = { id: '9b6f3b9e-3d0f-4b1e-9b1e-202620270002', name: 'Demo · Groupe principal' } as const;
+export const DEMO_EVENT = { id: '9b6f3b9e-3d0f-4b1e-9b1e-202620270101', title: 'La signal retrouvée', description: 'A short French-speaking mission for the class.', theme: 'NARRATIVE' as const };
+export const DEMO_CHALLENGE = { id: '9b6f3b9e-3d0f-4b1e-9b1e-202620270102', title: 'French Only', description: 'Reach 20 spontaneous French contributions.', target: 20 } as const;
 
 const names = [
   ['Camille Martin', 'Camille', 'fox', 'Leader'], ['Lina Bernard', 'Lina', 'owl', 'Diplomat'],
@@ -63,6 +66,19 @@ function seedDemoCoins(database: Database.Database) {
   });
 }
 
+function seedDemoGameplay(database: Database.Database, teacherId: string) {
+  const createdAt = new Date().toISOString();
+  const existingEvent = game.findEvent(database, teacherId, DEMO_EVENT.id);
+  if (!existingEvent) game.insertEvent(database, { id: DEMO_EVENT.id, ownerTeacherId: teacherId, groupId: DEMO_GROUP.id, title: DEMO_EVENT.title, description: DEMO_EVENT.description, status: 'ACTIVE', showOnProjection: 1, theme: DEMO_EVENT.theme, createdAt, updatedAt: createdAt, activatedAt: createdAt, completedAt: null, archivedAt: null });
+  else if (existingEvent.groupId !== DEMO_GROUP.id || existingEvent.title !== DEMO_EVENT.title || existingEvent.description !== DEMO_EVENT.description || existingEvent.theme !== DEMO_EVENT.theme) throw new Error(`Demo event collision: ${DEMO_EVENT.id}`);
+
+  const existingChallenge = game.findChallenge(database, teacherId, DEMO_CHALLENGE.id);
+  if (!existingChallenge) game.insertChallenge(database, { id: DEMO_CHALLENGE.id, ownerTeacherId: teacherId, groupId: DEMO_GROUP.id, title: DEMO_CHALLENGE.title, description: DEMO_CHALLENGE.description, target: DEMO_CHALLENGE.target, progress: 12, status: 'ACTIVE', showOnProjection: 1, createdAt, updatedAt: createdAt, activatedAt: createdAt, completedAt: null, archivedAt: null });
+  else if (existingChallenge.groupId !== DEMO_GROUP.id || existingChallenge.title !== DEMO_CHALLENGE.title || existingChallenge.description !== DEMO_CHALLENGE.description || existingChallenge.target !== DEMO_CHALLENGE.target) throw new Error(`Demo challenge collision: ${DEMO_CHALLENGE.id}`);
+
+  return { event: DEMO_EVENT.id, challenge: DEMO_CHALLENGE.id };
+}
+
 export function seedDemo(database: Database.Database, teacherId: string) {
   return database.transaction(() => {
     preflightDemo(database, teacherId);
@@ -72,6 +88,7 @@ export function seedDemo(database: Database.Database, teacherId: string) {
       category: categoryFor(student.specialty), baseXp: baseXp as 1 | 2 | 3,
     }, requestIds[keyIndex++])));
     const coinGrants = seedDemoCoins(database);
-    return { roster, events, coinGrants };
+    const gameplay = seedDemoGameplay(database, teacherId);
+    return { roster, events, coinGrants, gameplay };
   })();
 }
