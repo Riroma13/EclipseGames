@@ -8,6 +8,7 @@ import { openDatabase } from '../../src/db/client.js';
 const apps: Awaited<ReturnType<typeof createServer>>[] = [];
 const inspectors: ReturnType<typeof openDatabase>[] = [];
 const databasePaths: string[] = [];
+function key(number: number) { return `00000000-0000-4000-8000-${String(number).padStart(12, '0')}`; }
 afterEach(async () => {
   for (const app of apps.splice(0)) await app.close();
   for (const inspector of inspectors.splice(0)) inspector.close();
@@ -147,16 +148,16 @@ describe('coin allocation lifecycle', () => {
     const studentId = student.json()[0].id;
     const context = await app.inject({ method: 'POST', url: '/api/v1/assessment-contexts', headers: auth, payload: { groupId, name: 'Quiz' } });
     const contextId = context.json().id;
-    for (const source of ['PERSONAL_IMPROVEMENT', 'EXCEPTIONAL_FRENCH', 'SPECIAL_CHALLENGE']) {
-      expect((await app.inject({ method: 'POST', url: `/api/v1/students/${studentId}/coin-grants`, headers: auth, payload: { academicYearId: yearId, source } })).statusCode).toBe(201);
+    for (const [index, source] of ['PERSONAL_IMPROVEMENT', 'EXCEPTIONAL_FRENCH', 'SPECIAL_CHALLENGE'].entries()) {
+      expect((await app.inject({ method: 'POST', url: `/api/v1/students/${studentId}/coin-grants`, headers: { ...auth, 'idempotency-key': key(index + 1) }, payload: { academicYearId: yearId, source } })).statusCode).toBe(201);
     }
-    const key = '00000000-0000-4000-8000-000000000004';
-    const first = await app.inject({ method: 'POST', url: `/api/v1/students/${studentId}/advantages`, headers: { ...auth, 'idempotency-key': key }, payload: { assessmentContextId: contextId, rewardId: 'standard-assessment-advantage' } });
+    const redemptionKey = '00000000-0000-4000-8000-000000000004';
+    const first = await app.inject({ method: 'POST', url: `/api/v1/students/${studentId}/advantages`, headers: { ...auth, 'idempotency-key': redemptionKey }, payload: { assessmentContextId: contextId, rewardId: 'standard-assessment-advantage' } });
     expect(first.statusCode).toBe(201);
-    const replay = await app.inject({ method: 'POST', url: `/api/v1/students/${studentId}/advantages`, headers: { ...auth, 'idempotency-key': key }, payload: { assessmentContextId: contextId, rewardId: 'standard-assessment-advantage' } });
+    const replay = await app.inject({ method: 'POST', url: `/api/v1/students/${studentId}/advantages`, headers: { ...auth, 'idempotency-key': redemptionKey }, payload: { assessmentContextId: contextId, rewardId: 'standard-assessment-advantage' } });
     expect(replay.statusCode).toBe(200);
     expect(replay.json().id).toBe(first.json().id);
-    expect((await app.inject({ method: 'POST', url: `/api/v1/students/${studentId}/advantages`, headers: { ...auth, 'idempotency-key': key }, payload: { assessmentContextId: contextId, rewardId: 'exceptional-assessment-advantage' } })).statusCode).toBe(409);
+    expect((await app.inject({ method: 'POST', url: `/api/v1/students/${studentId}/advantages`, headers: { ...auth, 'idempotency-key': redemptionKey }, payload: { assessmentContextId: contextId, rewardId: 'exceptional-assessment-advantage' } })).statusCode).toBe(409);
     const ledgerBefore = await app.inject({ method: 'GET', url: `/api/v1/students/${studentId}/coin-ledger?academicYearId=${yearId}`, headers: auth });
     expect(ledgerBefore.json().filter((entry: { source: string }) => entry.source === 'REDEMPTION_DEBIT')).toHaveLength(1);
     const reversal = await app.inject({ method: 'POST', url: `/api/v1/advantage-redemptions/${first.json().id}/reversal`, headers: auth, payload: {} });
@@ -189,7 +190,7 @@ describe('coin allocation lifecycle', () => {
     expect(invalid.statusCode).toBe(404);
     expect(invalid.json()).toMatchObject({ code: 'NOT_FOUND', requestId: expect.any(String) });
     expect((await app.inject({ method: 'POST', url: `/api/v1/students/${studentId}/archive`, headers: auth })).statusCode).toBe(204);
-    const grant = await app.inject({ method: 'POST', url: `/api/v1/students/${studentId}/coin-grants`, headers: auth, payload: { academicYearId: yearId, source: 'PERSONAL_IMPROVEMENT' } });
+    const grant = await app.inject({ method: 'POST', url: `/api/v1/students/${studentId}/coin-grants`, headers: { ...auth, 'idempotency-key': key(10) }, payload: { academicYearId: yearId, source: 'PERSONAL_IMPROVEMENT' } });
     expect(grant.statusCode).toBe(422);
     const context = await app.inject({ method: 'POST', url: '/api/v1/assessment-contexts', headers: auth, payload: { groupId, name: 'Blocked context' } });
     expect(context.statusCode).toBe(201);
@@ -266,8 +267,8 @@ describe('coin allocation lifecycle', () => {
     const secondGroup = await makeGroup(secondYear, 'Archived');
     const secondStudent = await makeStudent(secondGroup, 'Archived student');
     const archivedContext = await makeContext(secondGroup, 'Archived assessment');
-    for (const source of ['PERSONAL_IMPROVEMENT', 'EXCEPTIONAL_FRENCH', 'SPECIAL_CHALLENGE']) {
-      expect((await app.inject({ method: 'POST', url: `/api/v1/students/${student}/coin-grants`, headers: auth, payload: { academicYearId: year, source } })).statusCode).toBe(201);
+    for (const [index, source] of ['PERSONAL_IMPROVEMENT', 'EXCEPTIONAL_FRENCH', 'SPECIAL_CHALLENGE'].entries()) {
+      expect((await app.inject({ method: 'POST', url: `/api/v1/students/${student}/coin-grants`, headers: { ...auth, 'idempotency-key': key(index + 20) }, payload: { academicYearId: year, source } })).statusCode).toBe(201);
     }
 
     const assertUnchanged = async (studentId: string, yearId: string, request: Parameters<typeof app.inject>[0], status: number, code: string) => {
@@ -292,9 +293,9 @@ describe('coin allocation lifecycle', () => {
     await assertUnchanged(secondStudent, secondYear, { method: 'POST', url: `/api/v1/students/${secondStudent}/advantages`, headers: { ...auth, 'idempotency-key': '00000000-0000-4000-8000-000000000096' }, payload: { assessmentContextId: archivedContext, rewardId: 'standard-assessment-advantage' } }, 409, 'CONFLICT');
 
     expect((await app.inject({ method: 'POST', url: `/api/v1/students/${student}/archive`, headers: auth })).statusCode).toBe(204);
-    await assertUnchanged(student, year, { method: 'POST', url: `/api/v1/students/${student}/coin-grants`, headers: auth, payload: { academicYearId: year, source: 'PERSONAL_IMPROVEMENT' } }, 422, 'VALIDATION_FAILED');
+    await assertUnchanged(student, year, { method: 'POST', url: `/api/v1/students/${student}/coin-grants`, headers: { ...auth, 'idempotency-key': key(30) }, payload: { academicYearId: year, source: 'PERSONAL_IMPROVEMENT' } }, 422, 'VALIDATION_FAILED');
     expect((await app.inject({ method: 'POST', url: `/api/v1/academic-years/${secondYear}/archive`, headers: auth })).statusCode).toBe(204);
-    await assertUnchanged(secondStudent, secondYear, { method: 'POST', url: `/api/v1/students/${secondStudent}/coin-grants`, headers: auth, payload: { academicYearId: secondYear, source: 'PERSONAL_IMPROVEMENT' } }, 422, 'VALIDATION_FAILED');
+    await assertUnchanged(secondStudent, secondYear, { method: 'POST', url: `/api/v1/students/${secondStudent}/coin-grants`, headers: { ...auth, 'idempotency-key': key(31) }, payload: { academicYearId: secondYear, source: 'PERSONAL_IMPROVEMENT' } }, 422, 'VALIDATION_FAILED');
     inspector.database.prepare('UPDATE assessment_contexts SET archived_at=? WHERE id=?').run('2026-09-02T00:00:00.000Z', archivedContext);
     await assertUnchanged(secondStudent, secondYear, { method: 'POST', url: `/api/v1/students/${secondStudent}/advantages`, headers: { ...auth, 'idempotency-key': '00000000-0000-4000-8000-000000000097' }, payload: { assessmentContextId: archivedContext, rewardId: 'standard-assessment-advantage' } }, 422, 'VALIDATION_FAILED');
   });
