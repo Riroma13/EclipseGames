@@ -54,7 +54,7 @@ test('authenticated classroom navigation keeps canonical routes and context thro
     await page.getByLabel('Password').fill(credentials.password);
     await page.getByRole('button', { name: 'Sign in' }).click();
   }
-  await expect(page.getByRole('heading', { name: 'Home / Command Center' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Command Center' })).toBeVisible();
 
   await page.getByRole('combobox', { name: 'Academic year' }).selectOption(yearId);
   const groupSelect = page.getByRole('combobox', { name: 'Group' });
@@ -70,7 +70,15 @@ test('authenticated classroom navigation keeps canonical routes and context thro
   await expect(page.getByRole('button', { name: /Routing Student One/ })).toBeVisible();
 
   await primaryNav(page, 'Home').click();
-  await expectTeacherDestination(page, consoleMessages, '', 'Home / Command Center', yearId, groupId, groupName, yearLabel);
+  await expectTeacherDestination(page, consoleMessages, '', 'Command Center', yearId, groupId, groupName, yearLabel);
+
+  const newEvent = page.locator('.quick-launch').getByRole('link', { name: /New Event/ });
+  await expect(newEvent).toHaveAttribute('href', `/#/events?year=${yearId}&group=${groupId}&new=1`);
+  await newEvent.click();
+  await expect(page.getByRole('heading', { name: 'Events', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'No events yet', exact: true })).toBeVisible();
+  await expect(page.locator('#event-title')).toBeVisible();
+  expect(new URL(page.url()).hash).toBe(`#/events?year=${yearId}&group=${groupId}&new=1`);
 
   await primaryNav(page, 'Events').click();
   await expectTeacherDestination(page, consoleMessages, 'events', 'Events', yearId, groupId, groupName, yearLabel);
@@ -96,4 +104,16 @@ test('authenticated classroom navigation keeps canonical routes and context thro
   expect(new URL(page.url()).hash).toBe(`#/projection?group=${groupId}`);
 
   expect(unmatchedRouteMessages(consoleMessages)).toEqual([]);
+});
+
+test('initial event creation is cleared when the requested classroom falls back', async ({ page }) => {
+  await page.goto('/#/events?year=00000000-0000-4000-8000-000000000901&group=00000000-0000-4000-8000-000000000902&new=1');
+  if (await page.getByLabel('Email').count()) {
+    await page.getByLabel('Email').fill(credentials.email);
+    await page.getByLabel('Password').fill(credentials.password);
+    await page.getByRole('button', { name: 'Sign in' }).click();
+  }
+
+  await expect(page.getByRole('heading', { name: 'Events', exact: true })).toBeVisible();
+  await expect(page.locator('#event-title')).toHaveCount(0);
 });

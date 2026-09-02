@@ -1,37 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
-import { activeAssessmentContexts, workspaceApi, type AdvantageRedemption, type ApiFailure, type AssessmentContext, type CoinReward, type CoinSummary, type TeacherStudent, type XpCategory, type XpSummary } from './workspace-api';
+import { activeAssessmentContexts, workspaceApi, type AdvantageRedemption, type ApiFailure, type AssessmentContext, type CoinLedgerEntry, type CoinReward, type CoinSummary, type ManualCoinSource, type TeacherStudent, type XpCategory, type XpSummary } from './workspace-api';
 import type { WorkspaceStudentContext } from './workspace-state';
 import { studentInitials } from './StudentCard';
 import { UndoBanner } from './UndoBanner';
-import { effectiveXpForAction } from './xp-presentation';
+import { disciplineForSpecialty, effectiveXpForAction, presentationForDiscipline } from './xp-presentation';
 
 type XpValue = 1 | 2 | 3;
 
 const categories: XpCategory[] = ['COMMUNICATION', 'PRECISION', 'CONSISTENCY', 'COLLABORATION'];
 const specialtyBonusLabel = 'Specialty bonus +1';
+const manualSources: Array<{ value: ManualCoinSource; label: string; description: string }> = [
+  { value: 'PERSONAL_IMPROVEMENT', label: 'Personal improvement', description: 'Visible progress' },
+  { value: 'EXCEPTIONAL_FRENCH', label: 'Exceptional French', description: 'French used exceptionally well' },
+  { value: 'EXCEPTIONAL_COLLABORATION', label: 'Exceptional collaboration', description: 'Meaningful help to the group' },
+  { value: 'SPECIAL_CHALLENGE', label: 'Special challenge', description: 'A challenge worth marking' },
+];
 
-const categoryMeta: Record<XpCategory, { glyph: string; cue: string; actions: Record<XpValue, string> }> = {
-  COMMUNICATION: {
-    glyph: '◒',
-    cue: 'Voice & expression',
-    actions: { 1: 'Participation', 2: 'French with help / short phrase', 3: 'Spontaneous or developed French' },
-  },
-  PRECISION: {
-    glyph: '⌖',
-    cue: 'Care & accuracy',
-    actions: { 1: 'Corrects / improves', 2: 'Correct and careful work', 3: 'Especially precise work' },
-  },
-  CONSISTENCY: {
-    glyph: '↗︎',
-    cue: 'Steady progress',
-    actions: { 1: 'Tries despite difficulty', 2: 'Maintains effort', 3: 'Overcomes difficulty / improves' },
-  },
-  COLLABORATION: {
-    glyph: '∞',
-    cue: 'Learning together',
-    actions: { 1: 'Appropriate occasional help', 2: 'Active collaboration', 3: 'Especially valuable collaboration' },
-  },
-};
+function manualSourceLabel(source: string) { return manualSources.find(item => item.value === source)?.label ?? source; }
 
 function progressPercent(summary: XpSummary) {
   if (summary.progress.isMaxLevel) return 100;
@@ -73,6 +58,7 @@ function RegisterXp({ studentId, specialty, onSummary, onFeedback, onUndo, conte
     return () => window.clearTimeout(timer);
   }, [award]);
 
+  const specialtyDiscipline = disciplineForSpecialty(specialty);
   const specialtyBonus = category ? effectiveXpForAction(1, specialty, category) - 1 : 0;
   const specialtyBonusId = specialtyBonus > 0 ? `xp-${category?.toLowerCase()}-specialty-bonus` : undefined;
 
@@ -115,24 +101,24 @@ function RegisterXp({ studentId, specialty, onSummary, onFeedback, onUndo, conte
     {award && <div key={award.id} className="xp-award" role="status" aria-live="polite"><strong>+{award.effectiveXp} XP</strong><span>Base +{award.baseXp}{award.bonusXp ? ' · Specialty bonus +1' : ''}</span></div>}
     {!category ? <div className="xp-categories" aria-label="XP categories">
       {categories.map(value => {
-        const meta = categoryMeta[value];
-        const hasSpecialtyBonus = effectiveXpForAction(1, specialty, value) > 1;
-        return <button className={`discipline-choice discipline-${value.toLowerCase()}`} type="button" key={value} aria-label={`${value}${hasSpecialtyBonus ? `, ${specialtyBonusLabel}` : ''}`} aria-expanded="false" disabled={pending} onClick={() => { setOperationKey(null); setError(''); setAward(null); setCategory(value); }}>
+        const meta = presentationForDiscipline(value);
+        const hasSpecialtyBonus = specialtyDiscipline === value;
+        return <button className={`discipline-choice discipline-${value.toLowerCase()}${hasSpecialtyBonus ? ' is-specialty-match' : ''}`} type="button" key={value} aria-label={`${value}${hasSpecialtyBonus ? `, ${specialtyBonusLabel}` : ''}`} aria-expanded="false" disabled={pending} onClick={() => { setOperationKey(null); setError(''); setAward(null); setCategory(value); }}>
           <span className="discipline-glyph" aria-hidden="true">{meta.glyph}</span>
           <span className="discipline-copy"><strong>{value}</strong><small>{meta.cue}</small>{hasSpecialtyBonus && <span className="specialty-bonus-note">{specialtyBonusLabel}</span>}</span>
           <span className="discipline-arrow" aria-hidden="true">+</span>
         </button>;
       })}
     </div> : <>
-      <div className={`selected-category discipline-${category.toLowerCase()}`}>
-        <span className="discipline-glyph" aria-hidden="true">{categoryMeta[category].glyph}</span>
-        <span className="selected-category-copy"><strong>{category}</strong><small>{categoryMeta[category].cue}</small>{specialtyBonus > 0 && <span id={specialtyBonusId} className="specialty-bonus-note">{specialtyBonusLabel}</span>}</span>
+      <div className={`selected-category discipline-${category.toLowerCase()}${specialtyDiscipline === category ? ' is-specialty-match' : ''}`}>
+        <span className="discipline-glyph" aria-hidden="true">{presentationForDiscipline(category).glyph}</span>
+        <span className="selected-category-copy"><strong>{category}</strong><small>{presentationForDiscipline(category).cue}</small>{specialtyBonus > 0 && <span id={specialtyBonusId} className="specialty-bonus-note">{specialtyBonusLabel}</span>}</span>
       </div>
       <div className="xp-values" id="xp-options" aria-label={`${category} XP value`}>
         {([1, 2, 3] as const).map(value => {
           const effectiveXp = effectiveXpForAction(value, specialty, category);
-          return <button type="button" key={value} aria-label={`+${effectiveXp} ${categoryMeta[category].actions[value]}`} aria-describedby={specialtyBonusId} disabled={pending} onClick={() => submit(value)}>
-            <span className="xp-value">+{effectiveXp}</span><span className="xp-action-label">{categoryMeta[category].actions[value]}</span>
+          return <button type="button" key={value} aria-label={`+${effectiveXp} ${presentationForDiscipline(category).actions[value]}`} aria-describedby={specialtyBonusId} disabled={pending} onClick={() => submit(value)}>
+            <span className="xp-value">+{effectiveXp}</span><span className="xp-action-label">{presentationForDiscipline(category).actions[value]}</span>
           </button>;
         })}
       </div>
@@ -146,19 +132,31 @@ function RegisterXp({ studentId, specialty, onSummary, onFeedback, onUndo, conte
 
 function CoinActions({ context, readOnly, onFeedback }: { context: WorkspaceStudentContext; readOnly: boolean; onFeedback: (message: string) => void }) {
   const [summary, setSummary] = useState<CoinSummary | null>(null);
+  const [ledger, setLedger] = useState<CoinLedgerEntry[]>([]);
   const [rewards, setRewards] = useState<CoinReward[]>([]);
   const [contexts, setContexts] = useState<AssessmentContext[]>([]);
   const [assessmentContextId, setAssessmentContextId] = useState('');
   const [assessmentName, setAssessmentName] = useState('');
   const [activeRedemption, setActiveRedemption] = useState<AdvantageRedemption | null>(null);
+  const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
+  const walletContextKey = `${context.academicYearId}:${context.groupId}:${context.studentId}`;
+  const walletContextRef = useRef(walletContextKey);
+  walletContextRef.current = walletContextKey;
 
   useEffect(() => {
     if (readOnly) return;
     const controller = new AbortController();
-    Promise.all([workspaceApi.coins(context.studentId, controller.signal), workspaceApi.coinRewards(controller.signal), workspaceApi.assessmentContexts(context.groupId, controller.signal)]).then(([coins, fixedRewards, availableContexts]) => {
+    const requestContextKey = walletContextKey;
+    let cancelled = false;
+    setLoading(true);
+    setPending(false);
+    setError('');
+    Promise.all([workspaceApi.coins(context.studentId, controller.signal), workspaceApi.coinLedger(context.studentId, context.academicYearId, controller.signal), workspaceApi.coinRewards(controller.signal), workspaceApi.assessmentContexts(context.groupId, controller.signal)]).then(([coins, entries, fixedRewards, availableContexts]) => {
+      if (cancelled || walletContextRef.current !== requestContextKey) return;
       setSummary(coins);
+      setLedger(entries);
       setRewards(fixedRewards);
       const writableContexts = activeAssessmentContexts(availableContexts);
       setContexts(writableContexts);
@@ -166,79 +164,152 @@ function CoinActions({ context, readOnly, onFeedback }: { context: WorkspaceStud
       setActiveRedemption(null);
       setError('');
     }).catch((caught: unknown) => {
+      if (cancelled || walletContextRef.current !== requestContextKey) return;
       if (caught instanceof DOMException && caught.name === 'AbortError') return;
       setError('Could not load coin advantages.');
-    });
-    return () => controller.abort();
-  }, [context.studentId, context.groupId, readOnly]);
+    }).finally(() => { if (!cancelled && walletContextRef.current === requestContextKey) setLoading(false); });
+    return () => { cancelled = true; controller.abort(); };
+  }, [context.studentId, context.groupId, context.academicYearId, readOnly]);
+
+  async function refreshWallet(requestContextKey = walletContextKey) {
+    const [coins, entries] = await Promise.all([workspaceApi.coins(context.studentId), workspaceApi.coinLedger(context.studentId, context.academicYearId)]);
+    if (walletContextRef.current !== requestContextKey) return false;
+    setSummary(coins);
+    setLedger(entries);
+    return true;
+  }
+
+  async function grantManual(source: ManualCoinSource) {
+    if (pending) return;
+    const requestContextKey = walletContextKey;
+    setPending(true);
+    setError('');
+    try {
+      const result = await workspaceApi.grantManualCoin(context.studentId, context.academicYearId, source);
+      if (walletContextRef.current !== requestContextKey) return;
+      setSummary(result.value);
+      try {
+        const entries = await workspaceApi.coinLedger(context.studentId, context.academicYearId);
+        if (walletContextRef.current === requestContextKey) setLedger(entries);
+      } catch { /* the balance response remains authoritative */ }
+      if (walletContextRef.current !== requestContextKey) return;
+      onFeedback(result.replayed ? 'Eclipse Point grant replayed.' : `${manualSourceLabel(source)} point granted.`);
+    } catch (caught) {
+      if (walletContextRef.current !== requestContextKey) return;
+      const failure = caught as ApiFailure;
+      setError(failure.status === 409 ? 'This point grant could not be applied safely.' : failure.message);
+    } finally {
+      if (walletContextRef.current === requestContextKey) setPending(false);
+    }
+  }
+
+  async function correctManual(grant: CoinLedgerEntry) {
+    if (pending) return;
+    const requestContextKey = walletContextKey;
+    setPending(true);
+    setError('');
+    try {
+      const result = await workspaceApi.reverseManualCoin(grant.id);
+      if (!(await refreshWallet(requestContextKey)) || walletContextRef.current !== requestContextKey) return;
+      onFeedback(result.replayed ? 'Point correction replayed.' : 'Point correction recorded.');
+    } catch (caught) {
+      if (walletContextRef.current !== requestContextKey) return;
+      const failure = caught as ApiFailure;
+      setError(failure.status === 409 ? 'This point cannot be corrected because it is already corrected or allocated.' : failure.message);
+    } finally {
+      if (walletContextRef.current === requestContextKey) setPending(false);
+    }
+  }
 
   async function createOrSelectAssessment(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const name = assessmentName.trim();
     if (!name || pending) return;
+    const requestContextKey = walletContextKey;
     setPending(true);
     setError('');
     try {
       const result = await workspaceApi.createAssessmentContext(context.groupId, assessmentName);
+      if (walletContextRef.current !== requestContextKey) return;
       const canonical = result.value;
       setContexts(current => current.some(item => item.id === canonical.id) ? current : [...current, canonical]);
       setAssessmentContextId(canonical.id);
       setAssessmentName('');
       onFeedback(result.replayed ? `${canonical.name} selected.` : `${canonical.name} created and selected.`);
     } catch (caught) {
+      if (walletContextRef.current !== requestContextKey) return;
       const failure = caught as ApiFailure;
       setError(failure.status === 422 ? 'Enter an assessment name.' : failure.message);
     } finally {
-      setPending(false);
+      if (walletContextRef.current === requestContextKey) setPending(false);
     }
   }
 
   async function redeem(reward: CoinReward) {
     if (!assessmentContextId || pending || activeRedemption) return;
+    const requestContextKey = walletContextKey;
     setPending(true);
     setError('');
     try {
       const result = await workspaceApi.redeemAdvantage(context.studentId, assessmentContextId, reward.id);
+      if (walletContextRef.current !== requestContextKey) return;
       setSummary(current => current ? { ...current, balance: current.balance - reward.cost } : current);
       setActiveRedemption(result.value);
       onFeedback(result.replayed ? 'Advantage request replayed.' : `${reward.name} reserved.`);
     } catch (caught) {
+      if (walletContextRef.current !== requestContextKey) return;
       const failure = caught as ApiFailure;
       setError(failure.status === 409 ? 'This assessment already has an advantage.' : failure.message);
     } finally {
-      setPending(false);
+      if (walletContextRef.current === requestContextKey) setPending(false);
     }
   }
 
   async function reverse() {
     if (!activeRedemption || pending) return;
+    const requestContextKey = walletContextKey;
+    const redemption = activeRedemption;
     setPending(true);
     setError('');
     try {
-      await workspaceApi.reverseAdvantage(activeRedemption.id);
-      setSummary(current => current ? { ...current, balance: current.balance + activeRedemption.cost } : current);
+      await workspaceApi.reverseAdvantage(redemption.id);
+      if (walletContextRef.current !== requestContextKey) return;
+      setSummary(current => current ? { ...current, balance: current.balance + redemption.cost } : current);
       setActiveRedemption(null);
       onFeedback('Assessment advantage undone.');
     } catch (caught) {
+      if (walletContextRef.current !== requestContextKey) return;
       const failure = caught as ApiFailure;
       setError(failure.status === 409 ? 'This assessment advantage is already reversed.' : failure.message);
     } finally {
-      setPending(false);
+      if (walletContextRef.current === requestContextKey) setPending(false);
     }
   }
 
   if (readOnly) return null;
+  const correctedGrantIds = new Set(ledger.flatMap(entry => entry.correctionOfId ? [entry.correctionOfId] : []));
+  const recentManualGrants = ledger.filter(entry => entry.amount === 1 && entry.correctionOfId === null && manualSources.some(source => source.value === entry.source)).slice(-6).reverse();
   return <section className="coin-action panel-section" aria-label="Assessment advantages">
-    <div className="coin-action-heading action-heading">
-      <div className="coin-title"><span className="eclipse-coin" aria-hidden="true">◈</span><div><p className="eyebrow">ECLIPSE POINTS</p><h3>Assessment advantage</h3></div></div>
-      <strong aria-label="Eclipse Points balance">{summary?.balance ?? '—'} points</strong>
-    </div>
-    <p className="coin-description">A rare academy token for a carefully chosen assessment.</p>
-    <form className="assessment-context-form" onSubmit={createOrSelectAssessment}><label htmlFor="assessment-name">Create/select Assessment<input id="assessment-name" value={assessmentName} onChange={event => setAssessmentName(event.target.value)} placeholder="e.g. Unit quiz" maxLength={100} /></label><button type="submit" disabled={pending || !assessmentName.trim()}>Create/select Assessment</button></form>
-    {contexts.length ? <label htmlFor="assessment-context">Assessment<select id="assessment-context" value={assessmentContextId} onChange={event => setAssessmentContextId(event.target.value)}>{contexts.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : <p className="muted">Create an assessment to continue.</p>}
-    <div className="coin-rewards">{rewards.map(reward => <button type="button" key={reward.id} disabled={pending || !assessmentContextId || Boolean(activeRedemption) || (summary?.balance ?? 0) < reward.cost} onClick={() => redeem(reward)}>{reward.name} · {reward.cost} points</button>)}</div>
-    {activeRedemption && <button type="button" className="quiet-button" disabled={pending} onClick={reverse}>Undo assessment advantage</button>}
-    {error && <p className="error" role="alert">{error}</p>}
+    <details className="coin-action-details">
+      <summary className="coin-action-heading action-heading">
+        <span className="coin-title"><span className="eclipse-coin" aria-hidden="true">◈</span><span><span className="eyebrow">ECLIPSE POINTS</span><strong>Assessment advantage</strong></span></span>
+        <strong aria-label="Eclipse Points balance">{summary?.balance ?? '—'} points</strong>
+      </summary>
+      <div className="coin-action-body">
+        <p className="coin-description">A rare academy token for a carefully chosen assessment.</p>
+        <section className="manual-coin-section" aria-label="Manual Eclipse Points">
+          <div className="manual-coin-heading"><div><p className="eyebrow">TEACHER AWARD</p><h4>Grant one Eclipse Point</h4></div><span>+1 each</span></div>
+          {loading && <p className="action-status" role="status">Loading Eclipse Points…</p>}
+          <div className="manual-coin-grid">{manualSources.map(source => <button type="button" key={source.value} disabled={pending || loading} onClick={() => grantManual(source.value)}><strong>{source.label}</strong><small>{source.description}</small></button>)}</div>
+          <details className="manual-coin-history"><summary>Recent manual points</summary>{recentManualGrants.length ? <ul>{recentManualGrants.map(grant => <li key={grant.id}><span><strong>{manualSourceLabel(grant.source)}</strong><time dateTime={grant.createdAt}>{new Date(grant.createdAt).toLocaleDateString()}</time></span>{correctedGrantIds.has(grant.id) ? <em>Corrected</em> : <button type="button" className="quiet-button" disabled={pending} onClick={() => correctManual(grant)}>Correct</button>}</li>)}</ul> : <p className="muted">No manual points recorded for this student.</p>}</details>
+        </section>
+        <form className="assessment-context-form" onSubmit={createOrSelectAssessment}><label htmlFor="assessment-name">Create/select Assessment<input id="assessment-name" value={assessmentName} onChange={event => setAssessmentName(event.target.value)} placeholder="e.g. Unit quiz" maxLength={100} /></label><button type="submit" disabled={pending || !assessmentName.trim()}>Create/select Assessment</button></form>
+        {contexts.length ? <label htmlFor="assessment-context">Assessment<select id="assessment-context" value={assessmentContextId} onChange={event => setAssessmentContextId(event.target.value)}>{contexts.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : <p className="muted">Create an assessment to continue.</p>}
+        <div className="coin-rewards">{rewards.map(reward => <button type="button" key={reward.id} disabled={pending || !assessmentContextId || Boolean(activeRedemption) || (summary?.balance ?? 0) < reward.cost} onClick={() => redeem(reward)}>{reward.name} · {reward.cost} points</button>)}</div>
+        {activeRedemption && <button type="button" className="quiet-button" disabled={pending} onClick={reverse}>Undo assessment advantage</button>}
+        {error && <p className="error" role="alert">{error}</p>}
+      </div>
+    </details>
   </section>;
 }
 
@@ -302,6 +373,8 @@ export function StudentPanel({ student, context, historical, feedback, undo, onC
   };
   const readOnly = historical || Boolean(student.archivedAt);
   const percent = summary ? progressPercent(summary) : 0;
+  const specialtyDiscipline = disciplineForSpecialty(student.specialty);
+  const specialtyGlyph = specialtyDiscipline ? presentationForDiscipline(specialtyDiscipline).glyph : '✦';
 
   return <aside ref={panelRef} className="student-panel" role={dialog ? 'dialog' : undefined} aria-modal={dialog ? true : undefined} aria-labelledby="student-panel-title">
     <button ref={closeRef} className="panel-close" type="button" onClick={close} aria-label="Close student panel">×</button>
@@ -309,7 +382,7 @@ export function StudentPanel({ student, context, historical, feedback, undo, onC
       <span className="character-crest student-crest avatar" aria-hidden="true"><span className="crest-initials">{studentInitials(student.realName)}</span><span className="crest-orbit" /></span>
       <div><p className="eyebrow">CHARACTER SHEET · SELECTED STUDENT</p><h2 ref={headingRef} id="student-panel-title" tabIndex={-1}>{student.realName}</h2><p className="student-alias">{student.alias}</p></div>
     </header>
-    <div className="sheet-specialty"><span className="specialty-glyph" aria-hidden="true">✦</span><div><small>Specialty</small><strong>{student.specialty ?? 'Not assigned'}</strong></div>{summary && <span className="level-mark">Level {summary.level}</span>}</div>
+    <div className="sheet-specialty"><span className="specialty-glyph" aria-hidden="true">{specialtyGlyph}</span><div><small>Specialty</small><strong>{student.specialty ?? 'Not assigned'}</strong></div>{summary && <span className="level-mark">Level {summary.level}</span>}</div>
     <section className="student-facts" aria-label="Student XP summary">
       <span><small>Annual record</small>{summary ? <strong>Annual XP: {summary.annualEffectiveXp} · Level {summary.level}</strong> : <strong>XP summary unavailable</strong>}</span>
     </section>
@@ -320,7 +393,7 @@ export function StudentPanel({ student, context, historical, feedback, undo, onC
     {readOnly ? <p className="read-only-note" role="status">Historical record · read-only</p> : <><RegisterXp studentId={student.id} specialty={student.specialty} contextKey={`${context.academicYearId}:${context.groupId}:${context.studentId}`} onSummary={onSummary} onFeedback={onFeedback} onUndo={onUndo} /><UndoBanner opportunity={undo} onResult={onUndoResult} /></>}
     <section className="achievement-section" aria-label="Achievements">
       <div className="section-heading"><div><p className="eyebrow">ACADEMY SEALS</p><h3>Achievements</h3></div><span className="achievement-count">{summary?.badges.length ?? 0}</span></div>
-      {summary?.badges.length ? <div className="badge-list">{summary.badges.map(badge => <span className="badge-seal" key={`${badge.category}-${badge.unlockedAt}`}><span className="badge-medallion" aria-hidden="true">{categoryMeta[badge.category].glyph}</span><span>{badge.label}</span></span>)}</div> : <p className="muted">Seals appear as classroom evidence accumulates.</p>}
+      {summary?.badges.length ? <div className="badge-list">{summary.badges.map(badge => <span className="badge-seal" key={`${badge.category}-${badge.unlockedAt}`}><span className="badge-medallion" aria-hidden="true">{presentationForDiscipline(badge.category).glyph}</span><span>{badge.label}</span></span>)}</div> : <p className="muted">Seals appear as classroom evidence accumulates.</p>}
     </section>
     {summary?.badges.length ? <p className="badge-callout" role="status">Badge unlocked: {summary.badges.map(badge => badge.label).join(', ')}</p> : null}
     {!readOnly && <CoinActions context={context} readOnly={readOnly} onFeedback={onFeedback} />}

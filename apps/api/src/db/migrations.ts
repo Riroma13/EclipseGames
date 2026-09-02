@@ -32,4 +32,16 @@ export const migrations: Migration[] = [
     id: '0007_classroom_gameplay',
     sql: readFileSync(fileURLToPath(new URL('../../drizzle/0007_classroom_gameplay.sql', import.meta.url)), 'utf8'),
   },
+  {
+    id: '0008_game_master_content',
+    sql: readFileSync(fileURLToPath(new URL('../../drizzle/0008_game_master_content.sql', import.meta.url)), 'utf8'),
+  },
+  {
+    id: '0009_event_create_idempotency',
+    sql: readFileSync(fileURLToPath(new URL('../../drizzle/0009_event_create_idempotency.sql', import.meta.url)), 'utf8'),
+  },
+  {
+    id: '0010_prompt_reveal',
+    sql: readFileSync(fileURLToPath(new URL('../../drizzle/0010_prompt_reveal.sql', import.meta.url)), 'utf8'),
+  },
 ];

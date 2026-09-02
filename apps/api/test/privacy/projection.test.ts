@@ -135,4 +135,41 @@ describe('projection privacy boundary', () => {
     expect(Object.keys(response.json().students[0]).sort()).toEqual(['alias', 'avatar', 'progressToNextLevel', 'specialty', 'unlockedBadge', 'xpLevel'].sort());
     expect(JSON.stringify(response.json())).not.toMatch(/Private Display Name|realName|rtAverage|rubric|grade|comments|incidents|history|redCode|disciplinary/i);
   });
+
+  it('keeps an unrevealed Prompt Deck prompt out of the classroom display', async () => {
+    const { app, cookie } = await authenticatedApp();
+    const headers = { origin, cookie };
+    const year = await app.inject({ method: 'POST', url: '/api/v1/academic-years', headers, payload: { label: 'Prompt privacy year', startsOn: '2026-09-01', endsOn: '2027-07-01' } });
+    const group = await app.inject({ method: 'POST', url: `/api/v1/academic-years/${year.json().id}/groups`, headers, payload: { name: 'Prompt privacy group' } });
+    const deck = await app.inject({ method: 'POST', url: '/api/v1/prompt-decks', headers, payload: { title: 'Private prompt deck', prompts: ['Private classroom question.', 'Follow-up question.'] } });
+    const launched = await app.inject({ method: 'POST', url: `/api/v1/groups/${group.json().id}/minigames/prompt-deck`, headers, payload: { deckId: deck.json().id } });
+    const hidden = await app.inject({ method: 'GET', url: `/api/v1/projection/groups/${group.json().id}/display`, headers });
+    expect(hidden.statusCode).toBe(200);
+    expect(hidden.json()).toMatchObject({ scene: 'MINIGAME', minigame: { kind: 'PROMPT_DECK', prompt: 'Prompt ready.', promptRevealed: false } });
+    expect(JSON.stringify(hidden.json())).not.toContain('Private classroom question.');
+    const revealed = await app.inject({ method: 'POST', url: `/api/v1/minigames/${launched.json().id}/reveal`, headers });
+    expect(revealed.json()).toMatchObject({ prompt: 'Private classroom question.', promptRevealed: true });
+    const shown = await app.inject({ method: 'GET', url: `/api/v1/projection/groups/${group.json().id}/display`, headers });
+    expect(shown.json()).toMatchObject({ minigame: { prompt: 'Private classroom question.', promptRevealed: true } });
+  });
+
+  it('clears every displayable gameplay layer without exposing private data', async () => {
+    const { app, cookie } = await authenticatedApp();
+    const headers = { origin, cookie };
+    const year = await app.inject({ method: 'POST', url: '/api/v1/academic-years', headers, payload: { label: 'Display clear year', startsOn: '2026-09-01', endsOn: '2027-07-01' } });
+    const group = await app.inject({ method: 'POST', url: `/api/v1/academic-years/${year.json().id}/groups`, headers, payload: { name: 'Display clear group' } });
+    const displayGroupId = group.json().id as string;
+    const event = await app.inject({ method: 'POST', url: `/api/v1/groups/${displayGroupId}/events`, headers: { ...headers, 'idempotency-key': '00000000-0000-4000-8000-000000000401' }, payload: { title: 'Safe event', description: 'A displayable event.', theme: 'MISSION', showOnProjection: true } });
+    expect(event.statusCode).toBe(201);
+    expect((await app.inject({ method: 'POST', url: `/api/v1/events/${event.json().id}/activate`, headers })).statusCode).toBe(200);
+    const challenge = await app.inject({ method: 'POST', url: `/api/v1/groups/${displayGroupId}/challenges`, headers, payload: { title: 'Safe challenge', description: 'A displayable challenge.', target: 2, showOnProjection: true } });
+    expect(challenge.statusCode).toBe(201);
+    expect((await app.inject({ method: 'POST', url: `/api/v1/challenges/${challenge.json().id}/activate`, headers })).statusCode).toBe(200);
+
+    const cleared = await app.inject({ method: 'POST', url: `/api/v1/teacher/groups/${displayGroupId}/display/clear`, headers });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json()).toMatchObject({ scene: 'IDLE', resourceId: null, display: { scene: 'IDLE', activeEvent: null, activeChallenge: null, minigame: null } });
+    expect((await app.inject({ method: 'GET', url: `/api/v1/projection/groups/${displayGroupId}/display`, headers })).json()).toMatchObject({ scene: 'IDLE', activeEvent: null, activeChallenge: null, minigame: null });
+    expect(JSON.stringify(cleared.json())).not.toMatch(/realName|Private|rtAverage|comments|incidents|history|disciplinary/i);
+  });
 });

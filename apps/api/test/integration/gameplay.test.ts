@@ -35,7 +35,7 @@ describe('classroom gameplay API lifecycle', () => {
   it('runs an event through draft, active, display, and completion states', async () => {
     const { app, headers } = await authenticatedApp();
     const { groupId } = await classroom(app, headers, 'Event lifecycle');
-    const created = await app.inject({ method: 'POST', url: `/api/v1/groups/${groupId}/events`, headers, payload: { title: 'Speak French', description: 'Use one full sentence.', theme: 'MISSION', showOnProjection: false } });
+    const created = await app.inject({ method: 'POST', url: `/api/v1/groups/${groupId}/events`, headers: { ...headers, 'idempotency-key': '00000000-0000-4000-8000-000000000301' }, payload: { title: 'Speak French', description: 'Use one full sentence.', theme: 'MISSION', showOnProjection: false } });
     expect(created.statusCode).toBe(201);
     const eventId = created.json().id as string;
     expect(created.json()).toMatchObject({ status: 'DRAFT', showOnProjection: false, activatedAt: null, completedAt: null });
@@ -118,6 +118,18 @@ describe('classroom gameplay API lifecycle', () => {
     }
   });
 
+  it('advances concurrent Random Student Draw requests without duplicate selections', async () => {
+    const { app, headers } = await authenticatedApp();
+    const { groupId, studentIds } = await classroom(app, headers, 'Concurrent random draw');
+    const launched = await app.inject({ method: 'POST', url: `/api/v1/groups/${groupId}/minigames/random-draw`, headers, payload: {} });
+    const minigameId = launched.json().id as string;
+    const draws = await Promise.all(studentIds.map(() => app.inject({ method: 'POST', url: `/api/v1/minigames/${minigameId}/draw`, headers })));
+    expect(draws.every(response => response.statusCode === 200)).toBe(true);
+    const selectedIds = draws.map(response => response.json().selectedStudent.id as string);
+    expect(new Set(selectedIds)).toEqual(new Set(studentIds));
+    expect((await app.inject({ method: 'GET', url: `/api/v1/groups/${groupId}/minigames/current`, headers })).json()).toMatchObject({ drawCount: studentIds.length, drawTotal: studentIds.length });
+  });
+
   it('runs French Sprint, replaces the active session, and preserves terminal state', async () => {
     const { app, headers } = await authenticatedApp();
     const { groupId } = await classroom(app, headers, 'French sprint lifecycle');
@@ -156,12 +168,12 @@ describe('classroom gameplay API lifecycle', () => {
     expect((await app.inject({ method: 'POST', url: `/api/v1/minigames/${minigameId}/start`, headers })).json()).toMatchObject({ status: 'RUNNING', remainingSeconds: 10 });
 
     clock.mockReturnValue(startTime + 12_000);
-    const current = await app.inject({ method: 'GET', url: `/api/v1/groups/${groupId}/minigames/current`, headers });
-    expect(current.statusCode).toBe(200);
-    expect(current.json()).toBeNull();
     const projection = await app.inject({ method: 'GET', url: `/api/v1/projection/groups/${groupId}/display`, headers });
     expect(projection.statusCode).toBe(200);
     expect(projection.json().minigame).toBeNull();
+    const current = await app.inject({ method: 'GET', url: `/api/v1/groups/${groupId}/minigames/current`, headers });
+    expect(current.statusCode).toBe(200);
+    expect(current.json()).toBeNull();
     for (const action of ['start', 'reset']) {
       const response = await app.inject({ method: 'POST', url: `/api/v1/minigames/${minigameId}/${action}`, headers });
       expect(response.statusCode).toBe(422);

@@ -38,7 +38,7 @@ test('teacher can lead visible event, challenge, and minigame flows', async ({ p
 
   await page.goto(route('challenges', yearId, groupId));
   await expect(page.getByRole('heading', { name: 'Challenges' })).toBeVisible();
-  await page.getByRole('button', { name: 'New Challenge' }).click();
+  await page.getByRole('button', { name: 'New Challenge', exact: true }).click();
   await page.locator('#challenge-title').fill('Smoke Challenge');
   await page.locator('#challenge-description').fill('Reach the shared target.');
   await page.locator('#challenge-target').fill('2');
@@ -54,7 +54,7 @@ test('teacher can lead visible event, challenge, and minigame flows', async ({ p
   await expect(page.getByText('Challenge progress: 1 / 2.')).toBeVisible();
   await page.getByRole('button', { name: '+1 Progress' }).click();
   await expect(page.getByText(/Challenge complete.*objective reached\./)).toBeVisible();
-  await expect(page.getByText('2 / 2')).toBeVisible();
+  await expect(page.locator('.challenge-progress').getByText('2 / 2', { exact: true })).toBeVisible();
 
   await page.goto(route('minigames', yearId, groupId));
   await expect(page.getByRole('heading', { name: 'Minigames' })).toBeVisible();
@@ -66,6 +66,7 @@ test('teacher can lead visible event, challenge, and minigame flows', async ({ p
   await page.getByRole('button', { name: 'End game' }).click();
   await expect(page.getByText('Minigame ended.')).toBeVisible();
 
+  await page.getByRole('button', { name: 'Choose French Sprint', exact: true }).click();
   await page.locator('#sprint-title').fill('Smoke Sprint');
   await page.locator('#sprint-prompt').fill('Describe the image.');
   await page.getByRole('button', { name: 'Launch French Sprint' }).click();

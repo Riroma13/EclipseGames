@@ -4,12 +4,20 @@ const demoYearId = '9b6f3b9e-3d0f-4b1e-9b1e-202620270001';
 const demoGroupId = '9b6f3b9e-3d0f-4b1e-9b1e-202620270002';
 
 test('teacher can sign in and open the Home command center without private data', async ({ page }) => {
-  await page.goto('/');
+  await page.goto(`/#/?year=${demoYearId}&group=${demoGroupId}`);
   await page.getByLabel('Email').fill('teacher@example.test');
   await page.getByLabel('Password').fill('change-me-in-development');
   await page.getByRole('button', { name: 'Sign in' }).click();
 
-  await expect(page.getByRole('heading', { name: 'Home / Command Center' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Command Center' })).toBeVisible();
+  await expect(page.getByText('Weekend Story', { exact: true })).toBeVisible();
+  const promptDeckCard = page.locator('.prepared-card').filter({ hasText: 'PROMPT DECKS' });
+  await expect(promptDeckCard).toContainText('saved');
+  await expect(promptDeckCard.getByRole('link', { name: 'Open minigame desk', exact: true })).toBeVisible();
+  await expect(page.getByText('The Weekend Signal', { exact: true })).toBeVisible();
+  await expect(page.getByText('Ten French Voices', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Clear display', exact: true })).toBeVisible();
+  await expect(page.locator('.context-display-control')).toContainText('French Only');
   await expect(page.locator('.home-header').getByRole('link', { name: 'Open Classroom Preview' })).toBeVisible();
   await expect(page.locator('[data-testid="projection-card"]')).toHaveCount(0);
   await expect(page.locator('body')).not.toContainText(/Private Name|RT average|rubric|comments|incidents|history/i);

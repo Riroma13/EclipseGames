@@ -1,13 +1,24 @@
+import { randomUUID } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
 
 async function signIn(page: Page, target = '/#/workspace') {
   await page.goto(target);
-  if (await page.getByLabel('Email').count()) {
-    await page.getByLabel('Email').fill('teacher@example.test');
+  const workspace = page.getByRole('heading', { name: 'Classroom workspace', exact: true });
+  const email = page.getByLabel('Email');
+  const screen = await Promise.race([
+    email.waitFor({ state: 'visible', timeout: 2_000 }).then(() => 'login' as const),
+    workspace.waitFor({ state: 'visible', timeout: 2_000 }).then(() => 'workspace' as const),
+  ]).catch(() => 'workspace' as const);
+  if (screen === 'login') {
+    await email.fill('teacher@example.test');
     await page.getByLabel('Password').fill('change-me-in-development');
     await page.getByRole('button', { name: 'Sign in' }).click();
   }
-  await expect(page.getByRole('heading', { name: 'Classroom workspace' })).toBeVisible();
+  await expect(workspace).toBeVisible();
+}
+
+function manualGrantHeaders(headers: { cookie?: string } | undefined) {
+  return { ...headers, 'Idempotency-Key': randomUUID() };
 }
 
 async function seedRoster(page: Page, suffix: string) {
@@ -151,7 +162,7 @@ test('root without a hash opens the Home command center', async ({ page }) => {
   await page.getByLabel('Email').fill('teacher@example.test');
   await page.getByLabel('Password').fill('change-me-in-development');
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByRole('heading', { name: 'Home / Command Center' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Command Center' })).toBeVisible();
   await expect(page.locator('.home-header').getByRole('link', { name: 'Open Classroom Preview' })).toBeVisible();
   await expect(page.locator('[data-testid="projection-card"]')).toHaveCount(0);
 });
@@ -189,8 +200,9 @@ test('AC-11 tablet dialog traps Tab focus in both directions', async ({ page }) 
   await firstValue.focus();
   await page.keyboard.press('Shift+Tab');
   await expect(close).toBeFocused();
-  await page.locator('summary').focus();
-  await expect(page.locator('summary')).toBeFocused();
+  const noteSummary = page.getByText('Add optional note', { exact: true });
+  await noteSummary.focus();
+  await expect(noteSummary).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(close).toBeFocused();
 });
@@ -261,13 +273,14 @@ test('SPEC-0005 real teacher redemption flow preserves balance and teaching cont
   expect(contextResponse.status()).toBe(201);
   const assessmentContextId = (await contextResponse.json()).id as string;
   for (const source of ['PERSONAL_IMPROVEMENT', 'EXCEPTIONAL_FRENCH', 'EXCEPTIONAL_COLLABORATION', 'SPECIAL_CHALLENGE', 'PERSONAL_IMPROVEMENT']) {
-    const grant = await page.request.post(`/api/v1/students/${studentId}/coin-grants`, { headers, data: { academicYearId: yearId, source } });
+    const grant = await page.request.post(`/api/v1/students/${studentId}/coin-grants`, { headers: manualGrantHeaders(headers), data: { academicYearId: yearId, source } });
     expect(grant.status()).toBe(201);
   }
 
   await signIn(page, `/#/workspace?year=${yearId}&group=${groupId}`);
   await page.getByRole('button', { name: /Ada Lovelace/ }).click();
   await expect(page.getByRole('heading', { name: 'Ada Lovelace' })).toBeVisible();
+  await page.locator('.coin-action-details > summary').click();
   await expect(page.getByLabel('Eclipse Points balance')).toHaveText('5 points');
   await expect(page.getByRole('combobox', { name: /Assessment/ })).toBeVisible();
   const standard = page.getByRole('button', { name: /Standard assessment advantage/ });
@@ -299,7 +312,7 @@ test('AC-01–AC-17 canonical teacher journey stays in the workspace', async ({ 
   expect(firstStudent).toBeTruthy();
   if (!firstStudent) throw new Error('Canonical roster is missing Zoë Durand.');
   for (const source of ['PERSONAL_IMPROVEMENT', 'EXCEPTIONAL_FRENCH', 'EXCEPTIONAL_COLLABORATION', 'SPECIAL_CHALLENGE', 'PERSONAL_IMPROVEMENT']) {
-    expect((await page.request.post(`/api/v1/students/${firstStudent.id}/coin-grants`, { headers, data: { academicYearId: yearId, source } })).status()).toBe(201);
+    expect((await page.request.post(`/api/v1/students/${firstStudent.id}/coin-grants`, { headers: manualGrantHeaders(headers), data: { academicYearId: yearId, source } })).status()).toBe(201);
   }
 
   await signIn(page, `/#/workspace?year=${yearId}&group=${groupId}`);
@@ -307,6 +320,7 @@ test('AC-01–AC-17 canonical teacher journey stays in the workspace', async ({ 
   await page.getByRole('button', { name: /Zoë Durand/ }).click();
   await expect(page.getByRole('heading', { name: 'Zoë Durand' })).toBeVisible();
   await expect(page.getByText('Analyst', { exact: true })).toBeVisible();
+  await page.locator('.coin-action-details > summary').click();
   await page.getByRole('button', { name: 'PRECISION' }).click();
   await page.getByRole('button', { name: '+4 Especially precise work' }).click();
   await expect(page.getByText(/Base XP \+3 · Specialty bonus \+1 · Effective XP \+4/)).toBeVisible();
@@ -356,7 +370,7 @@ test('SPEC-0005 coin action proves pending, failure, retry, and privacy boundari
   const contextResponse = await page.request.post('/api/v1/assessment-contexts', { headers, data: { groupId, name: 'Retry assessment' } });
   expect(contextResponse.status()).toBe(201);
   for (const source of ['PERSONAL_IMPROVEMENT', 'EXCEPTIONAL_FRENCH', 'EXCEPTIONAL_COLLABORATION', 'SPECIAL_CHALLENGE', 'PERSONAL_IMPROVEMENT']) {
-    expect((await page.request.post(`/api/v1/students/${studentId}/coin-grants`, { headers, data: { academicYearId: yearId, source } })).status()).toBe(201);
+    expect((await page.request.post(`/api/v1/students/${studentId}/coin-grants`, { headers: manualGrantHeaders(headers), data: { academicYearId: yearId, source } })).status()).toBe(201);
   }
 
   let attempts = 0;
@@ -372,6 +386,7 @@ test('SPEC-0005 coin action proves pending, failure, retry, and privacy boundari
   await signIn(page, `/#/workspace?year=${yearId}&group=${groupId}`);
   await page.getByRole('button', { name: /Ada Lovelace/ }).click();
   const coinSection = page.getByRole('region', { name: 'Assessment advantages' });
+  await coinSection.locator('.coin-action-details > summary').click();
   const standard = coinSection.getByRole('button', { name: /Standard assessment advantage/ });
   await expect(page.getByLabel('Eclipse Points balance')).toHaveText('5 points');
   const contextId = (await contextResponse.json()).id as string;
@@ -388,7 +403,7 @@ test('SPEC-0005 coin action proves pending, failure, retry, and privacy boundari
   await expect(page.getByText('Standard assessment advantage reserved.')).toBeVisible();
   await expect(page.getByLabel('Eclipse Points balance')).toHaveText('3 points');
   await expect(page.getByRole('combobox', { name: /Assessment/ })).toHaveValue(contextId);
-  await expect(coinSection).not.toContainText(/XP|RT|rubric|grade/i);
+  await expect(coinSection).not.toContainText(/\b(?:XP|RT|rubric|grade)\b/i);
   expect(page.url()).not.toMatch(/(coin|reward|balance|privateValue|cost)=/i);
 });
 
@@ -436,13 +451,14 @@ test('labelled fixture Projection handoff stays separate from the complete teach
   expect(firstStudent).toBeTruthy();
   if (!firstStudent) throw new Error('Projection journey roster is missing Zoë Durand.');
   for (const source of ['PERSONAL_IMPROVEMENT', 'EXCEPTIONAL_FRENCH', 'EXCEPTIONAL_COLLABORATION', 'SPECIAL_CHALLENGE', 'PERSONAL_IMPROVEMENT']) {
-    expect((await page.request.post(`/api/v1/students/${firstStudent.id}/coin-grants`, { headers, data: { academicYearId: yearId, source } })).status()).toBe(201);
+    expect((await page.request.post(`/api/v1/students/${firstStudent.id}/coin-grants`, { headers: manualGrantHeaders(headers), data: { academicYearId: yearId, source } })).status()).toBe(201);
   }
 
   await signIn(page, `/#/workspace?year=${yearId}&group=${groupId}`);
   await page.getByLabel('Search students').fill('zoe');
   await page.getByRole('button', { name: /Zoë Durand/ }).click();
   await expect(page.getByRole('heading', { name: 'Zoë Durand' })).toBeVisible();
+  await page.locator('.coin-action-details > summary').click();
   await page.getByRole('button', { name: 'PRECISION' }).click();
   await page.getByRole('button', { name: '+4 Especially precise work' }).click();
   await expect(page.getByText(/Base XP \+3 · Specialty bonus \+1 · Effective XP \+4/)).toBeVisible();
@@ -479,6 +495,7 @@ test('clean demo seed supports the normal Eclipse Points assessment journey', as
   await signIn(page, target);
   await page.goto(target);
   await page.getByRole('button', { name: /Camille Martin/ }).click();
+  await page.locator('.coin-action-details > summary').click();
   await expect(page.getByLabel('Eclipse Points balance')).toHaveText('2 points');
   const assessmentName = page.getByLabel('Create/select Assessment');
   await assessmentName.fill(`Seeded journey ${Date.now()}`);
@@ -533,8 +550,8 @@ test('coin loading keeps a genuine initial failure visible', async ({ page }) =>
 
 test('group authentication expiry clears the private workspace and shows recovery', async ({ page }) => {
   const { yearId } = await seedRoster(page, `${Date.now()}-auth`);
-  await page.route('**/api/v1/academic-years/*/groups', async (route) => { await route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ code: 'AUTH_REQUIRED', message: 'Sign-in required.' }) }); });
   await signIn(page);
+  await page.route('**/api/v1/academic-years/*/groups', async (route) => { await route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ code: 'AUTH_REQUIRED', message: 'Sign-in required.' }) }); });
   await page.goto(`/#/workspace?year=${yearId}`);
   await expect(page.getByRole('heading', { name: 'Open the classroom workspace' })).toBeVisible();
   await expect(page.getByText('Ada Lovelace')).toHaveCount(0);

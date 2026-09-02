@@ -33,6 +33,8 @@ export type XpCategory = (typeof xpCategories)[number];
 export type XpAnnualSummaryDto = { studentId: string; academicYearId: string; annualEffectiveXp: number; level: 1|2|3|4|5|6|7|8; progress: { current: number; required: number; nextLevel: number|null; isMaxLevel: boolean }; badges: Array<{ category: XpCategory; label: string; unlockedAt: string }> };
 
 export const coinSourceSchema = z.enum(['LEVEL_ENTITLEMENT', 'PERSONAL_IMPROVEMENT', 'EXCEPTIONAL_FRENCH', 'EXCEPTIONAL_COLLABORATION', 'SPECIAL_CHALLENGE']);
+export const manualCoinSourceSchema = z.enum(['PERSONAL_IMPROVEMENT', 'EXCEPTIONAL_FRENCH', 'EXCEPTIONAL_COLLABORATION', 'SPECIAL_CHALLENGE']);
+export type ManualCoinSource = z.infer<typeof manualCoinSourceSchema>;
 export const coinSummarySchema = z.object({ studentId: z.string(), academicYearId: z.string(), balance: z.number().int().nonnegative() });
 export type CoinSummaryDto = z.infer<typeof coinSummarySchema>;
 export type CoinLedgerEntryDto = { id: string; amount: number; source: string; createdAt: string; correctionOfId: string | null };
@@ -42,5 +44,8 @@ export const assessmentContextSchema = z.object({ id: z.string(), groupId: z.str
 export type AssessmentContextDto = z.infer<typeof assessmentContextSchema>;
 export type AdvantageRedemptionDto = { id: string; studentId: string; assessmentContextId: string; rewardId: string; cost: 2 | 3; createdAt: string; reversedAt: string | null };
 export type AutomaticReversalDto = { redemptionId: string; rewardId: string; cost: 2 | 3; trigger: 'ENTITLEMENT_REVOKED'; refundLedgerEntryId: string; reversedAt: string };
+
+export type MinigamePresetDto = { id: string; title: string; prompt: string; durationSeconds: number; archivedAt: string | null; createdAt: string; updatedAt: string };
+export type PromptDeckDto = { id: string; title: string; prompts: string[]; archivedAt: string | null; createdAt: string; updatedAt: string };
 
 export { z };

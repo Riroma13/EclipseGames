@@ -1,4 +1,6 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { gameApi, type ProjectionControl } from '../game/game-api';
+import { displayStatus } from '../app/display-status';
 import { ClassroomSetup } from './ClassroomSetup';
 
 export type WorkspaceRoute = 'home' | 'classroom' | 'events' | 'challenges' | 'minigames';
@@ -33,6 +35,55 @@ function projectionHref() {
   return `/#/projection${group ? `?group=${encodeURIComponent(group)}` : ''}`;
 }
 
+function groupIdFromUrl() {
+  return new URLSearchParams(contextQuery()).get('group');
+}
+
+function DisplayStatusFooter() {
+  const [groupId, setGroupId] = useState<string | null>(() => groupIdFromUrl());
+  const [display, setDisplay] = useState<ProjectionControl | null>(null);
+  const groupRef = useRef(groupId);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    const read = async () => {
+      const nextGroupId = groupIdFromUrl();
+      if (nextGroupId !== groupRef.current) {
+        groupRef.current = nextGroupId;
+        setGroupId(nextGroupId);
+        setDisplay(null);
+        setError('');
+      }
+      if (!nextGroupId) return;
+      try {
+        const value = await gameApi.projectionControl(nextGroupId);
+        if (!cancelled && groupIdFromUrl() === nextGroupId) { setDisplay(value); setError(''); }
+      } catch {
+        if (!cancelled && groupIdFromUrl() === nextGroupId) { setDisplay(null); setError('Display status unavailable.'); }
+      }
+    };
+    void read();
+    const interval = window.setInterval(() => void read(), 2_000);
+    return () => { cancelled = true; window.clearInterval(interval); };
+  }, []);
+
+  const status = groupId ? displayStatus(display) : { state: 'idle' as const, label: 'Idle' as const, title: 'Choose a classroom', detail: 'Select a class to read display status.' };
+  const displayedStatus = error ? { ...displayStatus(null), detail: error } : status;
+  return <div className="academy-rail-footer">
+    <div className={`rail-display-status is-${displayedStatus.state}`} aria-label="Classroom display status" aria-live="polite">
+      <div className="rail-display-topline"><span className="rail-display-state">{displayedStatus.label}</span><span className="rail-display-kicker">Display status</span></div>
+      <strong>{displayedStatus.title}</strong>
+      <span>{displayedStatus.detail}</span>
+    </div>
+    <a className="projection-handoff" href={projectionHref()} aria-label="Open Classroom Preview">
+      <span className="preview-seal" aria-hidden="true">◉</span>
+      <span><strong>Open display →</strong><small>Classroom Preview</small></span>
+    </a>
+    <p className="rail-caption">Private teacher workspace</p>
+  </div>;
+}
+
 const navigation: Array<{ route: WorkspaceRoute; label: string; caption: string; glyph: string }> = [
   { route: 'home', label: 'Home', caption: 'Command center', glyph: '⌂' },
   { route: 'classroom', label: 'Classroom', caption: 'Live roster', glyph: '◌' },
@@ -54,14 +105,7 @@ export function WorkspaceShell({ children, activeRoute = 'classroom' }: { childr
           <span><strong>{item.label}</strong><small>{item.caption}</small></span>
         </a>)}
       </nav>
-      <div className="academy-rail-footer">
-        <a className="projection-handoff" href={projectionHref()} aria-label="Open Classroom Preview">
-          <span className="preview-seal" aria-hidden="true">◉</span>
-          <span><strong>Classroom Preview</strong><small>Safe projection</small></span>
-          <span className="handoff-arrow" aria-hidden="true">→</span>
-        </a>
-        <p className="rail-caption">Private teacher workspace</p>
-      </div>
+       <DisplayStatusFooter />
     </aside>
     <main className="shell workspace-shell"><ClassroomSetup />{children}</main>
   </div>;

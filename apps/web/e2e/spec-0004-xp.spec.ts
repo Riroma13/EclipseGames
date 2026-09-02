@@ -88,6 +88,7 @@ test('XP quick actions show specialty totals while preserving canonical base req
   await options.nth(2).click();
   await expect(page.locator('.feedback')).toHaveText('Base XP +3 · Specialty bonus +1 · Effective XP +4');
   await expect(page.getByText('Annual XP: 9 · Level 1')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Recent XP activity' })).toContainText('Base +3 · Bonus +1 · Effective +4');
   expect(xpRequests).toEqual([
     { category: 'PRECISION', baseXp: 1 },
     { category: 'PRECISION', baseXp: 2 },
@@ -97,6 +98,63 @@ test('XP quick actions show specialty totals while preserving canonical base req
   await page.getByRole('button', { name: 'Undo' }).click();
   await expect(page.getByText('XP registration undone.')).toBeVisible();
   await expect(page.getByText('Annual XP: 5 · Level 1')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Recent XP activity' })).toContainText('Reversed');
+});
+
+test('specialty sheets share discipline glyphs and matching Quick XP treatment', async ({ page }) => {
+  const specialties = [
+    { realName: 'Leader Student', alias: 'Leader', specialty: 'Leader', discipline: 'COMMUNICATION', glyph: '◒', effectiveValues: ['+2', '+3', '+4'] },
+    { realName: 'Strategist Student', alias: 'Strategist', specialty: 'Strategist', discipline: 'PRECISION', glyph: '⌖', effectiveValues: ['+2', '+3', '+4'] },
+    { realName: 'Disciplined Student', alias: 'Disciplined', specialty: 'Disciplined', discipline: 'CONSISTENCY', glyph: '↗︎', effectiveValues: ['+2', '+3', '+4'] },
+    { realName: 'Helper Student', alias: 'Helper', specialty: 'Helper', discipline: 'COLLABORATION', glyph: '∞', effectiveValues: ['+2', '+3', '+4'] },
+  ];
+  const login = await page.request.post('/api/v1/auth/session', { data: { email: 'teacher@example.test', password: 'change-me-in-development' } });
+  expect(login.status()).toBe(204);
+  const cookie = login.headers()['set-cookie']?.split(';')[0];
+  const headers = cookie ? { cookie } : undefined;
+  const year = await page.request.post('/api/v1/academic-years', { headers, data: { label: `XP iconography ${Date.now()}`, startsOn: '1900-09-01', endsOn: '1901-07-01' } });
+  expect(year.status()).toBe(200);
+  const yearId = (await year.json()).id as string;
+  const group = await page.request.post(`/api/v1/academic-years/${yearId}/groups`, { headers, data: { name: 'XP iconography group' } });
+  expect(group.status()).toBe(200);
+  const groupId = (await group.json()).id as string;
+  const roster = await page.request.post(`/api/v1/groups/${groupId}/students`, { headers, data: { students: specialties.map(({ realName, alias, specialty }) => ({ realName, alias, avatar: 'default', specialty })) } });
+  expect(roster.status()).toBe(200);
+
+  await page.goto(`/#/workspace?year=${yearId}&group=${groupId}`);
+  if (await page.getByLabel('Email').count()) {
+    await page.getByLabel('Email').fill('teacher@example.test');
+    await page.getByLabel('Password').fill('change-me-in-development');
+    await page.getByRole('button', { name: 'Sign in' }).click();
+  }
+  await expect(page.getByRole('heading', { name: 'Classroom workspace' })).toBeVisible();
+
+  const panel = page.locator('.student-panel');
+  const disciplines = ['COMMUNICATION', 'PRECISION', 'CONSISTENCY', 'COLLABORATION'];
+  for (const entry of specialties) {
+    await page.getByRole('button', { name: new RegExp(entry.realName) }).click();
+    await expect(panel.getByRole('heading', { name: entry.realName })).toBeVisible();
+    await expect(panel.locator('.sheet-specialty strong')).toHaveText(entry.specialty);
+
+    const matching = panel.locator(`button.discipline-${entry.discipline.toLowerCase()}`);
+    await expect(panel.locator('.specialty-glyph')).toHaveText(entry.glyph);
+    await expect(matching.locator('.discipline-glyph')).toHaveText(entry.glyph);
+    expect(await panel.locator('.specialty-glyph').innerText()).toBe(await matching.locator('.discipline-glyph').innerText());
+    await expect(panel.locator('.discipline-choice.is-specialty-match')).toHaveCount(1);
+    await expect(panel.locator('.discipline-choice.is-specialty-match')).toHaveClass(new RegExp(`discipline-${entry.discipline.toLowerCase()}`));
+    for (const discipline of disciplines) {
+      const choice = panel.locator(`button.discipline-${discipline.toLowerCase()}`);
+      if (discipline === entry.discipline) await expect(choice).toContainText('Specialty bonus +1');
+      else await expect(choice).not.toContainText('Specialty bonus +1');
+    }
+    await expect(panel.locator('.discipline-choice').filter({ hasText: 'Specialty bonus +1' })).toHaveCount(1);
+
+    await matching.click();
+    await expect(panel.locator('.selected-category .discipline-glyph')).toHaveText(entry.glyph);
+    await expect(panel.locator('.selected-category')).toHaveClass(/is-specialty-match/);
+    await expect(panel.locator('#xp-options .xp-value')).toHaveText(entry.effectiveValues);
+    await expect(panel.getByText('Specialty bonus +1', { exact: true })).toHaveCount(1);
+  }
 });
 
 test('stale XP completion cannot publish into a newly selected student or clear its pending request', async ({ page }) => {

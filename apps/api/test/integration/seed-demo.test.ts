@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { migrateDatabase } from '../../src/db/migrate.js';
 import { migrations } from '../../src/db/migrations.js';
-import { DEMO_GROUP, DEMO_STUDENTS, DEMO_YEAR, seedDemo } from '../../src/demo/seed-service.js';
+import { DEMO_CHALLENGE, DEMO_EVENT, DEMO_GROUP, DEMO_PREPARED_CHALLENGE, DEMO_PREPARED_EVENT, DEMO_PRESET, DEMO_PROMPT_DECK, DEMO_STUDENTS, DEMO_YEAR, seedDemo } from '../../src/demo/seed-service.js';
 import { ensureOwnedDemoRoster } from '../../src/roster/service.js';
 
 const databases: Database.Database[] = [];
@@ -24,7 +24,7 @@ describe('service-owned demo seed', () => {
   it('creates the fixed fictional roster and points through owned services and replays safely', () => {
     const value = db();
     const first = seedDemo(value, 'teacher-demo');
-    const counts = () => ({ years: value.prepare('SELECT COUNT(*) AS count FROM academic_years').get(), groups: value.prepare('SELECT COUNT(*) AS count FROM groups').get(), students: value.prepare('SELECT COUNT(*) AS count FROM students').get(), events: value.prepare('SELECT COUNT(*) AS count FROM xp_evidence_events').get() });
+    const counts = () => ({ years: value.prepare('SELECT COUNT(*) AS count FROM academic_years').get(), groups: value.prepare('SELECT COUNT(*) AS count FROM groups').get(), students: value.prepare('SELECT COUNT(*) AS count FROM students').get(), events: value.prepare('SELECT COUNT(*) AS count FROM xp_evidence_events').get(), presets: value.prepare('SELECT COUNT(*) AS count FROM minigame_presets').get(), promptDecks: value.prepare('SELECT COUNT(*) AS count FROM prompt_decks').get(), classroomEvents: value.prepare('SELECT COUNT(*) AS count FROM classroom_events').get(), classroomChallenges: value.prepare('SELECT COUNT(*) AS count FROM classroom_challenges').get() });
     const before = counts();
     const second = seedDemo(value, 'teacher-demo');
     expect(first.roster.year.id).toBe(DEMO_YEAR.id);
@@ -32,10 +32,20 @@ describe('service-owned demo seed', () => {
     expect(first.roster.students).toHaveLength(16);
     expect(new Set(first.roster.students.map((student) => student.specialty)).size).toBe(8);
     expect(first.events).toHaveLength(64);
+    expect(first.gameplay).toMatchObject({ event: DEMO_EVENT.id, challenge: DEMO_CHALLENGE.id, preset: DEMO_PRESET.id, promptDeck: DEMO_PROMPT_DECK.id, preparedEvent: DEMO_PREPARED_EVENT.id, preparedChallenge: DEMO_PREPARED_CHALLENGE.id });
     expect(second.events.every((event) => event.replay)).toBe(true);
     expect(second.coinGrants.every((grant) => grant.replay)).toBe(true);
     expect(counts()).toEqual(before);
     expect(value.prepare('SELECT COUNT(*) AS count FROM coin_rewards').get()).toEqual({ count: 2 });
+    expect(value.prepare('SELECT COUNT(*) AS count FROM minigame_presets').get()).toEqual({ count: 1 });
+    expect(value.prepare('SELECT COUNT(*) AS count FROM prompt_decks').get()).toEqual({ count: 1 });
+    expect(value.prepare('SELECT COUNT(*) AS count FROM classroom_events').get()).toEqual({ count: 2 });
+    expect(value.prepare('SELECT COUNT(*) AS count FROM classroom_challenges').get()).toEqual({ count: 2 });
+    expect(value.prepare("SELECT COUNT(*) AS count FROM minigame_sessions WHERE status IN ('READY', 'RUNNING', 'PAUSED')").get()).toEqual({ count: 0 });
+    expect(value.prepare('SELECT id,title,prompt,duration_seconds AS durationSeconds FROM minigame_presets').get()).toEqual({ id: DEMO_PRESET.id, title: DEMO_PRESET.title, prompt: DEMO_PRESET.prompt, durationSeconds: DEMO_PRESET.durationSeconds });
+    expect(value.prepare('SELECT id,title,prompts FROM prompt_decks').get()).toEqual({ id: DEMO_PROMPT_DECK.id, title: DEMO_PROMPT_DECK.title, prompts: JSON.stringify(DEMO_PROMPT_DECK.prompts) });
+    expect(value.prepare('SELECT id,status,show_on_projection AS showOnProjection FROM classroom_events WHERE id=?').get(DEMO_PREPARED_EVENT.id)).toEqual({ id: DEMO_PREPARED_EVENT.id, status: 'DRAFT', showOnProjection: 0 });
+    expect(value.prepare('SELECT id,status,progress FROM classroom_challenges WHERE id=?').get(DEMO_PREPARED_CHALLENGE.id)).toEqual({ id: DEMO_PREPARED_CHALLENGE.id, status: 'DRAFT', progress: 0 });
     expect(value.prepare('SELECT SUM(amount) AS balance FROM coin_ledger WHERE student_id=? AND academic_year_id=?').get(DEMO_STUDENTS[0].id, DEMO_YEAR.id)).toEqual({ balance: 2 });
     const expectedTotals = [9, 12, 28, 6, 6, 12, 2, 12, 5, 24, 28, 10, 9, 24, 4, 21];
     const expectedBadges = [1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1];
@@ -74,6 +84,15 @@ describe('service-owned demo seed', () => {
     expect(() => seedDemo(value, 'teacher-demo')).toThrow(/Demo coin collision/);
     expect(value.prepare('SELECT COUNT(*) AS count FROM academic_years').get()).toEqual({ count: 1 });
     expect(value.prepare('SELECT COUNT(*) AS count FROM coin_ledger').get()).toEqual({ count: 1 });
+  });
+
+  it('fails closed when fixed prepared content is changed after the first seed', () => {
+    const value = db();
+    seedDemo(value, 'teacher-demo');
+    value.prepare('UPDATE minigame_presets SET prompt=? WHERE id=?').run('Changed prompt', DEMO_PRESET.id);
+    expect(() => seedDemo(value, 'teacher-demo')).toThrow(new RegExp(`Demo minigame preset collision: ${DEMO_PRESET.id}`));
+    expect(value.prepare('SELECT COUNT(*) AS count FROM minigame_presets').get()).toEqual({ count: 1 });
+    expect(value.prepare('SELECT COUNT(*) AS count FROM prompt_decks').get()).toEqual({ count: 1 });
   });
 
   it('does not mutate unrelated existing data when the fixed plan collides', () => {

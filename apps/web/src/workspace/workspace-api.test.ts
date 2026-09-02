@@ -19,6 +19,14 @@ describe('workspace XP idempotency', () => {
     await workspaceApi.redeemAdvantage('student', 'context', 'standard-assessment-advantage', undefined, '00000000-0000-4000-8000-000000000009');
     expect((fetchMock.mock.calls[0][1] as RequestInit).headers).toEqual({ 'content-type': 'application/json', 'Idempotency-Key': '00000000-0000-4000-8000-000000000009' });
   });
+
+  it('targets manual point grant and correction routes with idempotency keys', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ id: 'entry', studentId: 'student', academicYearId: 'year', balance: 1, grantId: 'grant', source: 'MANUAL_CORRECTION', amount: -1, replay: false }), { status: 201, headers: { 'content-type': 'application/json' } }));
+    await workspaceApi.grantManualCoin('student', 'year', 'PERSONAL_IMPROVEMENT', undefined, '00000000-0000-4000-8000-000000000010');
+    await workspaceApi.reverseManualCoin('grant', undefined, '00000000-0000-4000-8000-000000000011');
+    expect(fetchMock.mock.calls.map(call => call[0])).toEqual(['/api/v1/students/student/coin-grants', '/api/v1/coin-grants/grant/reversal']);
+    expect((fetchMock.mock.calls[1][1] as RequestInit).headers).toEqual({ 'content-type': 'application/json', 'Idempotency-Key': '00000000-0000-4000-8000-000000000011' });
+  });
 });
 
 describe('assessment context workspace contract', () => {
