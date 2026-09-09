@@ -60,7 +60,7 @@ These are all public commands; Start or Resume enters Build.
 
 | Command | Responsibility |
 |---|---|
-| `/sdd-start <change>` | Check active work, classify A/B/C, create SPEC and Design, route Luna/Sol and optional Terra, then Build. Never Ship. |
+| `/sdd-start <change>` | Check active work, classify A/B/C, create SPEC and Design, route Luna/Sol and Level C Terra review, then Build. Never Ship. |
 | `/sdd-resume [SPEC]` | Inspect branch, artifacts, worktree, code, and tests; continue evident incomplete work. Ask only when candidates require human selection; never reactivate completed work or Ship. |
 | `/sdd-verify [SPEC]` | Route Luna/Terra by level, permit bounded Build corrections, and create/refresh `VERIFY.md`. Never mutate Git. |
 | `/sdd-ship [SPEC]` | Require explicit invocation, rerun verification, isolate the intended diff, commit, push, create the PR, wait for CI, and merge only when green. |

@@ -16,7 +16,6 @@ OpenCode commands. Use this exact sequence:
    blockers return to Sol.
 4. Build with `sdd-lite-build` running Luna after Design is sound.
 5. Verify with Luna for Levels A/B and `sdd-lite-verify-terra` for Level C.
-
 There is no Apply, Apply Summary, Archive, Health, Repository Ready, runtime
 state, trace, fingerprint, recovery, or rebaseline phase. Never perform Git or
 VCS actions; only sdd-lite-ship may do so after explicit invocation.
