@@ -26,10 +26,10 @@ authoritative.
 - Level A: small/local work; Luna throughout.
 - Level B: normal feature; Sol Design, Luna Build, Luna Verify.
 - Level C: architecture, migration, privacy/security, or significant
-  cross-domain work; Sol Design, optional Terra review, Luna Build, Terra
-  Verify when delicate.
+  cross-domain work; Luna Explore, Sol Design, separate Terra review, Luna
+  Build, Terra Verify.
 
-Terra is a justified reviewer, not a routine lifecycle gate.
+Terra reviews the completed Sol Design and never authors or rewrites it.
 
 ## Stage contracts
 
@@ -58,8 +58,10 @@ perform final verification, intended-diff staging, commit, push, PR, CI wait,
 and green merge. With no SPEC argument, Ship infers the sole obvious verified
 candidate from the current branch, relevant SPEC/VERIFY.md evidence, and
 working tree. It asks only when multiple plausible candidates remain. It must
-preserve unrelated work and never force, reset, rewrite history, switch
-branches, tag, release, deploy, or act on ambiguous scope.
+preserve unrelated work and never force, reset, rewrite history, tag, release,
+deploy, or act on ambiguous scope. Ship may correct an unsuitable candidate
+branch before committing and may link an issue when one exists, but issue
+approval is not required.
 
 ## Commands
 

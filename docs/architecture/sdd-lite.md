@@ -22,9 +22,10 @@ tokens, or artifact-materialisation protocol.
 |---|---|---|
 | A | Small/local; no migration, sensitive boundary, or cross-domain effect | Luna throughout; concise artifacts |
 | B | Normal feature | Sol Design -> Luna Build -> Luna Verify |
-| C | Architecture, migration, privacy/security, or significant cross-domain change | Sol Design -> optional Terra Review -> Luna Build -> Terra Verify |
+| C | Architecture, migration, privacy/security, or significant cross-domain change | Luna Explore -> Sol Design -> separate Terra Review -> Luna Build -> Terra Verify |
 
-Terra handles justified pre-merge review, not routine gates.
+Terra reviews the completed Sol Design separately and verifies Level C work; it
+never replaces Sol as the Design author.
 
 ## Stage Contracts
 
@@ -50,7 +51,8 @@ wait, and green merge. An optional SPEC can narrow scope; without one, Ship
 infers the sole obvious verified candidate from the current branch, relevant
 SPEC/`VERIFY.md` evidence, and working tree. It asks only when multiple
 plausible candidates remain. It excludes force/history rewriting, destructive
-Git, release, tag, deployment, branch switching, and unrelated work.
+Git, release, tag, deployment, and unrelated work. Ship may correct an
+unsuitable candidate branch before committing.
 
 ## Command Contracts
 
@@ -58,7 +60,7 @@ These are all public commands; Start or Resume enters Build.
 
 | Command | Responsibility |
 |---|---|
-| `/sdd-start <change>` | Check active work, classify A/B/C, create SPEC and Design, route Luna/Sol and optional Terra, then Build. Never Ship. |
+| `/sdd-start <change>` | Check active work, classify A/B/C, create SPEC and Design, route Luna/Sol and Level C Terra review, then Build. Never Ship. |
 | `/sdd-resume [SPEC]` | Inspect branch, artifacts, worktree, code, and tests; continue evident incomplete work. Ask only when candidates require human selection; never reactivate completed work or Ship. |
 | `/sdd-verify [SPEC]` | Route Luna/Terra by level, permit bounded Build corrections, and create/refresh `VERIFY.md`. Never mutate Git. |
 | `/sdd-ship [SPEC]` | Require explicit invocation, rerun verification, isolate the intended diff, commit, push, create the PR, wait for CI, and merge only when green. |
