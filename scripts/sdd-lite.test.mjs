@@ -27,14 +27,31 @@ test('SDD Lite exposes exactly the four public commands', () => {
 });
 
 test('SDD Lite routing and Git boundary are explicit', () => {
+  const start = resolveCommand('.opencode/commands/sdd-start.md', 'M1 calendar', 'Start the change.');
+  const verifyCommand = resolveCommand('.opencode/commands/sdd-verify.md', 'SPEC-0018', 'Verify the change.');
+  const orchestrator = read('.opencode/agents/sdd-lite-orchestrator.md');
   const design = read('.opencode/agents/sdd-lite-design.md');
   const build = read('.opencode/agents/sdd-lite-build.md');
   const verify = read('.opencode/agents/sdd-lite-verify-luna.md');
+  const terraReview = read('.opencode/agents/sdd-lite-review-terra.md');
+  const terraVerify = read('.opencode/agents/sdd-lite-verify-terra.md');
   const ship = read('.opencode/agents/sdd-lite-ship.md');
 
+  assert.equal(start.agent, 'sdd-lite-orchestrator');
+  assert.equal(verifyCommand.agent, 'sdd-lite-orchestrator');
+  assert.match(verifyCommand.prompt, /Levels A\/B go directly to `sdd-lite-verify-luna`/);
+  assert.match(verifyCommand.prompt, /Level C goes directly to the\s+existing `sdd-lite-verify-terra` agent/);
+  assert.match(verifyCommand.prompt, /SPEC-0018 is Level C and must use Terra/);
+  assert.doesNotMatch(verifyCommand.prompt, /gentle-orchestrator|Portable orchestrator/);
+  assert.match(orchestrator, /Explore[^\n]*Luna[\s\S]*Design[^\n]*sdd-lite-design[^\n]*Sol[\s\S]*Terra Review[^\n]*sdd-lite-review-terra[\s\S]*Build[^\n]*sdd-lite-build[^\n]*Luna[\s\S]*Verify[^\n]*sdd-lite-verify-terra[^\n]*Level C/);
+  assert.match(orchestrator, /Terra must never author or rewrite DESIGN\.md/);
   assert.match(design, /openai\/gpt-5\.6-sol/);
   assert.match(build, /openai\/gpt-5\.6-luna/);
   assert.match(verify, /openai\/gpt-5\.6-luna/);
+  assert.match(terraReview, /openai\/gpt-5\.6-terra/);
+  assert.match(terraReview, /Review DESIGN\.md/);
+  assert.match(terraReview, /Never author or rewrite DESIGN\.md/);
+  assert.match(terraVerify, /openai\/gpt-5\.6-terra/);
   assert.match(ship, /sole SDD Lite agent\s+allowed to perform Git\/VCS actions/);
   assert.match(read('docs/architecture/sdd-lite.md'), /DESIGN -> BUILD -> VERIFY -> SHIP/);
   assert.match(read('docs/SDD-WORKFLOW.md'), /No other lifecycle artifact or state store/);
@@ -49,8 +66,13 @@ test('Bare Ship resolves through the authorized command path', () => {
   assert.match(resolved.prompt, /Ship authorization is granted/);
   assert.match(resolved.prompt, /optional SPEC\/change argument/);
   assert.match(resolved.prompt, /when it is empty,\s+infer the\s+candidate from repository\s+evidence/);
-  assert.doesNotMatch(ship, /delegated user message[\s\S]*\/sdd-ship/);
+  assert.doesNotMatch(ship, /delegated user message[\s\S]*ask.*\/sdd-ship/);
   assert.match(ship, /entry point structurally supplies maintainer authorization/);
+  assert.match(ship, /Explicit `\/sdd-ship` is sufficient authorization/);
+  assert.match(ship, /GitHub issue\s+linkage is optional/);
+  assert.match(ship, /branch is unsuitable[\s\S]*create or switch/);
+  assert.match(ship, /Stage only files belonging to that change and genuinely related/);
+  assert.doesNotMatch(ship, /status:approved|mandatory issue|Require.*issue/);
   assert.match(ship, /never inspect the delegated user message for a\s+command name/);
   assert.match(ship, /current branch, each relevant SPEC, VERIFY\.md, and the working tree/);
   assert.match(ship, /sole verified change when it is the obvious candidate/);
@@ -65,6 +87,24 @@ test('Build and Verify cannot silently Ship', () => {
     assert.match(text, /"gh \*": deny/);
   }
   assert.match(read('.opencode/commands/sdd-ship.md'), /Only this command may perform Git\/VCS actions/);
+});
+
+test('Ship contract excludes unrelated work and may correct its branch', () => {
+  const command = read('.opencode/commands/sdd-ship.md');
+  const ship = read('.opencode/agents/sdd-lite-ship.md');
+  const workflow = read('docs/SDD-WORKFLOW.md');
+
+  assert.match(command, /Explicit `\/sdd-ship` invocation is sufficient/);
+  assert.match(command, /issues may be linked when they exist, but are\s+optional/);
+  assert.match(command, /only the selected change and its\s+genuinely related fixes/);
+  assert.match(command, /correct an unsuitable current branch/);
+  assert.match(ship, /"git branch --show-current": allow/);
+  assert.match(ship, /"git branch \*": allow/);
+  assert.match(ship, /"git switch \*": allow/);
+  assert.match(ship, /leaving unrelated worktree changes untouched/);
+  assert.doesNotMatch(command, /status:approved|missing approval/);
+  assert.match(workflow, /may correct an unsuitable candidate\s+branch before committing/);
+  assert.doesNotMatch(workflow, /never force, reset, rewrite history, switch\s+branches/);
 });
 
 test('Only Ship has Git/VCS capability and no global deny overrides it', () => {

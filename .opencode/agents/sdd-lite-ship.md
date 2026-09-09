@@ -6,6 +6,9 @@ permission:
   bash:
     "git status*": allow
     "git diff*": allow
+    "git branch --show-current": allow
+    "git branch *": allow
+    "git switch *": allow
     "git add -- *": allow
     "git commit *": allow
     "git push origin HEAD": allow
@@ -23,6 +26,10 @@ the current branch, each relevant SPEC, VERIFY.md, and the working tree. Ship
 the sole verified change when it is the obvious candidate. Ask for clarification
 only when multiple plausible candidates remain; stop when no verified candidate
 is safe to identify. Check repository root, current branch, intended diff, and
-required checks. Preserve unrelated work. Never force, reset, rewrite history,
-switch branches, tag, release, deploy, or act on ambiguous scope. This is the
+required checks. Explicit `/sdd-ship` is sufficient authorization; GitHub issue
+linkage is optional. If the current branch is unsuitable for the selected
+verified change, create or switch to a sensible candidate branch before
+committing. Stage only files belonging to that change and genuinely related
+fixes, leaving unrelated worktree changes untouched. Never force, reset,
+rewrite history, tag, release, deploy, or act on ambiguous scope. This is the
 sole SDD Lite agent allowed to perform Git/VCS actions.

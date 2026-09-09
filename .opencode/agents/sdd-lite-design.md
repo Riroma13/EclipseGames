@@ -1,6 +1,6 @@
 ---
 description: Author SDD Lite Design contracts with Sol.
-mode: primary
+mode: all
 model: openai/gpt-5.6-sol
 permission:
   bash:

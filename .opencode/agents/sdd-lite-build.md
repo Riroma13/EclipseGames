@@ -1,6 +1,6 @@
 ---
 description: Implement approved SDD Lite work with Luna.
-mode: primary
+mode: all
 model: openai/gpt-5.6-luna
 permission:
   bash:
