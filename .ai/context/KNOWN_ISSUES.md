@@ -3,6 +3,14 @@
 Known issues here are non-blocking limitations, debt or deferred decisions.
 Future features belong in `ROADMAP.md`.
 
+## Control-plane reconciliation
+
+The repository is now governed by the Portable v1 lifecycle in
+`docs/SDD-WORKFLOW.md`. Older notes that describe an Automated Git Handoff,
+the retired `/sdd-apply` route, or a second product/spec store are historical
+and must not be used as current execution instructions. This section is
+governance context only; it does not create a product requirement.
+
 ## KI-001 — Technical stack not selected
 
 **Status:** Resolved by SPEC-0001  

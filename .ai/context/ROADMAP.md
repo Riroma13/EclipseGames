@@ -76,8 +76,10 @@ Includes:
 
 **Depends on:** SPEC-0002, SPEC-0003.
 
-**Repository Ready:** YES
-**Next:** Automated Git Handoff.
+**HISTORICAL Repository Ready:** YES
+**Historical next:** Automated Git Handoff. This wording is superseded by the
+Portable v1 rule: Repository Ready is the terminal SDD boundary and the HUMAN
+maintainer owns all Git/VCS handoff.
 
 ### SPEC-DEMO-001 — Client Preview MVP
 **Priority:** P0
@@ -91,8 +93,10 @@ Includes:
 
 **Depends on:** SPEC-0002, SPEC-0003, SPEC-0004.
 
-**Repository Ready:** YES (final gate passed after the localized test-harness correction; no Git handoff was executed in this run).
-**Next:** Automated Git Handoff.
+**HISTORICAL Repository Ready:** YES (final gate passed after the localized
+test-harness correction; no Git handoff was executed in that run).
+**Historical next:** Automated Git Handoff. Superseded: stop at Repository
+Ready for HUMAN Git handoff.
 
 ---
 
@@ -142,8 +146,10 @@ Includes:
 
 **Depends on:** SPEC-0004.
 
-**Repository Ready:** YES (final gate passed; Health PASS WITH CONDITIONS and no blocker; C-01 remains production-only). Automated Git Handoff remains separate and was not executed.
-**Next:** Stop before Automated Git Handoff.
+**HISTORICAL Repository Ready:** YES (final gate passed; Health PASS WITH
+CONDITIONS and no blocker; C-01 remains production-only). The former automated
+delivery wording is superseded.
+**Next:** Stop at Repository Ready for HUMAN Git handoff.
 
 ---
 

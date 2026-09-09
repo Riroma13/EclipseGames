@@ -399,11 +399,18 @@ The product must not depend on Additio.
 
 ## 10. Stack and architecture status
 
-The repository starts from zero.
+**HISTORICAL / SUPERSEDED:** The repository originally started from zero and
+the first foundation Design had not yet selected a stack. That statement must
+not be used as current project guidance.
 
-No implementation stack is approved yet.
+The current approved implementation stack is recorded by DEC-011 and the
+archived SPEC-0001 Design. It is a React/Vite web app with a Fastify REST API,
+SQLite managed by Drizzle, opaque revocable cookie sessions, pure TypeScript
+domain modules, server-side projection allowlists, and layered Vitest plus
+Playwright testing. It runs as one Docker-deployed service with explicit web,
+API, domain, and contract boundaries.
 
-The first architecture Design must explicitly choose and justify:
+Future architecture Designs must explicitly choose and justify any change to:
 - frontend framework;
 - backend strategy;
 - database;
@@ -414,7 +421,9 @@ The first architecture Design must explicitly choose and justify:
 - persistence strategy;
 - backup strategy.
 
-Do not invent or silently assume a stack before that Design is approved.
+Do not invent or silently replace the approved stack before that Design is
+approved. DEC-011 is the current baseline; the old no-approved-stack claim is
+preserved only as historical context.
 
 ## 11. Engineering philosophy
 
@@ -458,7 +467,10 @@ Do not invent or silently assume a stack before that Design is approved.
 
 ## 12. Repository conventions
 
-Until SPEC-0001 defines implementation conventions:
+**HISTORICAL / SUPERSEDED:** The following conventions were recorded before
+SPEC-0001 and the Portable v1 control-plane adoption. They remain historical
+context only; current authority is `docs/SDD-WORKFLOW.md`, the project profile,
+and the approved stack in DEC-011.
 
 - SDD artifacts live in `docs/specs/SPEC-XXXX/`.
 - Stable context lives in `.ai/context/`.
@@ -468,7 +480,8 @@ Until SPEC-0001 defines implementation conventions:
 
 ## 13. Current major unknowns
 
-These are intentionally unresolved until SPEC-0001:
+**HISTORICAL / SUPERSEDED:** These pre-SPEC-0001 unknowns are retained for
+traceability and must not be treated as current implementation gaps:
 - technical stack;
 - repository topology;
 - authentication mechanism;

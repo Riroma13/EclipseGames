@@ -1,0 +1,392 @@
+{
+  "schema": "sdd-model-map/v1",
+  "classification": "EXECUTION ADAPTER",
+  "project": "eclipsegames",
+  "project_profile": {
+    "name": "EclipseGames",
+    "memory_key": "eclipsegames",
+    "changes_root": "docs/specs",
+    "runtime_directory": ".sdd-runtime",
+    "runtime_layout": {
+      "state": "state.json",
+      "trace": "trace",
+      "recovery": "recovery",
+      "locks": "locks",
+      "checkpoints": "checkpoints"
+    },
+    "archive_behavior": "in-place",
+    "authority_order": [
+      "active SPEC artifacts",
+      "docs/SDD-WORKFLOW.md",
+      "AGENTS.md",
+      ".ai/context/PROJECT.md",
+      ".ai/context/DECISIONS.md",
+      "current implementation evidence",
+      ".ai/context/SESSION.md",
+      ".ai/context/ROADMAP.md",
+      ".ai/context/KNOWN_ISSUES.md"
+    ],
+    "context_sources": [
+      "AGENTS.md",
+      ".ai/context/PROJECT.md",
+      ".ai/context/DECISIONS.md",
+      ".ai/context/ROADMAP.md",
+      ".ai/context/KNOWN_ISSUES.md",
+      "docs/SDD-WORKFLOW.md",
+      "docs/specs/<SPEC-DIRECTORY>/DESIGN.md",
+      "docs/specs/<SPEC-DIRECTORY>/ARCHITECTURE-REVIEW.md",
+      "docs/specs/<SPEC-DIRECTORY>/TASKS.md",
+      "docs/specs/<SPEC-DIRECTORY>/TASKS-REVIEW.md",
+      "docs/specs/<SPEC-DIRECTORY>/APPLY-SUMMARY.md",
+      "docs/specs/<SPEC-DIRECTORY>/VERIFY-REPORT.md",
+      "docs/specs/<SPEC-DIRECTORY>/ARCHIVE-REPORT.md",
+      "docs/specs/<SPEC-DIRECTORY>/HEALTH-REPORT.md",
+      "docs/specs/<SPEC-DIRECTORY>/REPOSITORY-READY.md"
+    ],
+    "invariant_sources": [
+      "AGENTS.md",
+      ".ai/context/PROJECT.md",
+      ".ai/context/DECISIONS.md",
+      "docs/SDD-WORKFLOW.md"
+    ],
+    "authority_refs": {
+      "workflow": "docs/SDD-WORKFLOW.md",
+      "modelMap": ".opencode/sdd-model-map.json",
+      "config": ".opencode/sdd-model-map.json"
+    },
+    "lifecycle_artifacts": {
+      "Design": "DESIGN.md",
+      "Architecture Review": "ARCHITECTURE-REVIEW.md",
+      "Design Refinement": "DESIGN.md",
+      "Tasks": "TASKS.md",
+      "Tasks Review": "TASKS-REVIEW.md",
+      "Tasks Refinement": "TASKS.md",
+      "Apply": "APPLY-PROGRESS.md",
+      "Apply Summary": "APPLY-SUMMARY.md",
+      "Verify": "VERIFY-REPORT.md",
+      "Archive": "ARCHIVE-REPORT.md",
+      "Health Report": "HEALTH-REPORT.md",
+      "Repository Ready": "REPOSITORY-READY.md"
+    },
+    "semantic_validation": {
+      "profile": "eclipsegames",
+      "required_topics": [
+        "intent",
+        "approach",
+        "architecture",
+        "contracts",
+        "boundaries",
+        "working_set",
+        "testing",
+        "rollout",
+        "simplicity"
+      ],
+      "heading_aliases": {
+        "intent": [
+          "Design",
+          "Context",
+          "Current state",
+          "Goals",
+          "Scope",
+          "Phase Boundary and Evidence",
+          "Targeted Design Refinement"
+        ],
+        "approach": [
+          "Technical Approach",
+          "Technical approach",
+          "B-01 Technical Approach",
+          "Approach, direction, and IA",
+          "Proposed design",
+          "Overview"
+        ],
+        "architecture": [
+          "Architecture Decisions",
+          "Settled architecture decisions",
+          "Decisions",
+          "Components, ownership, and data flow",
+          "Allocation model and eligibility"
+        ],
+        "contracts": [
+          "Data Flow and Contracts",
+          "Data Flow",
+          "Contracts and affected implementation",
+          "Existing API contracts reused unchanged",
+          "Interface and UI",
+          "Functional scope"
+        ],
+        "boundaries": [
+          "Failure and Privacy Boundaries",
+          "Privacy and security",
+          "Failure and edge-case matrix",
+          "Threat Matrix",
+          "Threat matrix",
+          "Boundaries"
+        ],
+        "working_set": [
+          "Working Set and Read Order",
+          "Working Set",
+          "Predicted Working Set",
+          "Working Set (planned only)",
+          "Expected files",
+          "Read Order for Tasks/Apply",
+          "Minimum Tasks/Apply read order"
+        ],
+        "testing": [
+          "Testing Strategy",
+          "Tests and acceptance",
+          "Evidence Plan",
+          "Acceptance evidence and rollout",
+          "Testing, rollout, and rollback"
+        ],
+        "rollout": [
+          "Migration / Rollout",
+          "Migration, Simplicity, and Review State",
+          "Rollout and rollback",
+          "Migration Strategy",
+          "Deployment and rollback"
+        ],
+        "simplicity": [
+          "Simplicity Check",
+          "Simplicity",
+          "Product simplicity",
+          "Migration, Simplicity, and Review State"
+        ]
+      },
+      "optional_topics": [
+        "acceptance",
+        "open_questions",
+        "threat_matrix",
+        "domain_model"
+      ],
+      "review_semantics": {
+        "artifact": "ARCHITECTURE-REVIEW.md",
+        "required_meanings": [
+          "outcome",
+          "evidence",
+          "findings",
+          "next step"
+        ],
+        "heading_aliases": [
+          "Executive Summary",
+          "Evidence Reviewed",
+          "Architecture Validation",
+          "Required Conditions for Tasks",
+          "Threat Matrix",
+          "Risks",
+          "Next Recommended"
+        ]
+      }
+    },
+    "lifecycle": {
+      "phases": [
+        "Design",
+        "Architecture Review",
+        "Design Refinement",
+        "Tasks",
+        "Tasks Review",
+        "Tasks Refinement",
+        "Apply",
+        "Apply Summary",
+        "Verify",
+        "Archive",
+        "Health Report",
+        "Repository Ready"
+      ],
+      "edges": {
+        "Design": "Architecture Review",
+        "Design Refinement": "Architecture Review",
+        "Architecture Review": "Tasks",
+        "Tasks": "Tasks Review",
+        "Tasks Refinement": "Tasks Review",
+        "Tasks Review": "Apply",
+        "Apply": "Apply Summary",
+        "Apply Summary": "Verify",
+        "Verify": "Archive",
+        "Archive": "Health Report",
+        "Health Report": "Repository Ready"
+      },
+      "roles": {
+        "Design": "SOL",
+        "Architecture Review": "HIGH",
+        "Design Refinement": "SOL",
+        "Tasks": "MID",
+        "Tasks Review": "MID",
+        "Tasks Refinement": "MID",
+        "Apply": "MID",
+        "Apply Summary": "MID",
+        "Verify": "HIGH",
+        "Archive": "LOW",
+        "Health Report": "LOW",
+        "Repository Ready": "LOW"
+      },
+      "terminal": "Repository Ready"
+    },
+    "git_boundary": {
+      "owner": "HUMAN",
+      "terminal": "Repository Ready",
+      "operations": [
+        "git add",
+        "git commit",
+        "git push",
+        "git branch",
+        "git config",
+        "git notes",
+        "git apply",
+        "pull request",
+        "CI wait",
+        "merge",
+        "release",
+        "tag"
+      ]
+    }
+  },
+  "workflow_version": "portable-v1",
+  "persistence": "hybrid",
+  "runtime_routing": {
+    "schema": "sdd-runtime-routing/v1",
+    "fallback_policy": "same-role-compatible-only",
+    "quality_required": true,
+    "cost_ordered": true,
+    "exhaustion": "STOP/HUMAN_HANDOFF",
+      "primary": {
+        "SOL": "sol-design",
+        "HIGH": "terra-high",
+      "MID": "luna-mid",
+      "LOW": "luna-low-bounded"
+    },
+      "candidates": {
+        "SOL": [
+          {
+            "id": "sol-design",
+            "model": "openai/gpt-5.6-sol",
+            "local_executor": "sdd-direct-design",
+            "role": "SOL",
+            "capabilities": ["design"],
+            "quality": 1,
+            "cost": 1,
+            "available": true
+          }
+        ],
+        "HIGH": [
+        {
+          "id": "terra-high",
+          "model": "openai/gpt-5.6-terra",
+          "local_executor": "sdd-direct-architecture-review",
+          "role": "HIGH",
+          "capabilities": ["architecture", "design", "verification"],
+          "quality": 1,
+          "cost": 1,
+          "available": true
+        }
+      ],
+      "MID": [
+        {
+          "id": "luna-mid",
+          "model": "openai/gpt-5.6-luna",
+            "local_executor": "sdd-direct-orchestrator",
+          "role": "MID",
+          "capabilities": ["planning", "implementation", "orchestration"],
+          "quality": 1,
+          "cost": 1,
+          "available": true
+        }
+      ],
+      "LOW": [
+        {
+          "id": "luna-low-bounded",
+          "model": "openai/gpt-5.6-luna",
+          "local_executor": "sdd-direct-health-report",
+          "role": "LOW",
+          "capabilities": ["evidence", "mechanical-checks"],
+          "quality": 0.8,
+          "cost": 1,
+          "available": true,
+          "execution_profile": {
+            "context": "bounded evidence and mechanical checks only",
+            "token_budget": 12000,
+            "no_architecture_decisions": true,
+            "no_scope_expansion": true,
+            "no_git_mutation": true
+          }
+        }
+      ]
+    },
+      "fallbacks": {
+        "SOL": [],
+        "HIGH": [],
+      "MID": [],
+      "LOW": [],
+      "HUMAN": []
+    }
+  },
+  "roles": {
+    "SOL": {
+      "name": "DESIGN AUTHOR",
+      "model": "openai/gpt-5.6-sol",
+      "purpose": "Design authoring and bounded Design refinement"
+    },
+    "HIGH": {
+      "name": "ARCHITECT",
+      "model": "openai/gpt-5.6-terra",
+      "purpose": "Design, review judgment, and final verification"
+    },
+    "MID": {
+      "name": "BUILDER",
+      "model": "openai/gpt-5.6-luna",
+      "purpose": "Tasks, orchestration, and implementation"
+    },
+    "LOW": {
+      "name": "OPERATOR-EVIDENCE",
+      "model": "openai/gpt-5.6-luna",
+      "purpose": "Bounded evidence and mechanical lifecycle records"
+    },
+    "HUMAN": {
+      "name": "MAINTAINER",
+      "model": null,
+      "purpose": "Git, merge, release, and material decisions"
+    }
+  },
+  "phase_roles": {
+    "Design": "SOL",
+    "Architecture Review": "HIGH",
+    "Design Refinement": "SOL",
+    "Tasks": "MID",
+    "Tasks Review": "MID",
+    "Tasks Refinement": "MID",
+    "Apply": "MID",
+    "Apply Summary": "MID",
+    "Verify": "HIGH",
+    "Archive": "LOW",
+    "Health Report": "LOW",
+    "Repository Ready": "LOW",
+    "Commit": "HUMAN",
+    "Push": "HUMAN",
+    "Merge": "HUMAN"
+  },
+  "local_agent_roles": {
+    "sdd-direct-orchestrator": "MID",
+    "sdd-direct-design": "SOL",
+    "sdd-direct-architecture-review": "HIGH",
+    "sdd-direct-tasks": "MID",
+    "sdd-direct-tasks-review": "MID",
+    "sdd-direct-apply": "MID",
+    "sdd-direct-verify": "HIGH",
+    "sdd-direct-archive": "LOW",
+    "sdd-direct-health-report": "LOW",
+    "sdd-direct-repository-ready": "LOW"
+  },
+  "phase_executors": {
+    "Design": "sdd-direct-design",
+    "Design Refinement": "sdd-direct-design",
+    "Architecture Review": "sdd-direct-architecture-review",
+    "Tasks": "sdd-direct-tasks",
+    "Tasks Review": "sdd-direct-tasks-review",
+    "Tasks Refinement": "sdd-direct-tasks",
+    "Apply": "sdd-direct-apply",
+    "Apply Summary": "sdd-direct-apply",
+    "Verify": "sdd-direct-verify",
+    "Archive": "sdd-direct-archive",
+    "Health Report": "sdd-direct-health-report",
+    "Repository Ready": "sdd-direct-repository-ready"
+  }
+}

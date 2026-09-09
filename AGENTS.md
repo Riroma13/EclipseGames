@@ -57,9 +57,16 @@ If two sources conflict, stop only when the conflict affects correctness, privac
 - Apply executes approved Tasks.
 - Verify checks implementation against approved Design and acceptance criteria.
 - Archive records outcomes and learning.
-- Normal post-Repository-Ready Commit, Push, PR, CI, Squash-Merge and Synchronization are performed by the Automated Git Handoff defined in `docs/SDD-WORKFLOW.md`.
-- Release, Tag, production deployment, destructive Git operations, force push, and history rewriting outside normal squash merge remain maintainer-controlled.
+- Repository Ready is the terminal SDD boundary. Commit, Push, PR, CI wait,
+  Merge, Release, Tag, branch changes, and all other Git/VCS handoff actions
+  are HUMAN / maintainer-owned and are not executed by SDD tooling.
+- Runtime recovery uses `/sdd-resume`; it must reconcile the selected
+  `docs/specs/<SPEC-DIRECTORY>/.sdd-runtime/` state with authoritative SPEC
+  artifacts and never reactivate historical work.
+- Release, production deployment, destructive Git operations, force push, and
+  history rewriting remain maintainer-controlled.
 - Exceptions and material decisions always return to the maintainer.
 - Editing this workflow does not trigger it or apply it retroactively to the current SPEC. No commit, push, PR, CI, merge, release, tag, branch change, or other VCS action is authorized for the current documentation task.
 
-Detailed workflow rules live only in `docs/SDD-WORKFLOW.md`.
+Detailed workflow rules live only in `docs/SDD-WORKFLOW.md`. The profile-driven
+path and artifact mapping live only in `.opencode/sdd-model-map.json`.

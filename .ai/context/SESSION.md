@@ -1,6 +1,16 @@
 # SESSION.md — Protocole Éclipse
 
-**Current phase:** SPEC-DEMO-003 is archived after fresh Verify `PASS WITH WARNINGS` and Health `PASS WITH CONDITIONS` (8/8 requirements, 9/9 scenarios, 13/13 tasks, zero CRITICAL/BLOCKER issues). **Repository Ready: YES.** Exact next step: `STOP — maintainer review before Git handoff`. The separate fixture-backed `/` Projection decision, varied synthetic deterministic seed, privacy boundaries, shared Playwright fixture warning, hybrid provenance warning, and C-01 production-only condition remain preserved. No Git/VCS handoff occurred.
+**CURRENT SDD state:** No product SPEC is active. SPEC-DEMO-003 and all other
+listed product cycles are archived. The canonical Portable v1 lifecycle now
+selects active work only from authoritative evidence under `docs/specs/` and
+stops at Repository Ready for HUMAN Git handoff. No Git/VCS handoff occurred.
+
+**HISTORICAL / SUPERSEDED routing:** The prior SPEC-DEMO-003 Repository Ready
+claim, the older Automated Git Handoff wording, and any phase descriptions that
+placed Git after Repository Ready are retained below as historical evidence.
+They are not executable policy. The current next step for this control-plane
+adoption is maintainer review of the changed governance files, not a product
+SPEC continuation.
 **SPEC status:** SPEC-0001, SPEC-0002, SPEC-0003, SPEC-0004, SPEC-0005, and SPEC-DEMO-001 are archived. SPEC-DEMO-001 preserves their canonical roster ownership/archive semantics, private `/#/workspace` fast-action shell, and real XP contracts.
 **SPEC-0004 settled design:** Immutable XP evidence plus target-only compensating reversals; event-time specialty snapshot and flat +1 bonus; active-event annual derivation; one L2–L8 durable unlock with append-only GRANT/REVOKE/REINSTATE reconciliation transitions for SPEC-0005; exactly-three qualifying event-record badges with coherent current state; teacher-private API/detail and idempotent current-summary replays; a bounded zero-row roster-ordered group summary distinct from `TeacherStudentDto` and fixture DTOs; one explicit workspace XP action provider with base/bonus/effective feedback and the existing 10-second presentation undo. XP will use only an exported roster context adapter over `ownedStudentContext` and existing `lockStudentGroupCorrection`; roster ownership, specialty and archive semantics remain SPEC-0002-owned. No projection contract, client privacy filter, generic event bus, or coin ledger is introduced.
 **Production condition:** C-01 remains production-only because encrypted restic execution was not demonstrated. Real student data and production use remain blocked until SPEC-0014/0016 retention/deletion, backup-expiry, and encrypted-restic restore conditions are complete.
