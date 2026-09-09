@@ -1,5 +1,7 @@
 export type AcademicYear = { id: string; label: string; startsOn: string; endsOn: string; archivedAt: string | null };
 export type Group = { id: string; academicYearId: string; name: string };
+export type Calendar = { configured: false } | { configured: true; academicYearId: string; timezone: string; terms: Array<{ id: string; code: 'T1'|'T2'|'T3'; startsOn: string; endsOn: string }>; holidays: Array<{ id: string; startsOn: string; endsOn: string }>; slots: Array<{ id: string; groupId: string; weekday: number; startsAt: string; endsAt: string }> };
+export type Session = { id: string; academicYearId: string; groupId: string; localDate: string; timezone: string; slotStartsAt: string; slotEndsAt: string; startedAt: string; endedAt: string | null; createdAt: string };
 export type TeacherStudent = { id: string; groupId: string; realName: string; alias: string; avatar: string; specialty: string | null; archivedAt: string | null };
 export type ApiFailure = Error & { status?: number; code?: string };
 export type XpCategory = 'COMMUNICATION'|'PRECISION'|'CONSISTENCY'|'COLLABORATION';
@@ -55,4 +57,11 @@ export const workspaceApi = {
   createAssessmentContext: (groupId:string, name:string, signal?:AbortSignal) => post<AssessmentContext>('/api/v1/assessment-contexts',{groupId,name},undefined,signal),
   redeemAdvantage: (studentId:string, assessmentContextId:string, rewardId:string, signal?:AbortSignal, idempotencyKey?:string) => post<AdvantageRedemption>(`/api/v1/students/${studentId}/advantages`,{assessmentContextId,rewardId},idempotencyKey ?? newKey(),signal),
   reverseAdvantage: (redemptionId:string, signal?:AbortSignal) => post<unknown>(`/api/v1/advantage-redemptions/${redemptionId}/reversal`,{},newKey(),signal),
+  calendar: (yearId:string, signal?:AbortSignal) => get<Calendar>(`/api/v1/academic-years/${yearId}/calendar`, signal),
+  replaceCalendar: (yearId:string, value:Omit<Extract<Calendar, { configured:true }>, 'configured'|'academicYearId'|'terms'|'holidays'|'slots'> & { terms: Array<{ code:'T1'|'T2'|'T3'; startsOn:string; endsOn:string }>; holidays:Array<{ startsOn:string; endsOn:string }>; slots:Array<{ groupId:string; weekday:number; startsAt:string; endsAt:string }> }, signal?:AbortSignal) => fetchJson<Calendar>(`/api/v1/academic-years/${yearId}/calendar`, 'PUT', value, signal),
+  sessionStatus: (groupId:string, yearId:string, signal?:AbortSignal) => get<{ configured:boolean; eligible:boolean; active:Session|null }>(`/api/v1/groups/${groupId}/real-class-session-status?academicYearId=${yearId}`, signal),
+  startSession: (groupId:string, yearId:string, key?:string, signal?:AbortSignal) => post<Session>(`/api/v1/groups/${groupId}/real-class-sessions/start`, { academicYearId:yearId }, key ?? newKey(), signal),
+  endSession: (sessionId:string, key?:string, signal?:AbortSignal) => post<Session>(`/api/v1/real-class-sessions/${sessionId}/end`, {}, key ?? newKey(), signal),
 };
+
+async function fetchJson<T>(url:string, method:string, body:unknown, signal?:AbortSignal):Promise<T> { const response=await fetch(url,{method,credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify(body),signal}); if(!response.ok){let value:{message?:string}={};try{value=await response.json();}catch{} const error=new Error(value.message??'Could not save calendar configuration.') as ApiFailure;error.status=response.status;throw error;} return response.json() as Promise<T>; }

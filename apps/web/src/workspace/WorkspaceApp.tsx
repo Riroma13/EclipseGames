@@ -8,6 +8,7 @@ import { StudentPanel } from './StudentPanel';
 import { StudentRoster } from './StudentRoster';
 import { WorkspaceShell } from './WorkspaceShell';
 import { YearContextControl } from './YearContextControl';
+import { CalendarControls } from './CalendarControls';
 
 function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
   const [error, setError] = useState('');
@@ -274,7 +275,8 @@ export function WorkspaceApp() {
       {state.search && <button type="button" aria-label="Clear student search" onClick={() => { dispatch({ type: 'search', value: '' }); searchRef.current?.focus(); }}>Clear</button>}
     </div>
     {historical && <p className="read-only-note" role="status">Historical year — records are read-only.</p>}
-    {groupId && summary}
+     {groupId && summary}
+     {currentYear && currentGroup && <CalendarControls year={currentYear} group={currentGroup} />}
     {!groups.length && !error ? <p className="empty-state">No groups in this year.</p> : <div className="workspace-grid">
       <section className="roster-section"><div className="section-heading"><div><p className="eyebrow">ACADEMY ROSTER</p><h2 className="section-title">Roster <span>{visibleStudents.length}</span></h2></div><span className="section-note">Select a character to open their sheet</span></div><StudentRoster students={visibleStudents} summaries={summaries} selectedId={state.selectedStudentId} query={state.search} onSelect={id => { originRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; dispatch({ type: 'select', studentId: id }); }} /></section>
       <ActivitySummary activity={activity} onRetry={() => { if (selected) workspaceApi.xpEvidence(selected.id, yearId!, 3).then(result => setActivity(activityState(result))).catch(() => setActivity(activityState(null))); }} />
