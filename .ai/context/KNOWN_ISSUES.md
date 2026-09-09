@@ -5,9 +5,9 @@ Future features belong in `ROADMAP.md`.
 
 ## Control-plane reconciliation
 
-The repository is now governed by the Portable v1 lifecycle in
-`docs/SDD-WORKFLOW.md`. Older notes that describe an Automated Git Handoff,
-the retired `/sdd-apply` route, or a second product/spec store are historical
+The repository is now governed by SDD Lite in `docs/SDD-WORKFLOW.md` and
+`docs/architecture/sdd-lite.md`. Older notes that describe Portable v1,
+Apply/Archive/Health/Repository Ready, or automated Git handoff are historical
 and must not be used as current execution instructions. This section is
 governance context only; it does not create a product requirement.
 
@@ -62,26 +62,27 @@ Address baseline controls in SPEC-0001 and perform dedicated hardening in SPEC-0
 
 ---
 
-## KI-003 — Avatar source strategy unresolved
+## KI-003 — Avatar source strategy unresolved (SUPERSEDED / RESOLVED by SPEC-0017)
 
-**Status:** Open  
+**Status:** Superseded / resolved
 **Severity:** Low  
 **Area:** UX / privacy
 
-### Problem
+### Historical problem
 The product requires avatars but has not decided whether they are generated, selected from a built-in library or uploaded.
 
-### Impact
+### Historical impact
 May affect storage and privacy surface.
 
 ### Resolution
-Decide in the first SPEC that needs avatar persistence.
+SPEC-0017 defines Agent Éclipse identity, temporary access expiry, Avatar Core
+evolution, and keeps uploads/boutique out until explicitly designed.
 
 ---
 
-## KI-004 — Energy public-state thresholds need canonical implementation values
+## KI-004 — Energy public-state thresholds need canonical implementation values (SUPERSEDED / RESOLVED by SPEC-0017)
 
-**Status:** Open  
+**Status:** Superseded / resolved
 **Severity:** Medium  
 **Area:** Domain / UI
 
@@ -92,7 +93,8 @@ The product requires public visual states such as critical, low, stable, high an
 No impact until SPEC-0006 / SPEC-0009.
 
 ### Resolution
-Set explicit thresholds in Design and test them.
+SPEC-0017 defines Critical 0–2.9, Low 3–4.9, Stable 5–6.4, High 6.5–8.4,
+and Maximum 8.5–10 from current-term RT average.
 
 ---
 
@@ -103,19 +105,21 @@ Set explicit thresholds in Design and test them.
 **Area:** Data lifecycle
 
 ### Problem
-Annual XP and badges persist through the school year, but year rollover/archive mechanics, retention and copy-forward behaviour are not yet designed.
+Annual XP and badges persist through the school year, but year rollover/archive
+and copy-forward behaviour are not yet designed. Retention is owned separately
+by production hardening.
 
 ### Impact
 Does not block MVP core implementation.
 
 ### Resolution
-Cover in SPEC-0002 and revisit before production.
+Cover rollover in the relevant future SPEC and retention in SPEC-0014/0016.
 
 ---
 
-## KI-006 — Behaviour session boundary requires technical definition
+## KI-006 — Behaviour session boundary requires technical definition (SUPERSEDED / RESOLVED by SPEC-0017)
 
-**Status:** Open  
+**Status:** Superseded / resolved
 **Severity:** Medium  
 **Area:** Behaviour
 
@@ -126,13 +130,15 @@ The product says behaviour state resets at the next teaching session, but the te
 Must be resolved before SPEC-0007 Apply.
 
 ### Resolution
-Define session lifecycle in SPEC-0007 Design.
+SPEC-0017 defines a real class session as the interval between explicit
+`Comenzar clase` and `Finalizar clase` within timetable, teaching-day, and
+holiday configuration.
 
 ---
 
-## KI-007 — Assessment-context model for coin spending unresolved
+## KI-007 — Assessment-context model for coin spending unresolved (SUPERSEDED / RESOLVED by SPEC-0017)
 
-**Status:** Open  
+**Status:** Superseded / resolved
 **Severity:** Medium  
 **Area:** Coins
 
@@ -143,7 +149,9 @@ The business rule allows at most one advantage per assessment, but the app does 
 Must be resolved before reward-spending implementation.
 
 ### Resolution
-SPEC-0005 Design.
+SPEC-0017 preserves one advantage per assessment while replacing future money
+with gem-owned contracts; assessment identity may be reused without coin/gem
+coupling.
 
 ---
 

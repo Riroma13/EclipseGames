@@ -11,10 +11,7 @@
     "build": "pnpm --recursive build",
     "typecheck": "pnpm --recursive typecheck",
     "test": "pnpm exec vitest run",
-    "sdd:validate": "node scripts/validate-sdd-direct.mjs",
-    "sdd:validate:design": "node scripts/validate-design-semantics.mjs",
-    "test:sdd-runtime": "node --test scripts/*.test.mjs",
-    "sdd:resume": "node scripts/sdd-resume.mjs"
+    "test:sdd-lite": "node --test scripts/sdd-lite.test.mjs"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "4.7.0",

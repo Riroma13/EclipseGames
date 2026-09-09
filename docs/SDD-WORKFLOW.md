@@ -1,186 +1,88 @@
 ---
 classification: PRIMARY AUTHORITY
 semantic_authority: true
-sdd_version: portable-v1
+sdd_version: lite
 status: ACTIVE/STABLE
-persistence: hybrid
 ---
 
-# EclipseGames SDD Workflow
+# EclipseGames SDD Lite
 
-This document is the single semantic authority for the EclipseGames Portable
-v1 lifecycle. `AGENTS.md` supplies repository safety and startup rules. The
-project profile in `.opencode/sdd-model-map.json` supplies configurable paths,
-artifact names, semantic Design topics, role routing, and archive behavior.
-No command, agent, runtime state file, or memory record can redefine this
-workflow.
+`docs/architecture/sdd-lite.md` is the detailed contract. This document keeps
+the repository's operational authority short and explicit.
 
-## Quick Path
-
-1. Select one active SPEC directory under `docs/specs/`, explicitly or through
-   the deterministic resolver.
-2. Resume from `.sdd-runtime/state.json` after reconciling trace and artifacts.
-3. Execute only the next dependency-ready phase.
-4. Stop at Repository Ready for HUMAN Git handoff.
-
-## Authority And Storage
-
-`docs/specs/` is the only product/spec authority. EclipseGames active change
-roots are `docs/specs/<SPEC-DIRECTORY>/`; the runtime does not create or use a
-second product/spec tree. Runtime metadata is control-plane-only and lives at:
+## Workflow
 
 ```text
-docs/specs/<SPEC-DIRECTORY>/.sdd-runtime/
-  state.json
-  trace/
-  recovery/
-  locks/
-  checkpoints/
+DESIGN -> BUILD -> VERIFY -> SHIP
 ```
 
-The runtime directory contains state, trace, recovery, lock, and checkpoint
-metadata only. It must not contain product requirements, acceptance criteria,
-domain rules, or implementation decisions.
+`DESIGN.md` is the primary contract. `TASKS.md` is a plain implementation plan.
+`VERIFY.md` records evidence and residual risk. `REVIEW.md` is optional for
+work where review adds value. No other lifecycle artifact or state store is
+authoritative.
 
-The profile maps and validates these repository-native artifact names without
-renaming historical files:
+## Levels
 
-| Meaning | Canonical artifact |
-|---|---|
-| Design | `DESIGN.md` |
-| Architecture Review | `ARCHITECTURE-REVIEW.md` |
-| Tasks | `TASKS.md` |
-| Tasks Review | `TASKS-REVIEW.md` |
-| Apply progress | `APPLY-PROGRESS.md` |
-| Apply Summary | `APPLY-SUMMARY.md` |
-| Verify | `VERIFY-REPORT.md` |
-| Archive | `ARCHIVE-REPORT.md` |
-| Health Report | `HEALTH-REPORT.md` |
-| Repository Ready | `REPOSITORY-READY.md` |
+- Level A: small/local work; Luna throughout.
+- Level B: normal feature; Sol Design, Luna Build, Luna Verify.
+- Level C: architecture, migration, privacy/security, or significant
+  cross-domain work; Sol Design, optional Terra review, Luna Build, Terra
+  Verify when delicate.
 
-Historical records are evidence, not executable instructions. Use explicit
-`CURRENT`, `HISTORICAL`, or `SUPERSEDED` markers when reconciling context.
-Never manufacture absent historical artifacts, including `SPEC.md`, review
-reports, Tasks Review, or Repository Ready files.
+Terra is a justified reviewer, not a routine lifecycle gate.
 
-## Canonical Lifecycle
+## Stage contracts
 
-```text
-Design
-  -> Architecture Review
-       BLOCKED -> Design Refinement -> Architecture Review
-  PASS
-  -> Tasks
-  -> Tasks Review
-       BLOCKED -> Tasks Refinement -> Tasks Review
-  PASS
-  -> Apply
-  -> Apply Summary
-  -> Verify
-       BLOCKED -> bounded correction -> Verify
-  PASS
-  -> Archive
-  -> Health Report
-  -> Repository Ready
-  -> STOP
-```
+### Design
 
-Refinement is conditional and returns to its review. Apply Summary is a
-separate checkpoint immediately after Apply. There is no Workload Guard phase,
-proposal phase, ad-hoc Continue phase, or parallel Apply lifecycle. The retired
-`/sdd-apply` route is a STOP-only compatibility shim.
+Define behaviour, scope, ownership, data/API/UI effects, migration and rollout,
+privacy/failure boundaries, tests, acceptance, and simplicity. Build cannot
+silently change scope or architecture.
 
-Each transition is legal only when the current checkpoint, artifact, outcome,
-and required evidence agree. A malformed, ambiguous, corrupt, or stale record
-fails closed. One bounded automatic correction may be attempted where the
-approved Design permits it; material architecture, privacy, security, scope,
-risk, data-integrity, and recovery decisions are HUMAN-owned.
+### Build
 
-## Design Semantics
+Derive or update `TASKS.md`, implement the approved Design, test, fix, and
+document continuously. Return to Design for material decisions. Build never
+Ships and never performs Git/VCS actions.
 
-Design validation is profile-driven. The EclipseGames profile declares semantic
-topics, heading aliases, review semantics, optional topics, and lifecycle
-artifact names. A valid Design must contain non-empty meaning for every
-mandatory topic. Heading depth, numbering, and exact wording may vary; a file
-that merely contains headings or placeholder text fails. The validator must
-accept the existing repository-native Design structures and reject a genuinely
-missing mandatory meaning.
+### Verify
 
-The Portable generic validator remains available for projects whose profile
-declares the generic numbered Design shape. EclipseGames does not adopt that
-shape as a product requirement.
+Compare Design, Tasks, code, tests, privacy, and acceptance. Run sufficient
+checks and write `VERIFY.md`. Defects return to Build. Completion is based on
+semantic evidence, never parser markers.
 
-## Active SPEC Discovery
+### Ship
 
-Discovery is evidence-based and deterministic:
+The `/sdd-ship` invocation itself is explicit maintainer authorization. It may
+perform final verification, intended-diff staging, commit, push, PR, CI wait,
+and green merge. With no SPEC argument, Ship infers the sole obvious verified
+candidate from the current branch, relevant SPEC/VERIFY.md evidence, and
+working tree. It asks only when multiple plausible candidates remain. It must
+preserve unrelated work and never force, reset, rewrite history, switch
+branches, tag, release, deploy, or act on ambiguous scope.
 
-| Candidate count | Result |
-|---:|---|
-| 0 | `STOP` with an explicit `no-active-spec` result |
-| 1 | Select that candidate |
-| 2 or more | `STOP` with candidate names and no guess |
+## Commands
 
-Runtime state, current lifecycle artifact status, and explicit profile markers
-are authoritative. Archived, superseded, historical, Repository Ready, and
-stale metadata cannot reactivate a SPEC. The resolver never selects the highest
-numbered directory. `/sdd-direct <SPEC-directory>` is the explicit selector;
-it must still reject a historical or unsafe path.
+- `/sdd-start <change>` creates or refines Design and enters Build.
+- `/sdd-resume [SPEC]` continues evident incomplete work from repository
+  artifacts and implementation evidence.
+- `/sdd-verify [SPEC]` creates or refreshes `VERIFY.md` without Git/VCS work.
+- `/sdd-ship [SPEC]` is the sole explicit Git/VCS handoff; `[SPEC]` is optional
+  when repository evidence identifies one obvious verified change.
 
-## Resume And Recovery
+Resume never reactivates completed work, guesses between ambiguous SPECs, or
+uses hidden runtime state. Start and Resume stop for material ambiguity.
 
-Resume must:
+## Privacy and safety
 
-1. identify the EclipseGames project and load the profile;
-2. discover active SPEC candidates under `docs/specs/`;
-3. read and validate the selected `.sdd-runtime/state.json`;
-4. validate identity, fingerprints, locks, and trace continuity;
-5. reconcile an event-first interruption with the authoritative artifact files;
-6. determine the last completed checkpoint and next dependency-ready phase;
-7. continue without repeating completed phases; and
-8. stop at Repository Ready without entering Git operations.
+Student names require protected access, retention, and backups. Projection DTOs
+remain server-side allowlists. Stop for meaningful privacy/security exposure,
+unsafe migration, contradictory requirements, major unapproved scope, or
+unresolved essential failures.
 
-Recovery is append-only and lock-protected. It may repair only a proven
-runtime interruption through the supported `/sdd-resume` mechanism. It must not
-infer a successful phase from a missing or ambiguous artifact.
+## SPEC-0017 cutover
 
-## Roles And Routing
-
-Logical roles are configured in `.opencode/sdd-model-map.json`:
-
-| Role | Model | Boundary |
-|---|---|---|
-| SOL | `openai/gpt-5.6-sol` | Design authoring and Design Refinement |
-| HIGH | `openai/gpt-5.6-terra` | Architecture Review and Verify |
-| MID | `openai/gpt-5.6-luna` | Tasks, orchestration, Apply |
-| LOW | `openai/gpt-5.6-luna` | Bounded evidence and mechanical reports only |
-| HUMAN | None | Git, merge, release, tag, and material decisions |
-
-LOW is truthful Luna reuse, not an invented low-tier model. Its profile is
-explicitly bounded by evidence-only context, a token budget, no architecture
-decisions, no scope expansion, and no Git mutation. Provider exhaustion stops
-with HUMAN_HANDOFF; routing never crosses logical roles.
-
-## Human Git Boundary
-
-Repository Ready is the terminal SDD boundary. The Portable runtime, commands,
-agents, and permissions must not run or authorize:
-
-- `git add`, commit, push, pull request creation, or CI waiting;
-- merge, release, tag, reset, checkout, branch switching, or history rewrite;
-- production deployment or any destructive VCS operation.
-
-The human maintainer owns the post-Repository-Ready handoff. Older context
-claims that described an automated delivery route are historical or superseded
-by this rule and must not be treated as executable policy.
-
-## Failure Semantics
-
-Use these classifications consistently:
-
-- `BLOCKER`: continuation risks correctness, privacy, security, data integrity,
-  or an impossible acceptance criterion;
-- `CONDITION`: non-blocking evidence carried into the next checkpoint;
-- `NON-BLOCKING`: recorded improvement or debt outside the acceptance gate.
-
-Do not hide a required test failure as a condition, fabricate missing evidence,
-or turn a product rule into runtime metadata.
+SPEC-0017 is closed under SDD Lite by preserving `DESIGN.md`, `TASKS.md`, useful
+historical `ARCHITECTURE-REVIEW.md`, and approved M0 context changes, then
+creating `VERIFY.md`. Portable Apply, Apply Summary, runtime state, traces,
+recovery, and related checkpoint artifacts are obsolete and are not completed.

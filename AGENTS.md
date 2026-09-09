@@ -2,71 +2,45 @@
 
 ## Session startup
 
-At the start of every session, read in this order:
+Read, in order:
 
 1. `.ai/context/PROJECT.md`
 2. `.ai/context/SESSION.md`
 3. `.ai/context/DECISIONS.md`
 4. `.ai/context/KNOWN_ISSUES.md`
 5. `.ai/context/ROADMAP.md`
-6. The active approved `docs/specs/SPEC-XXXX/DESIGN.md`, if one exists
+6. The active SPEC `DESIGN.md`, `TASKS.md`, and `VERIFY.md` when present
 
-Do not ask the maintainer to re-explain information already recorded in these files.
+## SDD Lite
 
-## Source of truth
+The only workflow is `DESIGN -> BUILD -> VERIFY -> SHIP`, governed by
+`docs/architecture/sdd-lite.md`. Use `DESIGN.md`, `TASKS.md`, `VERIFY.md`, and
+repository evidence. There is no runtime state machine, trace, fingerprint,
+checkpoint, recovery, rebaseline, Apply, Archive, Health, or Repository Ready.
 
-Use this authority order:
+- Design decides scope, architecture, privacy, migration, and acceptance.
+- Build implements the approved Design with Luna and never Ships.
+- Verify records commands, results, findings, and residual risk in `VERIFY.md`.
+- Ship requires explicit `/sdd-ship` and is the only SDD Git/VCS boundary.
 
-1. Approved Design of the active SPEC
-2. `docs/SDD-WORKFLOW.md`
-3. `.ai/context/PROJECT.md`
-4. `.ai/context/DECISIONS.md`
-5. Current implementation evidence: code, schema and tests
-6. `.ai/context/SESSION.md`, `ROADMAP.md` and `KNOWN_ISSUES.md`
+## Product constraints
 
-If two sources conflict, stop only when the conflict affects correctness, privacy, data integrity or acceptance criteria.
-
-## Core engineering principles
-
-- Spec-Driven Development for non-trivial work.
-- Think deeply in Design; execute predictably afterwards.
-- TDD for domain rules and calculations.
-- Make the smallest change that fully satisfies the approved Design.
-- Do not introduce architecture during Tasks or Apply.
-- Do not reopen settled decisions without concrete new evidence.
-- Prefer clear module ownership over clever abstractions.
-- Optimize for maintainability, low coupling and fast classroom interaction.
-
-## Project constraints
-
-- Academic evaluation, gamification, behaviour and narrative are separate domains.
-- Behaviour must never reduce academic grades, XP evidence or RT.
-- XP is evidence for observation; it is not the official grade.
+- Academic evaluation, gamification, behaviour, and narrative remain separate.
+- Behaviour must never reduce academic grades, XP evidence, or RT.
+- XP is evidence for observation, not the official grade.
 - Student educational data is private.
-- Classroom projection must expose only explicitly classroom-safe fields.
-- The MVP has no individual student accounts.
-- The product must remain practical for groups of about 30 students.
-- No public ranking of students by academic or gamification performance.
-- Narrative is lightweight and must not consume significant class time.
+- Classroom projection exposes only explicitly safe fields through server DTOs.
+- The MVP has no individual student accounts or public rankings.
+- Narrative remains lightweight and classroom-practical.
 
-## Agent boundaries
+## Engineering rules
 
-- Design decides.
-- Architecture Review validates Design; it does not redesign without a blocker.
-- Tasks derive work directly from approved Design.
-- Apply executes approved Tasks.
-- Verify checks implementation against approved Design and acceptance criteria.
-- Archive records outcomes and learning.
-- Repository Ready is the terminal SDD boundary. Commit, Push, PR, CI wait,
-  Merge, Release, Tag, branch changes, and all other Git/VCS handoff actions
-  are HUMAN / maintainer-owned and are not executed by SDD tooling.
-- Runtime recovery uses `/sdd-resume`; it must reconcile the selected
-  `docs/specs/<SPEC-DIRECTORY>/.sdd-runtime/` state with authoritative SPEC
-  artifacts and never reactivate historical work.
-- Release, production deployment, destructive Git operations, force push, and
-  history rewriting remain maintainer-controlled.
-- Exceptions and material decisions always return to the maintainer.
-- Editing this workflow does not trigger it or apply it retroactively to the current SPEC. No commit, push, PR, CI, merge, release, tag, branch change, or other VCS action is authorized for the current documentation task.
-
-Detailed workflow rules live only in `docs/SDD-WORKFLOW.md`. The profile-driven
-path and artifact mapping live only in `.opencode/sdd-model-map.json`.
+- Make the smallest change that satisfies the approved Design.
+- Use TDD for domain rules and calculations.
+- Prefer explicit cohesive modules over generic engines.
+- Preserve the approved React/Vite, Fastify, SQLite/Drizzle, cookie-session,
+  TypeScript-domain, server-allowlist, Vitest, and Playwright boundaries.
+- Stop only for contradictory requirements, unsafe migration, meaningful
+  privacy/security exposure, major unapproved scope, unresolved essential
+  failures, or unsafe Ship ambiguity.
+- Do not perform Git/VCS operations outside `/sdd-ship`.

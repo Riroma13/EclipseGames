@@ -305,6 +305,33 @@ Includes:
 
 ---
 
+## Current future plan — SPEC-0017 canonical dependency order
+
+The unstarted plan below replaces the pre-audit future ordering above; archived
+history and completed SPEC records are preserved. These are planning boundaries,
+not M0 implementation work.
+
+1. **M1 — Calendar and real class sessions:** terms, timetable, teaching days,
+   holidays, and explicit class sessions.
+2. **M2 — RT and Energy:** `ABSENT`, term average, derived Energy, streak, bulk
+   entry, and correction.
+3. **M3 — Gems and advantages:** Emerald/Ruby/Diamond, advantages, and
+   teacher-triggered result rewards; no coin conversion or dual-write.
+4. **M4 — Lives and behaviour:** restrictions, Red Code, and report proposal.
+5. **M5 — Quarterly rubric:** base-XP evidence, adjustment, and grade.
+6. **M6 — Term close and export:** immutable close/reopen and XLSX export.
+7. **M7 — Avatar Core and temporary access.**
+8. **M8 — Workspace, Classroom Mode, and expiring Show Student.**
+9. **M9 — Boutique:** Avatar Core-compatible evolution only.
+10. **M10 — History, filters, and audit.**
+11. **M11 — Narrative, events, challenges, and minigame integration.**
+12. **M12 — Production hardening and privacy:** retention/deletion, backup expiry,
+    and executed encrypted-restic restore evidence; this is the owner of C-01.
+
+All later work must preserve STOP-USING, no-conversion, no-dual-write,
+server-side privacy, and academic non-mutation constraints. M0 makes no
+implementation claim.
+
 ## Deferred until evidence exists
 
 Do not schedule without a real requirement:

@@ -41,7 +41,7 @@ The teacher must retain professional judgement and cannot reduce classroom obser
 
 ---
 
-## DEC-003 — RT is independent from XP
+## DEC-003 — RT is independent from XP (SUPERSEDED)
 
 **Status:** Accepted
 
@@ -50,6 +50,9 @@ Task Register (RT) uses only evaluated task records: 10, 5 and 0. `NOT_EVALUATED
 
 ### Rationale
 Task completion and classroom-observation evidence measure different things.
+
+The representative `NOT_EVALUATED` value is superseded by the current
+canonical `ABSENT` semantics recorded in DEC-016.
 
 ---
 
@@ -213,16 +216,13 @@ Maintainer runtime review proved the previous seed could not demonstrate the int
 
 ---
 
-## DEC-015 — Portable v1 is the single EclipseGames SDD lifecycle
+## DEC-015 — Portable v1 lifecycle (SUPERSEDED)
 
-**Status:** Accepted / current control-plane decision
+**Status:** Historical / superseded by DEC-017
 
 ### Decision
-EclipseGames uses SDD Portable v1 as its one executable lifecycle. Product and
-SPEC authority remains `docs/specs/`; the configurable runtime stores only
-control-plane metadata in `docs/specs/<SPEC-DIRECTORY>/.sdd-runtime/`. The
-profile-driven lifecycle ends at Repository Ready and then stops for HUMAN Git
-handoff.
+EclipseGames previously used SDD Portable v1. This decision is retained as
+historical evidence only; it is no longer executable policy.
 
 ### Rationale
 The repository-native `docs/specs/` artifacts are already the authoritative
@@ -230,10 +230,57 @@ product record. A second product/spec tree or an independent Apply chain would
 split lifecycle state and could reactivate historical work.
 
 ### Consequences
-- `/sdd-direct` is the canonical entry point and `/sdd-resume` is the supported
-  recovery mechanism.
-- `/sdd-apply` and its old executor/skill chain are STOP-only compatibility
-  shims.
-- Active SPEC discovery uses lifecycle evidence, not directory numbering.
-- No runtime or permission grants automated Git add/commit/push/PR/CI/merge,
-  release, or tag operations.
+Portable runtime state, traces, model maps, and phase artifacts are obsolete.
+
+---
+
+## DEC-017 — SDD Lite is the single EclipseGames workflow
+
+**Status:** Accepted / current control-plane decision
+
+### Decision
+EclipseGames uses DESIGN -> BUILD -> VERIFY -> SHIP. Design is the primary
+contract, Tasks are a plain plan, Verify records evidence, and only explicit
+`/sdd-ship` may perform Git/VCS handoff.
+
+### Rationale
+The product needs evidence-driven engineering without a second critical-system
+control plane or parser-dependent lifecycle state.
+
+### Consequences
+- Public commands are `/sdd-start`, `/sdd-resume`, `/sdd-verify`, and
+  `/sdd-ship`.
+- Resume uses Design, Tasks, Verify, code, tests, and worktree evidence only.
+- There is no Apply, Archive, Health, Repository Ready, runtime state, trace,
+  fingerprint, recovery, checkpoint, or rebaseline phase.
+
+---
+
+## DEC-016 — SPEC-0017 canonical functional register
+
+**Status:** Accepted / current canonicalization authority
+
+### Decision
+Later SPECs use the SPEC-0017 register as product authority. RT uses
+`10 | 5 | 0 | ABSENT`, with `ABSENT` excluded from average, Energy, and
+streak. Energy is derived from the current-term RT average. Emerald, Ruby, and
+Diamond replace coins for future writes with no conversion or dual-write;
+legacy coin records remain readable evidence. Lives map to
+Normal/Vigilancia/Alerta/Código Rojo, and a real class session exists only
+between explicit `Comenzar clase` and `Finalizar clase` actions within the
+configured calendar. XP remains annual while RT, Energy, rubric, and close
+snapshots are term-scoped.
+
+### Rationale
+The audit reconciles contradictory stable context without rewriting archived
+SPECs or claiming future behavior exists. Explicit ownership and dependency
+boundaries prevent legacy money, fixture values, or representative RT values
+from becoming accidental product contracts.
+
+### Consequences
+- Future work follows M1–M12 dependency order from SPEC-0017.
+- Server-side projection allowlists remain authoritative; private fields are
+  never filtered only in React.
+- `ABSENT` is not a reinterpretation of existing task rows; later RT
+  persistence must define it explicitly.
+- C-01 remains an open production privacy/recoverability gate: encrypted-restic backup and restore execution is not demonstrated.
