@@ -1,0 +1,6 @@
+import type Database from 'better-sqlite3';
+export type CalendarRow = { id:string; academicYearId:string; ownerTeacherId:string; timezone:string; createdAt:string; updatedAt:string };
+const fields = 'id, academic_year_id academicYearId, owner_teacher_id ownerTeacherId, timezone, created_at createdAt, updated_at updatedAt';
+export function findCalendar(db: Database.Database, yearId: string, owner: string) { return db.prepare(`SELECT ${fields} FROM academic_calendars WHERE academic_year_id=? AND owner_teacher_id=?`).get(yearId, owner) as CalendarRow|undefined; }
+export function findChain(db: Database.Database, owner: string, yearId: string, groupId: string) { return db.prepare(`SELECT c.*, g.name group_name, y.starts_on year_starts, y.ends_on year_ends FROM academic_calendars c JOIN academic_years y ON y.id=c.academic_year_id AND y.owner_teacher_id=c.owner_teacher_id JOIN groups g ON g.academic_year_id=y.id AND g.owner_teacher_id=y.owner_teacher_id WHERE c.owner_teacher_id=? AND c.academic_year_id=? AND g.id=?`).get(owner, yearId, groupId) as (CalendarRow & {group_name:string;year_starts:string;year_ends:string})|undefined; }
+export function withTransaction<T>(db: Database.Database, work: () => T) { db.exec('BEGIN IMMEDIATE'); try { const result=work(); db.exec('COMMIT'); return result; } catch(e) { try { db.exec('ROLLBACK'); } catch {} throw e; } }

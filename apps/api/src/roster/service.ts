@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import { ApiError } from '../http/errors.js';
 import * as repository from './repository.js';
+import { assertAcademicYearLifecycleChange, assertArchiveAllowed } from '../calendar/service.js';
+import { getOwnedAcademicYearGroupContext as getOwnedAcademicYearGroupContextAdapter } from './calendar-context.js';
 
 export const AVATARS = ['default', 'fox', 'owl', 'cat', 'wolf'] as const;
 export const SPECIALTIES = ['Leader', 'Diplomat', 'Strategist', 'Analyst', 'Disciplined', 'Perseverant', 'Helper', 'Ally'] as const;
@@ -12,6 +14,10 @@ const notFound = (message: string): never => { throw new ApiError('NOT_FOUND', 4
 const validation = (message: string): never => { throw new ApiError('VALIDATION_FAILED', 422, message); };
 function ownedYear(db: Database.Database, id: string, teacherId: string) { return repository.findYear(db, id, teacherId) ?? notFound('Academic year not found.'); }
 export function getYearForPatch(db: Database.Database, teacherId: string, id: string) { return ownedYear(db, id, teacherId); }
+/** Calendar's narrow adapter: calendar code receives verified roster identity without owning roster queries. */
+export function getOwnedAcademicYearGroupContext(db: Database.Database, teacherId: string, yearId: string, groupId: string) {
+  return getOwnedAcademicYearGroupContextAdapter(db, teacherId, yearId, groupId);
+}
 function ownedGroup(db: Database.Database, id: string, teacherId: string) { return repository.findGroup(db, id, teacherId) ?? notFound('Group not found.'); }
 function groupYear(db: Database.Database, group: repository.GroupRecord, teacherId: string) { const year = ownedYear(db, group.academicYearId, teacherId); return { group, year }; }
 function ownedStudentContext(db: Database.Database, id: string, teacherId: string) { const student = repository.findOwnedStudent(db, id, teacherId) ?? notFound('Student not found.'); const group = ownedGroup(db, student.groupId, teacherId); return { student, ...groupYear(db, group, teacherId) }; }
@@ -29,8 +35,8 @@ export function getOwnedStudentAcademicYearContextForYear(db: Database.Database,
 
 export function createYear(db: Database.Database, teacherId: string, input: { label: string; startsOn: string; endsOn: string }) { const value = { label: input.label.trim(), startsOn: input.startsOn.trim(), endsOn: input.endsOn.trim() }; if (!value.label || value.startsOn >= value.endsOn) validation('Academic year values are invalid.'); try { return repository.insertYear(db, { id: randomUUID(), ownerTeacherId: teacherId, ...value, archivedAt: null, createdAt: now() }); } catch (error) { return conflict(error); } }
 export function listAcademicYears(db: Database.Database, teacherId: string, includeArchived: boolean) { return repository.listYears(db, teacherId, includeArchived); }
-export function updateYear(db: Database.Database, teacherId: string, id: string, input: { label: string; startsOn: string; endsOn: string }) { const year = ownedYear(db, id, teacherId); const value = { label: input.label.trim(), startsOn: input.startsOn.trim(), endsOn: input.endsOn.trim() }; if (year.archivedAt) validation('Archived academic years are read-only.'); if (!value.label || value.startsOn >= value.endsOn) validation('Academic year values are invalid.'); try { repository.updateYear(db, id, value); return { ...year, ...value }; } catch (error) { return conflict(error); } }
-export function archiveAcademicYear(db: Database.Database, teacherId: string, id: string) { const year = ownedYear(db, id, teacherId); if (year.archivedAt) validation('Academic year is already archived.'); repository.archiveYear(db, id, now()); }
+export function updateYear(db: Database.Database, teacherId: string, id: string, input: { label: string; startsOn: string; endsOn: string }) { const value = { label: input.label.trim(), startsOn: input.startsOn.trim(), endsOn: input.endsOn.trim() }; if (!value.label || value.startsOn >= value.endsOn) validation('Academic year values are invalid.'); try { return repository.withTransaction(db, () => { const year = ownedYear(db, id, teacherId); if (year.archivedAt) validation('Archived academic years are read-only.'); assertAcademicYearLifecycleChange(db,id,value.startsOn,value.endsOn); repository.updateYear(db, id, value); return { ...year, ...value }; }); } catch (error) { return conflict(error); } }
+export function archiveAcademicYear(db: Database.Database, teacherId: string, id: string) { try { repository.withTransaction(db, () => { const year = ownedYear(db, id, teacherId); if (year.archivedAt) validation('Academic year is already archived.'); assertArchiveAllowed(db,id); repository.archiveYear(db, id, now()); }); } catch (error) { return conflict(error); } }
 export function createGroup(db: Database.Database, teacherId: string, yearId: string, name: string) { const year = ownedYear(db, yearId, teacherId); const value = name.trim(); if (year.archivedAt || !value) validation('Academic year is not writable or group name is empty.'); try { return repository.insertGroup(db, { id: randomUUID(), ownerTeacherId: teacherId, academicYearId: yearId, name: value, createdAt: now() }); } catch (error) { return conflict(error); } }
 export function listAcademicGroups(db: Database.Database, teacherId: string, yearId: string) { ownedYear(db, yearId, teacherId); return repository.listGroups(db, yearId, teacherId); }
 export function updateGroup(db: Database.Database, teacherId: string, id: string, name: string) { const group = ownedGroup(db, id, teacherId); const year = ownedYear(db, group.academicYearId, teacherId); const value = name.trim(); if (year.archivedAt || !value) validation('Archived academic years are read-only or group name is empty.'); try { repository.updateGroup(db, id, value); return { ...group, name: value }; } catch (error) { return conflict(error); } }
