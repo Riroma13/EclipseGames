@@ -170,7 +170,7 @@ Allowed values:
 RT average:
 `sum(evaluated values) / count(evaluated values)`.
 
-### Energy
+### Energy — SUPERSEDED representative rules
 
 Initial value: 30.
 Range: 0–50.
@@ -214,7 +214,7 @@ Maximum one advantage per assessment.
 
 The app records the spending event but does not store the resulting assessment grade.
 
-### Behaviour state
+### Behaviour state — SUPERSEDED representative rules
 
 States:
 - NORMAL
@@ -327,6 +327,58 @@ Must not show:
 - incidents;
 - disciplinary reports;
 - history.
+
+## 6A. CURRENT canonicalization register (SPEC-0017)
+
+The following register is the current product authority for later SPECs. The
+rules above that conflict with it are representative historical context and
+must not be extended:
+
+- XP preserves `baseXp` (1–3), flat matching-specialty `specialtyBonusXp`
+  (0/1), and effective XP. Annual levels use effective XP at
+  0/10/25/45/70/100/135/175, continue above L8, and grant one Emerald per
+  newly unlocked level. Rubric evidence aggregates active base XP only;
+  behaviour never removes it.
+- RT is `10 | 5 | 0 | ABSENT`; Spanish UI uses `Ausente`. `ABSENT` is excluded
+  from average, Energy, and streak and is not `NOT_EVALUATED`.
+- Energy is derived from the current-term RT average: Critical 0–2.9, Low
+  3–4.9, Stable 5–6.4, High 6.5–8.4, Maximum 8.5–10. Streak increments on
+  10, resets on 5/0, ignores absence, and four 10s grant one Emerald then
+  reset.
+- Emerald, Ruby, and Diamond replace coins/Eclipse Points. No automatic
+  conversion or new coin write is allowed. Advantages cost their defined
+  2 Emeralds, 1 Ruby, or 1 Diamond; one per assessment, without stacking or
+  grade mutation. Result rewards are teacher-triggered and source marks are
+  never stored.
+- Lives 4/3/2/1/0 map to Normal/Vigilancia/Alerta/Código Rojo. Restrictions
+  affect only game mechanics; academic facts remain unchanged. At zero,
+  propose, but never confirm automatically, a minor report.
+- A real class session exists only between `Comenzar clase` and `Finalizar
+  clase`, within configured timetable, teaching days, and holidays. XP is
+  annual; RT, Energy, rubric, and close snapshots are term-scoped.
+- Rubric dimensions match XP categories; term base XP maps 0–2/3–5/6–9/10+
+  to levels 1–4. Teacher adjustment is allowed; grade is `(sum / 16) * 10`.
+  Close snapshots are immutable and reopen is explicit and traceable.
+- `Exportar` creates XLSX columns Student, Classroom Observation /10, and RT
+  average /10.
+- Projection allowlists avatar/alias, specialty/badge, level/progress,
+  qualitative Energy, gem balances, and narrative progress. Real name, exact
+  RT, rubric/grade, base/category XP, history, comments, and disciplinary
+  data remain private. `Mostrar al alumno` may add current behaviour
+  temporarily and must auto-return after a configured timeout.
+- Every student has an Agent Éclipse avatar without an account. Temporary
+  teacher-controlled code/URL/QR access expires. Persistent identity is face,
+  skin tone, base hair/features, and alias; evolution uses
+  clothing/accessories/badges/frames/backgrounds. Boutique follows Avatar
+  Core.
+
+The former `NOT_EVALUATED` RT value is **SUPERSEDED** as a representative
+product rule; the former mutable 0–50 Energy adjustments are **SUPERSEDED**;
+coin/Eclipse Points fields in projection and reward rules are
+**SUPERSEDED**; the old behaviour/session reset description is
+**SUPERSEDED**; and unresolved avatar source wording is **SUPERSEDED** by the
+Agent Éclipse/Avatar Core rule above. These markers do not claim that later
+runtime behavior has been implemented.
 
 ## 7. Narrative
 
