@@ -210,3 +210,30 @@ Maintainer runtime review proved the previous seed could not demonstrate the int
 - The seed extension uses the existing coin repository grant only and preserves backend `coin` terminology.
 - No automatic XP-route reconciliation, wallet/shop/dashboard/history mechanic, or new subsystem is introduced.
 - Collision preflight, transactional insertion, replay idempotency, reward catalogue, redemption, and reversal remain tested.
+
+---
+
+## DEC-015 — Portable v1 is the single EclipseGames SDD lifecycle
+
+**Status:** Accepted / current control-plane decision
+
+### Decision
+EclipseGames uses SDD Portable v1 as its one executable lifecycle. Product and
+SPEC authority remains `docs/specs/`; the configurable runtime stores only
+control-plane metadata in `docs/specs/<SPEC-DIRECTORY>/.sdd-runtime/`. The
+profile-driven lifecycle ends at Repository Ready and then stops for HUMAN Git
+handoff.
+
+### Rationale
+The repository-native `docs/specs/` artifacts are already the authoritative
+product record. A second product/spec tree or an independent Apply chain would
+split lifecycle state and could reactivate historical work.
+
+### Consequences
+- `/sdd-direct` is the canonical entry point and `/sdd-resume` is the supported
+  recovery mechanism.
+- `/sdd-apply` and its old executor/skill chain are STOP-only compatibility
+  shims.
+- Active SPEC discovery uses lifecycle evidence, not directory numbering.
+- No runtime or permission grants automated Git add/commit/push/PR/CI/merge,
+  release, or tag operations.
