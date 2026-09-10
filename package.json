@@ -7,11 +7,14 @@
     "migrate": "pnpm --filter @eclipse/api exec tsx scripts/migrate.ts",
     "bootstrap": "pnpm --filter @eclipse/api exec tsx scripts/bootstrap.ts",
     "seed:demo": "pnpm --filter @eclipse/api exec tsx scripts/seed-demo.ts",
+    "dev:demo": "node scripts/demo-workflow.mjs start",
+    "demo:reset": "node scripts/demo-workflow.mjs reset",
     "dev": "pnpm --parallel --filter web dev --filter api dev",
     "build": "pnpm --recursive build",
     "typecheck": "pnpm --recursive typecheck",
     "test": "pnpm exec vitest run",
-    "test:sdd-lite": "node --test scripts/sdd-lite.test.mjs"
+    "test:sdd-lite": "node --test scripts/sdd-lite.test.mjs",
+    "test:demo-workflow": "node --test scripts/demo-workflow.test.mjs"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "4.7.0",
