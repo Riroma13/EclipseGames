@@ -75,6 +75,17 @@ approval is not required.
 Resume never reactivates completed work, guesses between ambiguous SPECs, or
 uses hidden runtime state. Start and Resume stop for material ambiguity.
 
+### Local demo development
+
+`pnpm dev:demo` applies development-only defaults, runs pending migrations, and
+keeps the API watcher on `127.0.0.1:3199` alongside strict-port Vite on
+`127.0.0.1:5173`. It does not bootstrap, seed, or reset; the canonical demo
+SQLite file persists across restarts. Use `pnpm demo:reset` only when an
+intentional reset is required. It accepts only the canonical demo path, removes
+that file and its exact SQLite sidecars, then runs `migrate`, `bootstrap`, and
+`seed:demo` in order. Neither command reads or rewrites `.env`, and production
+is refused.
+
 ## Privacy and safety
 
 Student names require protected access, retention, and backups. Projection DTOs
