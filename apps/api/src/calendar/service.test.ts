@@ -69,4 +69,15 @@ describe('calendar persistence and session lifecycle', () => {
     expect(() => db.prepare('INSERT INTO academic_terms (id,calendar_id,academic_year_id,owner_teacher_id,code,starts_on,ends_on) VALUES (?,?,?,?,?,?,?)').run('44444444-4444-4444-8444-444444444444', calendar.id, year, '99999999-9999-4999-8999-999999999999', 'T2', '2026-01-01', '2026-01-02')).toThrow();
     expect(() => db.prepare('DELETE FROM academic_calendars WHERE id=?').run(calendar.id)).toThrow();
   });
+
+  it('returns stable eligibility reasons in the documented precedence order', () => {
+    expect(service.status(db, teacher, year, group, fixed)).toMatchObject({ reason: 'UNCONFIGURED', eligible: false });
+    service.replaceCalendar(db, teacher, year, input);
+    expect(service.status(db, teacher, year, group, { now: () => new Date('2026-09-07T05:30:00Z') })).toMatchObject({ reason: 'OUTSIDE_TIMETABLE', eligible: false });
+    expect(service.status(db, teacher, year, group, { now: () => new Date('2026-09-07T06:30:00Z') })).toMatchObject({ reason: 'ELIGIBLE', eligible: true });
+    const started = service.start(db, teacher, year, group, '11111111-1111-4111-8111-111111111117', fixed).session;
+    expect(service.status(db, teacher, year, group, fixed)).toMatchObject({ reason: 'ACTIVE_SESSION', eligible: false });
+    service.end(db, teacher, started.id, '11111111-1111-4111-8111-111111111118', fixed);
+    expect(service.status(db, teacher, year, group, fixed)).toMatchObject({ reason: 'USED_SLOT_DATE', eligible: false });
+  });
 });
