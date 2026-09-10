@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('SPEC-0020 configures today through the UI and leaves ended RT read-only', async ({ page }) => {
+test('SPEC-0021 saves numeric RT during an active session and leaves ended RT read-only', async ({ page }) => {
   const login = await page.request.post('/api/v1/auth/session', { data: { email: 'teacher@example.test', password: 'change-me-in-development' } });
   expect(login.status()).toBe(204);
   const cookie = login.headers()['set-cookie']?.split(';')[0]; const headers = cookie ? { cookie } : undefined;
@@ -11,6 +11,7 @@ test('SPEC-0020 configures today through the UI and leaves ended RT read-only', 
   expect(group.status()).toBe(200); const groupId = (await group.json()).id as string;
   const students = await page.request.post(`/api/v1/groups/${groupId}/students`, { headers, data: { students: [{ realName: 'Private One', alias: 'One' }, { realName: 'Private Two', alias: 'Two' }, { realName: 'Private Three', alias: 'Three' }, { realName: 'Private Four', alias: 'Four' }] } });
   expect(students.status()).toBe(200);
+  const studentIds = (await students.json()) as Array<{ id: string; alias: string }>;
 
   await page.goto(`/#/workspace?year=${yearId}&group=${groupId}`);
   if (await page.getByLabel('Email').count()) { await page.getByLabel('Email').fill('teacher@example.test'); await page.getByLabel('Password').fill('change-me-in-development'); await page.getByRole('button', { name: 'Sign in' }).click(); }
@@ -25,7 +26,17 @@ test('SPEC-0020 configures today through the UI and leaves ended RT read-only', 
   await expect(page.getByText('Calendar saved.')).toBeVisible();
   await page.getByRole('button', { name: 'Comenzar clase' }).click();
   await expect(page.getByRole('button', { name: 'Finalizar clase' })).toBeVisible();
-  for (const [alias, value] of [['One', '10'], ['Two', '5'], ['Three', '0'], ['Four', 'Ausente']] as const) await page.getByLabel(`RT for ${alias}`).selectOption(value === 'Ausente' ? 'ABSENT' : value);
+  const activeStatus = await page.request.get(`/api/v1/groups/${groupId}/real-class-session-status?academicYearId=${yearId}`, { headers });
+  expect(activeStatus.status()).toBe(200);
+  const sessionId = ((await activeStatus.json()).active as { id: string }).id;
+  const numericPost = page.waitForRequest(request => request.method() === 'POST' && request.url().includes('/rt-entries'));
+  await page.getByLabel('RT for One').selectOption('10');
+  const numericRequest = await numericPost;
+  expect(JSON.parse(numericRequest.postData() ?? '{}').entries[0].value).toBe(10);
+  for (const [alias, value] of [['Two', '5'], ['Three', '0'], ['Four', 'Ausente']] as const) await page.getByLabel(`RT for ${alias}`).selectOption(value === 'Ausente' ? 'ABSENT' : value);
+  const persisted = await page.request.get(`/api/v1/real-class-sessions/${sessionId}/rt-entries`, { headers });
+  expect(persisted.status()).toBe(200);
+  expect((await persisted.json()).entries.find((entry: { studentId: string }) => entry.studentId === studentIds[0].id).value).toBe(10);
   await page.getByRole('button', { name: 'Finalizar clase' }).click();
   await expect(page.getByText('Read-only — class ended')).toBeVisible();
   await expect(page.getByLabel('RT for One')).toHaveValue('10'); await expect(page.getByLabel('RT for Two')).toHaveValue('5'); await expect(page.getByLabel('RT for Three')).toHaveValue('0'); await expect(page.getByLabel('RT for Four')).toHaveValue('ABSENT');
