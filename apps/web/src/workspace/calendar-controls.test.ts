@@ -7,8 +7,8 @@ describe('calendar controls contract', () => {
   });
 
   it('maps every server reason to stable teacher copy', () => {
-    expect(Object.keys(eligibilityMessages)).toHaveLength(7);
-    expect(eligibilityMessages.USED_SLOT_DATE).toBe('This period has already been used today.');
-    expect(eligibilityMessages.ELIGIBLE).toBe('Class can start now.');
+    expect(Object.keys(eligibilityMessages)).toHaveLength(9);
+    expect(eligibilityMessages.ARCHIVED_YEAR).toBe('Este curso académico está archivado. No se pueden comenzar clases.');
+    expect(eligibilityMessages.ELIGIBLE).toBe('Puedes comenzarla ahora.');
   });
 });

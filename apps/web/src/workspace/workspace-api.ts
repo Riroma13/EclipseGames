@@ -2,6 +2,8 @@ export type AcademicYear = { id: string; label: string; startsOn: string; endsOn
 export type Group = { id: string; academicYearId: string; name: string };
 export type Calendar = { configured: false; canReplace: boolean } | { configured: true; canReplace: boolean; academicYearId: string; timezone: string; terms: Array<{ id: string; code: 'T1'|'T2'|'T3'; startsOn: string; endsOn: string }>; holidays: Array<{ id: string; startsOn: string; endsOn: string }>; slots: Array<{ id: string; groupId: string; weekday: number; startsAt: string; endsAt: string }> };
 export type Session = { id: string; academicYearId: string; groupId: string; localDate: string; timezone: string; slotStartsAt: string; slotEndsAt: string; startedAt: string; endedAt: string | null; createdAt: string };
+export type ClassOccurrence = { localDate:string; weekdayLabel:string; startsAt:string; endsAt:string };
+export type SessionStatus = { configured:boolean; canReplace:boolean; eligible:boolean; reason:'ACTIVE_SESSION'|'ARCHIVED_YEAR'|'UNCONFIGURED'|'OUTSIDE_TERM'|'HOLIDAY'|'NO_CLASS_DAY'|'OUTSIDE_TIMETABLE'|'USED_SLOT_DATE'|'ELIGIBLE'; startTiming:'EARLY'|'SCHEDULED'|null; message:string; currentClass:ClassOccurrence|null; nextClass:ClassOccurrence|null; activeForSelectedGroup:boolean; active:Session|null };
 export type RtValue = 10 | 5 | 0 | 'ABSENT';
 export type RtEntry = { id: string; studentId: string; value: RtValue; createdAt: string; updatedAt: string };
 export type RtRoster = { sessionId: string; termId: string; students: Array<{ studentId: string }>; entries: RtEntry[] };
@@ -63,7 +65,7 @@ export const workspaceApi = {
   reverseAdvantage: (redemptionId:string, signal?:AbortSignal) => post<unknown>(`/api/v1/advantage-redemptions/${redemptionId}/reversal`,{},newKey(),signal),
   calendar: (yearId:string, signal?:AbortSignal) => get<Calendar>(`/api/v1/academic-years/${yearId}/calendar`, signal),
   replaceCalendar: (yearId:string, value:{ timezone:string; terms: Array<{ code:'T1'|'T2'|'T3'; startsOn:string; endsOn:string }>; holidays:Array<{ startsOn:string; endsOn:string }>; slots:Array<{ groupId:string; weekday:number; startsAt:string; endsAt:string }> }, signal?:AbortSignal) => fetchJson<Calendar>(`/api/v1/academic-years/${yearId}/calendar`, 'PUT', value, signal),
-  sessionStatus: (groupId:string, yearId:string, signal?:AbortSignal) => get<{ configured:boolean; canReplace:boolean; eligible:boolean; reason:'ACTIVE_SESSION'|'UNCONFIGURED'|'OUTSIDE_TERM'|'HOLIDAY'|'OUTSIDE_TIMETABLE'|'USED_SLOT_DATE'|'ELIGIBLE'; active:Session|null }>(`/api/v1/groups/${groupId}/real-class-session-status?academicYearId=${yearId}`, signal),
+  sessionStatus: (groupId:string, yearId:string, signal?:AbortSignal) => get<SessionStatus>(`/api/v1/groups/${groupId}/real-class-session-status?academicYearId=${yearId}`, signal),
   startSession: (groupId:string, yearId:string, key?:string, signal?:AbortSignal) => post<Session>(`/api/v1/groups/${groupId}/real-class-sessions/start`, { academicYearId:yearId }, key ?? newKey(), signal),
   endSession: (sessionId:string, key?:string, signal?:AbortSignal) => post<Session>(`/api/v1/real-class-sessions/${sessionId}/end`, {}, key ?? newKey(), signal),
   rtEntries: (sessionId:string, signal?:AbortSignal) => get<RtRoster>(`/api/v1/real-class-sessions/${sessionId}/rt-entries`, signal),
