@@ -52,5 +52,8 @@ export const calendarTermSchema = z.object({ code: z.enum(['T1', 'T2', 'T3']), s
 export const calendarSchema = z.object({ timezone: z.string(), terms: z.array(calendarTermSchema).length(3), holidays: z.array(z.object({ startsOn: z.string().date(), endsOn: z.string().date() })), slots: z.array(z.object({ groupId: z.string().uuid(), weekday: z.number().int(), startsAt: z.string(), endsAt: z.string() })) });
 export const realClassSessionSchema = z.object({ id: z.string().uuid(), academicYearId: z.string().uuid(), groupId: z.string().uuid(), localDate: z.string().date(), timezone: z.string().min(1), slotStartsAt: z.string(), slotEndsAt: z.string(), startedAt: z.string().datetime(), endedAt: z.string().datetime().nullable(), createdAt: z.string().datetime() });
 export type RealClassSessionDto = z.infer<typeof realClassSessionSchema>;
+export const rtValueSchema = z.union([z.literal(10), z.literal(5), z.literal(0), z.literal('ABSENT')]);
+export type RtValue = z.infer<typeof rtValueSchema>;
+export type RtTermSummaryDto = { studentId: string; termId: string; average: number | null; energy: 'CRITICAL'|'LOW'|'STABLE'|'HIGH'|'MAXIMUM' | null; streak: number };
 
 export { z };

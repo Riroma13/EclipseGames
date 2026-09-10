@@ -15,6 +15,7 @@ import { registerXpRoutes } from './xp/routes.js';
 import { registerCoinRoutes } from './coins/routes.js';
 import { registerGameRoutes } from './game/routes.js';
 import { registerCalendarRoutes } from './calendar/routes.js';
+import { registerRtRoutes } from './rt/routes.js';
 
 type ServerOptions = {
   logger?: boolean;
@@ -47,6 +48,7 @@ export function createServer(databaseUrl = databasePathFromEnv(), options: Serve
     registerCoinRoutes(instance, db.database);
     registerGameRoutes(instance, db.database);
     registerCalendarRoutes(instance, db.database);
+    registerRtRoutes(instance, db.database);
   });
   const webRoot = resolve(process.cwd(), 'apps/web/dist');
   if (existsSync(webRoot)) {
