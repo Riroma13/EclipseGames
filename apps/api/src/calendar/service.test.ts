@@ -80,4 +80,28 @@ describe('calendar persistence and session lifecycle', () => {
     service.end(db, teacher, started.id, '11111111-1111-4111-8111-111111111118', fixed);
     expect(service.status(db, teacher, year, group, fixed)).toMatchObject({ reason: 'USED_SLOT_DATE', eligible: false });
   });
+
+  it('keeps future calendar save independent of eligibility and persists the single start decision instant', () => {
+    service.replaceCalendar(db, teacher, year, input);
+    expect(service.status(db, teacher, year, group, { now: () => new Date('2026-09-06T06:30:00.000Z') })).toMatchObject({ configured:true, canReplace:true, eligible:false, reason:'NO_CLASS_DAY' });
+    let reads = 0;
+    const decision = new Date('2026-09-07T05:45:00.123Z');
+    const started = service.start(db, teacher, year, group, '11111111-1111-4111-8111-111111111119', { now: () => { reads += 1; return decision; } });
+    expect(reads).toBe(1);
+    expect(started.session).toMatchObject({ localDate:'2026-09-07', slotStartsAt:'08:00', slotEndsAt:'09:00', startedAt:decision.toISOString() });
+  });
+
+  it('keeps canReplace aligned with calendar GET for unconfigured and archived years', () => {
+    expect(service.status(db, teacher, year, group, fixed).canReplace).toBe(true);
+    db.prepare('UPDATE academic_years SET archived_at=? WHERE id=?').run(new Date().toISOString(), year);
+    expect(service.status(db, teacher, year, group, fixed)).toMatchObject({ reason:'ARCHIVED_YEAR', canReplace:false, currentClass:null, nextClass:null, message:'Este curso académico está archivado. No se pueden comenzar clases.' });
+  });
+
+  it('blocks a different selected group without exposing its active-session controls', () => {
+    const otherGroup = '33333333-3333-4333-8333-333333333335';
+    db.prepare('INSERT INTO groups (id,owner_teacher_id,academic_year_id,name,created_at) VALUES (?,?,?,?,?)').run(otherGroup, teacher, year, 'B', new Date().toISOString());
+    service.replaceCalendar(db, teacher, year, { ...input, slots:[...input.slots, { groupId:otherGroup, weekday:1, startsAt:'08:00', endsAt:'09:00' }] });
+    service.start(db, teacher, year, group, '11111111-1111-4111-8111-111111111120', fixed);
+    expect(service.status(db, teacher, year, otherGroup, fixed)).toMatchObject({ reason:'ACTIVE_SESSION', eligible:false, activeForSelectedGroup:false, active:{groupId:group}, currentClass:{localDate:'2026-09-07'}, nextClass:{localDate:'2026-09-07'} });
+  });
 });
