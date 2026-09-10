@@ -29,6 +29,11 @@ never replaces Sol as the Design author.
 
 ## Stage Contracts
 
+The full **Professional Engineering Baseline** is owned by the root
+`AGENTS.md`; this document does not duplicate it. Design identifies applicable
+baseline clauses and acceptance, Build implements them, and Verify records
+evidence for each applicable clause or explains why it is not applicable.
+
 **Design:** define scope, evidence, behaviour, ownership, data/API/UI and
 migration effects, privacy/failure boundaries, tests, acceptance, rollout, and
 simplicity. Build cannot silently change scope or architecture.

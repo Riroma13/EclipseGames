@@ -33,6 +33,11 @@ Terra reviews the completed Sol Design and never authors or rewrites it.
 
 ## Stage contracts
 
+The root `AGENTS.md` is the sole owner of the **Professional Engineering
+Baseline**. Design selects applicable obligations and acceptance, Build applies
+them without weakening them, and Verify records evidence or explains why an
+obligation is not applicable; this guide does not duplicate the baseline.
+
 ### Design
 
 Define behaviour, scope, ownership, data/API/UI effects, migration and rollout,
