@@ -57,6 +57,24 @@ test('SDD Lite routing and Git boundary are explicit', () => {
   assert.match(read('docs/SDD-WORKFLOW.md'), /No other lifecycle artifact or state store/);
 });
 
+test('Professional Engineering Baseline has one canonical owner and stage references', () => {
+  const agents = read('AGENTS.md');
+  const detailed = read('docs/architecture/sdd-lite.md');
+  const workflow = read('docs/SDD-WORKFLOW.md');
+  const baselineHeading = /^## Professional Engineering Baseline$/gm;
+
+  assert.equal([...agents.matchAll(baselineHeading)].length, 1);
+  assert.equal([...detailed.matchAll(baselineHeading)].length, 0);
+  assert.equal([...workflow.matchAll(baselineHeading)].length, 0);
+
+  for (const guide of [detailed, workflow]) {
+    assert.match(guide, /Professional Engineering\s+Baseline/);
+    assert.match(guide, /root\s+`AGENTS\.md`/);
+    assert.match(guide, /Design[\s\S]*Build[\s\S]*Verify/);
+    assert.match(guide, /not applicable/);
+  }
+});
+
 test('Bare Ship resolves through the authorized command path', () => {
   const resolved = resolveCommand('.opencode/commands/sdd-ship.md', '', 'Ship the verified change.');
   const ship = read('.opencode/agents/sdd-lite-ship.md');

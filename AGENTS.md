@@ -44,3 +44,28 @@ checkpoint, recovery, rebaseline, Apply, Archive, Health, or Repository Ready.
   privacy/security exposure, major unapproved scope, unresolved essential
   failures, or unsafe Ship ambiguity.
 - Do not perform Git/VCS operations outside `/sdd-ship`.
+
+## Professional Engineering Baseline
+
+This baseline applies to every future agent and SPEC. Apply the relevant clauses
+using repository evidence; SDD level controls ceremony, not engineering quality.
+
+- Design and test complete end-user journeys, not only isolated components.
+- Keep one authoritative source for important state; do not hardcode values that
+  should be configurable. Automate or document reproducible repetitive setup,
+  and never let development defaults reach production.
+- Test runtime UI, API, and database contracts rather than trusting TypeScript
+  alone.
+- Make applicable loading, empty, error, retry, disabled, editable, and
+  finalized states intentional; explain useful disabled actions.
+- For editable configuration, provide edit, save, cancel, and failure recovery
+  where applicable.
+- Where relevant, verify persistence/reload, correction/retry,
+  authorization/privacy, and responsive behaviour.
+- Before Ship, focused browser coverage must prove meaningful teacher
+  interactions and every Classroom interaction; automate manual regression when
+  practical.
+
+Design selects applicable baseline obligations and acceptance. Build implements
+them without silently weakening them. Verify records evidence for each
+applicable obligation and explains why any obligation is not applicable.
