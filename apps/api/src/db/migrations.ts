@@ -48,4 +48,8 @@ export const migrations: Migration[] = [
     id: '0011_academic_calendar_real_sessions',
     sql: readFileSync(fileURLToPath(new URL('../../drizzle/0011_academic_calendar_real_sessions.sql', import.meta.url)), 'utf8'),
   },
+  {
+    id: '0012_rt_absent_term_energy',
+    sql: readFileSync(fileURLToPath(new URL('../../drizzle/0012_rt_absent_term_energy.sql', import.meta.url)), 'utf8'),
+  },
 ];

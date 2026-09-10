@@ -9,6 +9,8 @@ import { StudentRoster } from './StudentRoster';
 import { WorkspaceShell } from './WorkspaceShell';
 import { YearContextControl } from './YearContextControl';
 import { CalendarControls } from './CalendarControls';
+import { RtGrid } from './RtGrid';
+import type { Session } from './workspace-api';
 
 function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
   const [error, setError] = useState('');
@@ -62,6 +64,7 @@ export function WorkspaceApp() {
   const [auth, setAuth] = useState(true);
   const [historical, setHistorical] = useState(false);
   const [activity, setActivity] = useState<ActivityState>({ kind: 'zero' });
+  const [activeSession, setActiveSession] = useState<Session | null>(null);
   const generation = useRef(0);
   const originRef = useRef<HTMLElement | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -276,7 +279,8 @@ export function WorkspaceApp() {
     </div>
     {historical && <p className="read-only-note" role="status">Historical year — records are read-only.</p>}
      {groupId && summary}
-     {currentYear && currentGroup && <CalendarControls year={currentYear} group={currentGroup} />}
+      {currentYear && currentGroup && <CalendarControls year={currentYear} group={currentGroup} onSessionChange={setActiveSession} />}
+      {currentGroup && <RtGrid group={currentGroup} session={activeSession} students={students} />}
     {!groups.length && !error ? <p className="empty-state">No groups in this year.</p> : <div className="workspace-grid">
       <section className="roster-section"><div className="section-heading"><div><p className="eyebrow">ACADEMY ROSTER</p><h2 className="section-title">Roster <span>{visibleStudents.length}</span></h2></div><span className="section-note">Select a character to open their sheet</span></div><StudentRoster students={visibleStudents} summaries={summaries} selectedId={state.selectedStudentId} query={state.search} onSelect={id => { originRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; dispatch({ type: 'select', studentId: id }); }} /></section>
       <ActivitySummary activity={activity} onRetry={() => { if (selected) workspaceApi.xpEvidence(selected.id, yearId!, 3).then(result => setActivity(activityState(result))).catch(() => setActivity(activityState(null))); }} />

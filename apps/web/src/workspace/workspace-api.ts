@@ -2,6 +2,10 @@ export type AcademicYear = { id: string; label: string; startsOn: string; endsOn
 export type Group = { id: string; academicYearId: string; name: string };
 export type Calendar = { configured: false } | { configured: true; academicYearId: string; timezone: string; terms: Array<{ id: string; code: 'T1'|'T2'|'T3'; startsOn: string; endsOn: string }>; holidays: Array<{ id: string; startsOn: string; endsOn: string }>; slots: Array<{ id: string; groupId: string; weekday: number; startsAt: string; endsAt: string }> };
 export type Session = { id: string; academicYearId: string; groupId: string; localDate: string; timezone: string; slotStartsAt: string; slotEndsAt: string; startedAt: string; endedAt: string | null; createdAt: string };
+export type RtValue = 10 | 5 | 0 | 'ABSENT';
+export type RtEntry = { id: string; studentId: string; value: RtValue; createdAt: string; updatedAt: string };
+export type RtRoster = { sessionId: string; termId: string; students: Array<{ studentId: string }>; entries: RtEntry[] };
+export type RtSummary = { studentId: string; termId: string; average: number | null; energy: 'CRITICAL'|'LOW'|'STABLE'|'HIGH'|'MAXIMUM' | null; streak: number };
 export type TeacherStudent = { id: string; groupId: string; realName: string; alias: string; avatar: string; specialty: string | null; archivedAt: string | null };
 export type ApiFailure = Error & { status?: number; code?: string };
 export type XpCategory = 'COMMUNICATION'|'PRECISION'|'CONSISTENCY'|'COLLABORATION';
@@ -62,6 +66,9 @@ export const workspaceApi = {
   sessionStatus: (groupId:string, yearId:string, signal?:AbortSignal) => get<{ configured:boolean; eligible:boolean; active:Session|null }>(`/api/v1/groups/${groupId}/real-class-session-status?academicYearId=${yearId}`, signal),
   startSession: (groupId:string, yearId:string, key?:string, signal?:AbortSignal) => post<Session>(`/api/v1/groups/${groupId}/real-class-sessions/start`, { academicYearId:yearId }, key ?? newKey(), signal),
   endSession: (sessionId:string, key?:string, signal?:AbortSignal) => post<Session>(`/api/v1/real-class-sessions/${sessionId}/end`, {}, key ?? newKey(), signal),
+  rtEntries: (sessionId:string, signal?:AbortSignal) => get<RtRoster>(`/api/v1/real-class-sessions/${sessionId}/rt-entries`, signal),
+  saveRt: (sessionId:string, entries:Array<{studentId:string;value:RtValue}>, key?:string, signal?:AbortSignal) => post<RtRoster>(`/api/v1/real-class-sessions/${sessionId}/rt-entries`, { entries }, key ?? newKey(), signal),
+  rtSummaries: (groupId:string, yearId:string, termId:string, signal?:AbortSignal) => get<{ summaries:RtSummary[] }>(`/api/v1/groups/${groupId}/rt-summaries?academicYearId=${yearId}&termId=${termId}`, signal),
 };
 
 async function fetchJson<T>(url:string, method:string, body:unknown, signal?:AbortSignal):Promise<T> { const response=await fetch(url,{method,credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify(body),signal}); if(!response.ok){let value:{message?:string}={};try{value=await response.json();}catch{} const error=new Error(value.message??'Could not save calendar configuration.') as ApiFailure;error.status=response.status;throw error;} return response.json() as Promise<T>; }
