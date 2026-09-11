@@ -43,7 +43,7 @@ test('SDD Lite routing and Git boundary are explicit', () => {
   assert.match(verifyCommand.prompt, /Level C goes directly to the\s+existing `sdd-lite-verify-terra` agent/);
   assert.match(verifyCommand.prompt, /SPEC-0018 is Level C and must use Terra/);
   assert.doesNotMatch(verifyCommand.prompt, /gentle-orchestrator|Portable orchestrator/);
-  assert.match(orchestrator, /Explore[^\n]*Luna[\s\S]*Design[^\n]*sdd-lite-design[^\n]*Sol[\s\S]*Terra Review[^\n]*sdd-lite-review-terra[\s\S]*Build[^\n]*sdd-lite-build[^\n]*Luna[\s\S]*Verify[^\n]*sdd-lite-verify-terra[^\n]*Level C/);
+  assert.match(orchestrator, /sdd-lite-explore[\s\S]*Luna[\s\S]*sdd-lite-design[\s\S]*Sol[\s\S]*sdd-lite-review-terra[\s\S]*Terra[\s\S]*sdd-lite-build[\s\S]*Luna[\s\S]*sdd-lite-verify-terra/);
   assert.match(orchestrator, /Terra must never author or rewrite DESIGN\.md/);
   assert.match(design, /openai\/gpt-5\.6-sol/);
   assert.match(build, /openai\/gpt-5\.6-luna/);
@@ -79,6 +79,7 @@ test('SDD Lite enforces real model-routed child stages', () => {
     taskBlock?.trim().replaceAll(/^    /gm, ''),
     [
       '"*": deny',
+      '"sdd-lite-explore": allow',
       '"sdd-lite-design": allow',
       '"sdd-lite-review-terra": allow',
       '"sdd-lite-build": allow',
@@ -90,6 +91,7 @@ test('SDD Lite enforces real model-routed child stages', () => {
   assert.doesNotMatch(taskBlock ?? '', /sdd-lite-ship/);
 
   for (const child of [
+    'sdd-lite-explore',
     'sdd-lite-design',
     'sdd-lite-review-terra',
     'sdd-lite-build',
@@ -104,6 +106,7 @@ test('SDD Lite enforces real model-routed child stages', () => {
   }
 
   for (const [agent, model] of [
+    ['sdd-lite-explore.md', 'openai/gpt-5.6-luna'],
     ['sdd-lite-design.md', 'openai/gpt-5.6-sol'],
     ['sdd-lite-review-terra.md', 'openai/gpt-5.6-terra'],
     ['sdd-lite-build.md', 'openai/gpt-5.6-luna'],
@@ -120,6 +123,7 @@ test('SDD Lite enforces real model-routed child stages', () => {
   }
 
   for (const agent of [
+    'sdd-lite-explore.md',
     'sdd-lite-design.md',
     'sdd-lite-review-terra.md',
     'sdd-lite-build.md',
@@ -131,12 +135,52 @@ test('SDD Lite enforces real model-routed child stages', () => {
   }
   assert.match(terraReview, /^\s*edit:\s*deny$/m, 'Terra Review must remain read-only');
 
+  const explore = read('.opencode/agents/sdd-lite-explore.md');
+  assert.match(explore, /^\s*edit:\s*deny$/m, 'Explore must remain read-only');
+  assert.match(orchestrator, /STOP with\s+`ROUTING ERROR`/);
+  assert.match(orchestrator, /Never substitute General, another phase agent/);
+  assert.match(orchestrator, /Never use Build, General, or prompt persona simulation for Explore/);
+
   for (const source of [
     read('.opencode/commands/sdd-start.md'),
     read('.opencode/commands/sdd-resume.md'),
     orchestrator,
   ]) {
     assert.doesNotMatch(source, /\bAct as (?:Sol|Terra)\b/i);
+  }
+});
+
+test('Non-Ship command docs state exact phase routing and fail closed', () => {
+  const start = resolveCommand('.opencode/commands/sdd-start.md', 'SPEC-0029', 'Start the change.');
+  const resume = resolveCommand('.opencode/commands/sdd-resume.md', 'SPEC-0029', 'Resume the change.');
+  const verify = resolveCommand('.opencode/commands/sdd-verify.md', 'SPEC-0029', 'Verify the change.');
+  const commandPrompts = [start.prompt, resume.prompt, verify.prompt];
+
+  for (const prompt of commandPrompts) {
+    assert.match(prompt, /exact real (?:phase |verification )?agents?/);
+    assert.match(prompt, /unavailable,\s+disallowed,\s+or cannot be invoked/);
+    assert.match(prompt, /ROUTING ERROR/);
+    assert.match(prompt, /never\s+substitute/i);
+    assert.match(prompt, /General,\s+another phase agent,\s+or persona\s+simulation/i);
+  }
+
+  assert.match(start.prompt, /Explore[\s\S]*sdd-lite-explore[\s\S]*Luna/);
+  assert.match(start.prompt, /Design[\s\S]*sdd-lite-design[\s\S]*Sol/);
+  assert.match(start.prompt, /Level C[\s\S]*sdd-lite-review-terra[\s\S]*Terra/);
+  assert.match(start.prompt, /Build[\s\S]*sdd-lite-build[\s\S]*Luna/);
+  assert.match(resume.prompt, /Build[\s\S]*sdd-lite-build[\s\S]*Luna/);
+  assert.match(verify.prompt, /A\/B[\s\S]*sdd-lite-verify-luna[\s\S]*Luna/);
+  assert.match(verify.prompt, /Level C[\s\S]*sdd-lite-verify-terra[\s\S]*Terra/);
+  assert.match(start.prompt, /blockers[\s\S]*sdd-lite-design/);
+
+  for (const authority of ['docs/SDD-WORKFLOW.md', 'docs/architecture/sdd-lite.md']) {
+    const source = read(authority);
+    assert.match(source, /sdd-lite-explore.*Luna[\s\S]*sdd-lite-design.*Sol[\s\S]*sdd-lite-review-terra.*Terra[\s\S]*sdd-lite-build.*Luna/);
+    assert.match(source, /sdd-lite-verify-luna.*Luna[\s\S]*sdd-lite-verify-terra.*Terra/);
+    assert.match(source, /unavailable, disallowed, or cannot be invoked[\s\S]*ROUTING ERROR/);
+    assert.match(source, /never[\s\S]*substitute/i);
+    assert.match(source, /substitute\s+General,\s+another phase agent/i);
+    assert.match(source, /persona\s+simulation/i);
   }
 });
 

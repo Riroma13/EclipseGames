@@ -31,6 +31,14 @@ authoritative.
 
 Terra reviews the completed Sol Design and never authors or rewrites it.
 
+The exact non-Ship route is: Explore → `sdd-lite-explore` (Luna) → Design →
+`sdd-lite-design` (Sol) → Level C Review → `sdd-lite-review-terra` (Terra) →
+Build → `sdd-lite-build` (Luna) → Verify A/B → `sdd-lite-verify-luna` (Luna),
+or Verify C → `sdd-lite-verify-terra` (Terra). Every required phase uses its
+exact real agent. If an agent is unavailable, disallowed, or cannot be invoked,
+stop with `ROUTING ERROR`; never substitute General, another phase agent, or
+persona simulation. Design-review blockers return to `sdd-lite-design`.
+
 ## Stage contracts
 
 The root `AGENTS.md` is the sole owner of the **Professional Engineering
