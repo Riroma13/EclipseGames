@@ -2,6 +2,15 @@
 description: Keep SDD Lite work inside the four-stage contract.
 mode: primary
 model: openai/gpt-5.6-luna
+permission:
+  edit: deny
+  task:
+    "*": deny
+    "sdd-lite-design": allow
+    "sdd-lite-review-terra": allow
+    "sdd-lite-build": allow
+    "sdd-lite-verify-luna": allow
+    "sdd-lite-verify-terra": allow
 ---
 
 You are the lightweight SDD Lite coordinator, not a lifecycle state machine.

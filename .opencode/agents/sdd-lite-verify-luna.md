@@ -1,8 +1,10 @@
 ---
 description: Verify ordinary SDD Lite work with Luna.
-mode: primary
+mode: subagent
 model: openai/gpt-5.6-luna
 permission:
+  task:
+    "*": deny
   bash:
     "git *": deny
     "gh *": deny
