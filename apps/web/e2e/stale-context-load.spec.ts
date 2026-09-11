@@ -109,3 +109,69 @@ test('failed Minigames group refresh removes the previous session and library wi
   await expect(page.getByRole('heading', { name: deckTitle, exact: true })).toBeVisible();
   expect(secondGroupReads).toBeGreaterThan(1);
 });
+
+test('rapid year switching ignores a delayed old group and keeps the canonical classroom context', async ({ page }) => {
+  const oldYearId = '00000000-0000-4000-8000-000000000401';
+  const newYearId = '00000000-0000-4000-8000-000000000402';
+  const oldGroupId = '00000000-0000-4000-8000-000000000403';
+  const newGroupId = '00000000-0000-4000-8000-000000000404';
+  let releaseOldGroups!: () => void;
+  const oldGroupsReleased = new Promise<void>(resolve => { releaseOldGroups = resolve; });
+
+  await page.route('**/api/v1/academic-years*', async route => {
+    if (!new URL(route.request().url()).pathname.endsWith('/academic-years')) return route.continue();
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([
+      { id: oldYearId, label: 'Old year', startsOn: '1900-09-01', endsOn: '1901-07-01', archivedAt: null },
+      { id: newYearId, label: 'New year', startsOn: '1901-09-01', endsOn: '1902-07-01', archivedAt: null },
+    ]) });
+  });
+  await page.route(`**/api/v1/academic-years/${oldYearId}/groups`, async route => {
+    await oldGroupsReleased;
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: oldGroupId, academicYearId: oldYearId, name: 'Old classroom' }]) });
+  });
+  await page.route(`**/api/v1/academic-years/${newYearId}/groups`, async route => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: newGroupId, academicYearId: newYearId, name: 'New classroom' }]) });
+  });
+  await page.route(`**/api/v1/groups/${newGroupId}/students*`, async route => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: '00000000-0000-4000-8000-000000000405', groupId: newGroupId, realName: 'New Student', alias: 'New', avatar: 'default', specialty: null, archivedAt: null }]) });
+  });
+
+  await signIn(page, `/#/workspace?year=${oldYearId}&group=${oldGroupId}`);
+  await page.getByRole('combobox', { name: 'Academic year' }).selectOption(newYearId);
+  await expect(page.getByText('New Student')).toBeVisible();
+  await expect(page.getByText('New year · New classroom')).toBeVisible();
+  expect(new URL(page.url()).hash).toBe(`#/workspace?year=${newYearId}&group=${newGroupId}`);
+
+  releaseOldGroups();
+  await expect(page.getByText('New year · New classroom')).toBeVisible();
+  await expect(page.getByText('Old classroom')).toHaveCount(0);
+  await page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: /^Events\b/ }).click();
+  await expect(page.getByRole('heading', { name: 'Events', exact: true })).toBeVisible();
+  expect(new URL(page.url()).hash).toBe(`#/events?year=${newYearId}&group=${newGroupId}`);
+});
+
+test('delayed old academic-year response cannot overwrite a later hash destination', async ({ page }) => {
+  const oldYearId = '00000000-0000-4000-8000-000000000411';
+  const newYearId = '00000000-0000-4000-8000-000000000412';
+  const newGroupId = '00000000-0000-4000-8000-000000000413';
+  let releaseOldYears!: () => void;
+  const oldYearsReleased = new Promise<void>(resolve => { releaseOldYears = resolve; });
+  let yearReads = 0;
+
+  await page.route('**/api/v1/academic-years*', async route => {
+    if (!new URL(route.request().url()).pathname.endsWith('/academic-years')) return route.continue();
+    yearReads += 1;
+    if (yearReads === 1) await oldYearsReleased;
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: yearReads === 1 ? oldYearId : newYearId, label: yearReads === 1 ? 'Old year' : 'New year', startsOn: '1900-09-01', endsOn: '1901-07-01', archivedAt: null }]) });
+  });
+  await page.route(`**/api/v1/academic-years/${newYearId}/groups`, async route => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: newGroupId, academicYearId: newYearId, name: 'Destination classroom' }]) });
+  });
+
+  await signIn(page, `/#/workspace?year=${oldYearId}`);
+  await page.goto(`/#/events?year=${newYearId}&group=${newGroupId}`);
+  await expect(page.getByRole('heading', { name: 'Events', exact: true })).toBeVisible();
+  releaseOldYears();
+  await expect(page.getByRole('combobox', { name: 'Academic year' })).toHaveValue(newYearId);
+  expect(new URL(page.url()).hash).toBe(`#/events?year=${newYearId}&group=${newGroupId}`);
+});

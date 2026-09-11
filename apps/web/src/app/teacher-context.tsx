@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { gameApi, type ProjectionControl } from '../game/game-api';
 import { workspaceApi, type AcademicYear, type Group } from '../workspace/workspace-api';
@@ -46,43 +46,71 @@ export function useTeacherContext(): TeacherContext {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
+  const yearGeneration = useRef(0);
+  const groupGeneration = useRef(0);
 
   useEffect(() => {
+    const generation = ++yearGeneration.current;
+    const requestContext = contextFromUrl();
     const controller = new AbortController();
+    const isCurrent = () => generation === yearGeneration.current
+      && contextFromUrl().yearId === requestContext.yearId
+      && contextFromUrl().groupId === requestContext.groupId;
     setLoading(true);
     workspaceApi.years(false, controller.signal).then(async values => {
       const available = values.length ? values : await workspaceApi.years(true, controller.signal);
+      if (!isCurrent()) return;
       setYears(available);
-      const chosen = available.find(value => value.id === yearId) ?? available[0] ?? null;
+      const chosen = available.find(value => value.id === requestContext.yearId) ?? available[0] ?? null;
       setYearId(chosen?.id ?? null);
-      if (chosen?.id !== yearId) replaceContext(chosen?.id ?? null, null);
+      if (chosen?.id !== requestContext.yearId) {
+        setGroupId(null);
+        replaceContext(chosen?.id ?? null, null);
+      } else if (groupId !== requestContext.groupId) {
+        setGroupId(requestContext.groupId);
+      }
       setError('');
     }).catch((caught: any) => {
-      if (caught.name !== 'AbortError') setError(caught.status === 401 ? 'Your session has expired.' : 'Could not load classroom context.');
-    }).finally(() => setLoading(false));
+      if (isCurrent() && caught.name !== 'AbortError') setError(caught.status === 401 ? 'Your session has expired.' : 'Could not load classroom context.');
+    }).finally(() => { if (isCurrent()) setLoading(false); });
     return () => controller.abort();
-  }, [location.pathname, location.search, refreshKey]);
+  }, [location.pathname, location.search, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    const generation = ++groupGeneration.current;
+    const requestYearId = yearId;
+    const requestGroupId = groupId;
+    const requestContext = contextFromUrl();
+    const isCurrent = () => generation === groupGeneration.current
+      && yearId === requestYearId
+      && contextFromUrl().yearId === requestContext.yearId
+      && contextFromUrl().groupId === requestContext.groupId;
     if (!yearId || !years.some(year => year.id === yearId)) {
       setGroups([]);
       setGroupId(null);
       return;
     }
     const controller = new AbortController();
+    setLoading(true);
     workspaceApi.groups(yearId, controller.signal).then(values => {
+      if (!isCurrent()) return;
       setGroups(values);
-      const chosen = values.find(value => value.id === groupId) ?? values[0] ?? null;
+      const chosen = values.find(value => value.id === requestGroupId) ?? values[0] ?? null;
       setGroupId(chosen?.id ?? null);
-      if (chosen?.id !== groupId) replaceContext(yearId, chosen?.id ?? null);
-    }).catch((caught: any) => { if (caught.name !== 'AbortError') setError('Could not load groups.'); });
+      if (chosen?.id !== requestGroupId) replaceContext(requestYearId, chosen?.id ?? null);
+      setError('');
+    }).catch((caught: any) => { if (isCurrent() && caught.name !== 'AbortError') setError(caught.status === 401 ? 'Your session has expired.' : 'Could not load groups.'); })
+      .finally(() => { if (isCurrent()) setLoading(false); });
     return () => controller.abort();
-  }, [yearId, years, refreshKey]);
+  }, [yearId, years, groupId, refreshKey]);
 
   function selectYear(id: string) {
+    ++groupGeneration.current;
     setYearId(id || null);
     setGroups([]);
     setGroupId(null);
+    setLoading(true);
+    setError('');
     replaceContext(id || null, null);
   }
 
