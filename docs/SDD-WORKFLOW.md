@@ -82,14 +82,30 @@ uses hidden runtime state. Start and Resume stop for material ambiguity.
 
 ### Local demo development
 
-`pnpm dev:demo` applies development-only defaults, runs pending migrations, and
-keeps the API watcher on `127.0.0.1:3199` alongside strict-port Vite on
-`127.0.0.1:5173`. It does not bootstrap, seed, or reset; the canonical demo
-SQLite file persists across restarts. Use `pnpm demo:reset` only when an
-intentional reset is required. It accepts only the canonical demo path, removes
-that file and its exact SQLite sidecars, then runs `migrate`, `bootstrap`, and
-`seed:demo` in order. Neither command reads or rewrites `.env`, and production
-is refused.
+`pnpm dev:demo` applies canonical development defaults, runs pending migrations,
+and keeps the API watcher on `127.0.0.1:3199` alongside strict-port Vite on
+`127.0.0.1:5173`. Generic inherited variables cannot override these values.
+Validated `ECLIPSE_DEMO_*` variables are the only supported overrides; hosts and
+origins must be loopback, ports must be valid, and production is refused before
+side effects. The runner waits for API `/health` and the Vite root before
+reporting readiness.
+
+The runner writes a private per-user ownership record with a random token, PID
+start identity, process-group identity, command fingerprint, and endpoints. API
+and Vite records are classified independently: a complete identity match is
+terminated with bounded TERM/KILL escalation, while a stale or absent record is
+cleared only after its endpoint is confirmed clear. Occupied endpoints without
+complete proof, identity mismatches, and endpoint mismatches fail safely,
+remain recorded, and are never adopted or killed, even when the other component
+is owned. Component and final record cleanup is token-checked. Ctrl-C, SIGTERM,
+child failure, readiness failure, and a second signal clean up owned groups and
+the record. It does not read or rewrite `.env`, log credentials, bootstrap,
+seed, or reset; the canonical demo SQLite file persists across restarts.
+
+Use `pnpm demo:reset` only for an intentional reset. It accepts only the
+canonical regular database path, refuses production, occupied ports, symlinks,
+non-files, and unexpected sidecars, removes only the database and exact `-wal`
+and `-shm` files, then runs `migrate`, `bootstrap`, and `seed:demo` in order.
 
 ## Privacy and safety
 

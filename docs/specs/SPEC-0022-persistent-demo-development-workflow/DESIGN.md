@@ -2,55 +2,130 @@
 
 ## Design
 
-**Level B — Sol Design → Luna Build → Luna Verify.** This is local tooling over existing Vite, Fastify, SQLite, migration, bootstrap, and seed contracts. It adds no schema, production integration, product API/UI, or sensitive boundary, so Terra review is not justified. Build must stop and reclassify Level C if any such change or arbitrary deletion becomes necessary.
+**Level B — Sol Design → Luna Build → Luna Verify.** This local tooling bugfix
+preserves existing Vite, Fastify, SQLite, migration, bootstrap, seed, and
+watcher contracts. It changes no schema, production path, product API/UI,
+student-data boundary, or deployment behavior. Reclassify to Level C if that
+scope, arbitrary deletion, or unrelated-process termination becomes necessary.
 
 ## Behaviour and scope
 
-Root `pnpm dev:demo` starts the API on `127.0.0.1:3199` and Vite on `127.0.0.1:5173`. The browser uses `http://localhost:5173`, matching API origin enforcement. Vite retains HMR and proxies `/api` to `http://127.0.0.1:3199`; the existing `apps/api/package.json` `tsx watch src/server.ts` command restarts changed backend source.
+`pnpm dev:demo` resolves development defaults before any side effect:
+`NODE_ENV=development`, the canonical demo SQLite path, API `127.0.0.1:3199`,
+Vite `127.0.0.1:5173`, existing origins, and demo credentials. Generic inherited
+values **cannot override** them. Retain overrides only through validated
+`ECLIPSE_DEMO_*` variables (same allowlist, loopback/port/origin/path/password
+validation); reject production or malformed values first. Do not read/rewrite
+`.env` or log passwords/database contents.
 
-Missing inherited values default to: `NODE_ENV=development`, `DATABASE_URL=/home/ubuntu/.local/share/eclipsegames-demo/review-m2.sqlite`, `API_HOST=127.0.0.1`, `API_PORT=3199`, `APP_ORIGIN=http://localhost:5173`, `API_ORIGIN=http://127.0.0.1:3199`, `BOOTSTRAP_TEACHER_EMAIL=teacher@example.test`, and `BOOTSTRAP_TEACHER_PASSWORD=change-me-in-development`. Explicit development values win; `NODE_ENV=production` is refused before side effects. The script neither reads nor rewrites `.env`.
+Startup runs `pnpm migrate`, then directly spawns existing `tsx watch
+src/server.ts` and Vite commands in detached POSIX process groups.
+It waits for bounded HTTP readiness (`/health` for API and the Vite root), not
+merely successful spawn. Spawn errors and early exits are observed from the
+first event; either failure cancels readiness, reports its causal command/status,
+and cleans up both groups. Readiness timeout is failure. Once ready, HMR,
+`/api` proxying, watcher restart, and persistent SQLite behavior remain as-is.
 
-Startup checks both effective ports, completes existing root `pnpm migrate`, then spawns the API watcher and Vite with `--host 127.0.0.1 --port 5173 --strictPort`. It never bootstraps, seeds, or resets. `openDatabase` retains its idempotent migration check; the SQLite file and changes survive restarts.
+## Ownership and recovery
 
-`pnpm demo:reset` is explicit destructive preparation. It refuses production or occupied demo ports and requires resolved `DATABASE_URL` to equal the canonical path. It refuses symlinks, removes only that SQLite file and exact `-wal`/`-shm` sidecars, then runs existing `migrate`, `bootstrap`, and `seed:demo` sequentially. Failure stops the chain. Wildcards, directory removal, alternate paths, and fallback deletion are forbidden.
+**Decision:** ownership and recovery are per recorded component, not an
+all-or-nothing stack decision. The runner owns only a recorded API process
+group or Vite process group that is individually proven by its PID, `/proc`
+start identity, process-group identity, expected command fingerprint, and
+recorded endpoint matching the current validated environment. PID reuse,
+command mismatch, endpoint mismatch, missing/invalid component records, or
+any other incomplete proof is never ownership.
 
-**In:** root commands, one Node-standard-library script, focused tests, and a local/demo section in `docs/SDD-WORKFLOW.md`. **Out:** deployment, systemd, Docker, database architecture, product UI, M3, Windows/SSH, and generic process management.
+Before preflight, the atomically-created per-user runtime ownership record
+contains a random token, independently optional API and web records, leader
+PIDs, `/proc` start identities, expected command fingerprints, endpoints, and
+creation time. Each recorded component is classified independently:
 
-## Ownership and process contract
+- A proven owned component receives bounded TERM, then KILL escalation; its
+  record is cleared only after termination is attempted safely.
+- A component with no matching process is stale. It may be cleared only when
+  its endpoint is confirmed unoccupied; otherwise recovery fails closed and
+  retains the record.
+- An occupied endpoint with no matching identity, an identity mismatch, or an
+  endpoint mismatch is an unrelated/unproven occupant. It is never killed,
+  signalled, adopted, or used for startup. Recovery reports the endpoint and
+  refuses startup, even when the other component is proven owned.
 
-| Owner | Contract |
+Consequently, stale owned API-only, stale owned Vite-only, and partially stale
+API/Vite records each recover the individually proven group(s), while an
+unproven remaining endpoint remains untouched and blocks the retry. If all
+components are absent or safely recovered and both endpoints are clear, the
+record is removed only when its token still matches; otherwise the updated
+record is retained for safe subsequent inspection/recovery. Cleanup is
+idempotent and token-checked, and handles Ctrl-C, SIGTERM, spawn failure,
+readiness failure, child exit, and a second signal.
+
+`pnpm demo:reset` remains an explicit guarded destructive operation: production,
+occupied ports, non-canonical paths, symlinks, non-files, and sidecars are
+refused; only the exact database and `-wal`/`-shm` files are removed; existing
+`migrate`, `bootstrap`, and `seed:demo` run sequentially. It has no stale
+recovery or implicit invocation.
+
+## Data/API/UI and privacy boundaries
+
+No persistent application data, DTO, route, API contract, UI, auth, projection,
+or production configuration changes. New state is local, non-sensitive runtime
+ownership metadata outside the database; it contains no credentials or student
+data. Diagnostics identify command, endpoint, cause, and remediation without
+secrets. Migration/reset/seed guards remain authoritative.
+
+## Ownership by file
+
+| File | Planned change |
 |---|---|
-| `scripts/demo-workflow.mjs` | Owns defaults, guards, preparation order, supervision, and diagnostics. No dependency is added. |
-| Root `package.json` | Exposes only `dev:demo` and `demo:reset`; existing generic commands remain unchanged. |
-| API/Vite | Existing watcher owns restart; Vite CLI owns bind/strict port and existing `API_ORIGIN` proxy owns `/api`; HMR remains direct. |
-
-Each long-running command gets a POSIX process group. Signal, spawn failure, or either child exit terminates both groups: `SIGTERM`, bounded wait, then `SIGKILL`; exits are awaited. Propagate the causal non-zero status; unexpected zero server exit is failure. A second signal forces cleanup. Port preflight names the occupied endpoint; strict Vite/Fastify binds cover the check/start race.
-
-## Data, API, UI, privacy, and failure boundaries
-
-No schema, DTO, route, UI, auth, projection, or production configuration changes. Logs omit passwords and rows. Migration/bootstrap/seed errors block the operation. Existing migration transactions and seed transaction/collision/production guards remain authoritative. C-01 still blocks real-data production use.
+| `scripts/demo-workflow.mjs` | Defaults/validated namespace, ownership record, stale recovery, readiness, supervision, cleanup, diagnostics. |
+| `scripts/demo-workflow.test.mjs` | RED tests and regression coverage for every contract below. |
+| `package.json` | No new command; preserve only `dev:demo`, `demo:reset`, and existing commands. |
+| `docs/SDD-WORKFLOW.md` | Document precedence, ownership/recovery, readiness, persistence, and explicit reset. |
 
 ## Tests and acceptance
 
-- Node tests cover defaults/precedence, pre-side-effect production refusal, exact-path/symlink guards, no arbitrary deletion, migration/reset order, occupied-port diagnostics, failure propagation, signals/escalation, and no surviving descendants.
-- Runtime checks prove fixed binds, strict-port failure, `/api` target, HMR, API watcher restart, and persistence without reseed.
-- Acceptance requires one terminal to serve health/API and the browser on the specified defaults, source reload on both sides, persistence across stop/start, intentional canonical reset to the seeded baseline, clean Ctrl+C, no orphan, and unchanged generic/production workflows.
+Node tests cover generic-env rejection, valid/invalid overrides,
+pre-side-effect production/malformed refusal, atomic ownership and PID-start /
+command identity checks, stale owned API-only, Vite-only, and partially stale
+recovery, refusal to touch unrelated or identity-mismatched occupants,
+readiness success/timeout, immediate spawn error/early exit, causal status,
+signal escalation, second-signal cleanup, descendant cleanup, reset
+order/exact-path guards, and token-safe ownership cleanup. Runtime/E2E checks
+cover API/Vite binds, health and proxy, HMR, watcher restart, persistence
+without reseed, clean Ctrl-C, each stale recovery shape, occupied-port safety,
+and the unchanged generic workflow. Documentation must match these contracts.
+
+## Professional Engineering Baseline
+
+Applicable obligations are deterministic normal, loading/readiness, failure,
+retry/recovery, persistence/reload, and safe diagnostics; tests prove each.
+Privacy and data integrity require no secret/student-data logging and no
+destruction outside canonical reset. Responsive UI, classroom interaction,
+authorization, and production backup are N/A: no product or production surface
+changes.
 
 ## Threat matrix
 
-| Boundary | Applicability | Safe/failure behaviour and RED test |
-|---|---|---|
-| Process integration | Applicable | Argument-vector spawn only; signals/failures close both process groups; tests cover injection-like env text, exits, escalation, and descendants. |
-| Documentation-like paths | N/A | No path classification or execution. |
-| Git repository selection | N/A | No Git/VCS command. |
-| Commit state | N/A | No commit/index handling. |
-| Push state | N/A | No push handling. |
-| PR commands | N/A | No PR handling. |
+| Boundary | Status and contract |
+|---|---|
+| Process integration | **Applicable:** argument-vector spawning, bounded readiness, identity-checked groups, causal failures, escalation, and RED tests for injection-like values, exits, descendants, and unrelated occupants. |
+| Documentation-like paths | **N/A:** documentation is not executable or classified as a command. |
+| Git repository selection | **N/A:** no Git/VCS command. |
+| Commit state | **N/A:** no commit/index handling. |
+| Push state | **N/A:** no push handling. |
+| PR commands | **N/A:** no PR automation. |
 
 ## Rollout
 
-No migration, backfill, flag, or dependency. Land script, tests, package scripts, and documentation together. Rollback removes those local entry points; the demo database is intentionally left intact.
+No migration, backfill, feature flag, or dependency. Land runner, focused tests,
+and documentation together; verify fresh startup and recovery. Rollback removes
+only these local entry-point changes and leaves the demo database intact.
 
 ## Simplicity Check
 
-One small Node script reuses pnpm, `tsx watch`, Vite, and existing data commands. No process-manager package, shell command composition, new configuration system, product abstraction, or production coupling is introduced; safety complexity is limited to the explicitly required lifecycle and exact-path reset boundary.
+One Node standard-library runner remains the sole owner. The ownership record,
+readiness probes, and validation are the minimum safety needed to distinguish
+this workflow from unrelated processes and recover deterministically. No
+process-manager package, shell composition, lock service, database state, UI,
+generic configuration system, or production coupling is introduced.
