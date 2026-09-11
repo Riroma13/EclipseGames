@@ -3,6 +3,8 @@ description: Review delicate Level C SDD Lite work with Terra.
 mode: subagent
 model: openai/gpt-5.6-terra
 permission:
+  task:
+    "*": deny
   bash:
     "git *": deny
     "gh *": deny

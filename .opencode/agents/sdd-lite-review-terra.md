@@ -4,6 +4,8 @@ mode: subagent
 model: openai/gpt-5.6-terra
 permission:
   edit: deny
+  task:
+    "*": deny
   bash:
     "git *": deny
     "gh *": deny

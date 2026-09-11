@@ -57,6 +57,89 @@ test('SDD Lite routing and Git boundary are explicit', () => {
   assert.match(read('docs/SDD-WORKFLOW.md'), /No other lifecycle artifact or state store/);
 });
 
+
+test('SDD Lite enforces real model-routed child stages', () => {
+  const resume = resolveCommand(
+    '.opencode/commands/sdd-resume.md',
+    'SPEC-0027',
+    'Resume the change.',
+  );
+  const orchestrator = read('.opencode/agents/sdd-lite-orchestrator.md');
+  const terraReview = read('.opencode/agents/sdd-lite-review-terra.md');
+
+  assert.equal(resume.agent, 'sdd-lite-orchestrator');
+
+  assert.match(orchestrator, /^mode:\s*primary$/m);
+  assert.match(orchestrator, /^model:\s*openai\/gpt-5\.6-luna$/m);
+  assert.match(orchestrator, /^\s*edit:\s*deny$/m);
+  assert.match(orchestrator, /^\s*"\*":\s*deny$/m);
+
+  const taskBlock = orchestrator.match(/^  task:\n((?:    "[^"]+": (?:allow|deny)\n?)+)/m)?.[1];
+  assert.equal(
+    taskBlock?.trim().replaceAll(/^    /gm, ''),
+    [
+      '"*": deny',
+      '"sdd-lite-design": allow',
+      '"sdd-lite-review-terra": allow',
+      '"sdd-lite-build": allow',
+      '"sdd-lite-verify-luna": allow',
+      '"sdd-lite-verify-terra": allow',
+    ].join('\n'),
+    'orchestrator must expose exactly the five non-Ship child allows',
+  );
+  assert.doesNotMatch(taskBlock ?? '', /sdd-lite-ship/);
+
+  for (const child of [
+    'sdd-lite-design',
+    'sdd-lite-review-terra',
+    'sdd-lite-build',
+    'sdd-lite-verify-luna',
+    'sdd-lite-verify-terra',
+  ]) {
+    assert.match(
+      orchestrator,
+      new RegExp(`^\\s*"${child}":\\s*allow$`, 'm'),
+      `${child} must be explicitly delegable`,
+    );
+  }
+
+  for (const [agent, model] of [
+    ['sdd-lite-design.md', 'openai/gpt-5.6-sol'],
+    ['sdd-lite-review-terra.md', 'openai/gpt-5.6-terra'],
+    ['sdd-lite-build.md', 'openai/gpt-5.6-luna'],
+    ['sdd-lite-verify-luna.md', 'openai/gpt-5.6-luna'],
+    ['sdd-lite-verify-terra.md', 'openai/gpt-5.6-terra'],
+  ]) {
+    const source = read(`.opencode/agents/${agent}`);
+    assert.match(source, /^mode:\s*subagent$/m, `${agent} must be a real subagent`);
+    assert.match(
+      source,
+      new RegExp(`^model:\\s*${model.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'),
+      `${agent} must pin its real model`,
+    );
+  }
+
+  for (const agent of [
+    'sdd-lite-design.md',
+    'sdd-lite-review-terra.md',
+    'sdd-lite-build.md',
+    'sdd-lite-verify-luna.md',
+    'sdd-lite-verify-terra.md',
+  ]) {
+    const source = read(`.opencode/agents/${agent}`);
+    assert.match(source, /^\s*task:\n\s+"\*":\s*deny$/m, `${agent} must deny child task delegation`);
+  }
+  assert.match(terraReview, /^\s*edit:\s*deny$/m, 'Terra Review must remain read-only');
+
+  for (const source of [
+    read('.opencode/commands/sdd-start.md'),
+    read('.opencode/commands/sdd-resume.md'),
+    orchestrator,
+  ]) {
+    assert.doesNotMatch(source, /\bAct as (?:Sol|Terra)\b/i);
+  }
+});
+
 test('Professional Engineering Baseline has one canonical owner and stage references', () => {
   const agents = read('AGENTS.md');
   const detailed = read('docs/architecture/sdd-lite.md');

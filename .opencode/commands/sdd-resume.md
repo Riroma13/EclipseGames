@@ -1,6 +1,6 @@
 ---
 description: Resume incomplete SDD Lite work from repository evidence.
-agent: sdd-lite-build
+agent: sdd-lite-orchestrator
 ---
 
 Resume SDD Lite work for `$ARGUMENTS`.
