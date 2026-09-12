@@ -144,6 +144,20 @@ describe('academic roster API integration', () => {
     expect((await app.inject({ method: 'PATCH', url: `/api/v1/students/${studentId}`, headers: { origin, cookie }, payload: { alias: 'Ada Updated' } })).statusCode).toBe(422);
   });
 
+  it('returns archived year metadata only through the explicit historical DTO query', async () => {
+    const { app, cookie } = await authenticatedApp();
+    const year = await app.inject({ method: 'POST', url: '/api/v1/academic-years', headers: { origin, cookie }, payload: { label: 'Archived DTO year', startsOn: '2029-09-01', endsOn: '2030-07-01' } });
+    const group = await app.inject({ method: 'POST', url: `/api/v1/academic-years/${year.json().id}/groups`, headers: { origin, cookie }, payload: { name: 'DTO group' } });
+    await app.inject({ method: 'POST', url: `/api/v1/groups/${group.json().id}/students`, headers: { origin, cookie }, payload: { students: [{ realName: 'Archived Ada', alias: 'Archived Ada' }] } });
+    await app.inject({ method: 'POST', url: `/api/v1/academic-years/${year.json().id}/archive`, headers: { origin, cookie } });
+
+    const activeOnly = await app.inject({ method: 'GET', url: `/api/v1/academic-years?reload=active-only`, headers: { origin, cookie } });
+    const historical = await app.inject({ method: 'GET', url: `/api/v1/academic-years?includeArchived=true&reload=authoritative`, headers: { origin, cookie } });
+    expect(activeOnly.json().some((value: { id: string }) => value.id === year.json().id)).toBe(false);
+    expect(historical.json()).toContainEqual(expect.objectContaining({ id: year.json().id, archivedAt: expect.any(String) }));
+    expect(Object.keys(historical.json().find((value: { id: string }) => value.id === year.json().id))).toEqual(['id', 'label', 'startsOn', 'endsOn', 'archivedAt']);
+  });
+
   it('verifies correction target failures and preserves the stable student identifier', async () => {
     const { app, cookie } = await authenticatedApp();
     const year = await app.inject({ method: 'POST', url: '/api/v1/academic-years', headers: { origin, cookie }, payload: { label: '2028-2029', startsOn: '2028-09-01', endsOn: '2029-07-01' } });

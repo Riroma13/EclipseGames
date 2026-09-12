@@ -10,7 +10,7 @@ describe('XP rules', () => {
   it('derives thresholds and caps level eight progress', () => {
     expect(levelForXp(24)).toBe(2);
     expect(levelForXp(175)).toBe(8);
-    expect(progressForXp(175)).toEqual({ current: 0, required: 0, nextLevel: null, isMaxLevel: true });
+    expect(progressForXp(175)).toEqual({ progressPercent: 100, nextLevel: null, xpToNextLevel: null, isMaxLevel: true });
   });
   it('counts exactly three qualifying active records, not points', () => {
     const events = [1, 2, 3].map((id) => ({ id: String(id), category: 'COMMUNICATION' as const, specialtyCategoryAtAward: 'COMMUNICATION' as const, active: true }));

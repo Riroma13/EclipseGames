@@ -18,6 +18,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "4.7.0",
+    "happy-dom": "18.0.1",
     "@types/node": "22.15.30",
     "@types/better-sqlite3": "7.6.13",
     "@types/react": "19.1.10",

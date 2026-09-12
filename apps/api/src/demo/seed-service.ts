@@ -2,7 +2,6 @@ import type Database from 'better-sqlite3';
 import { ensureOwnedDemoRoster, type DemoRosterStudent } from '../roster/service.js';
 import * as xp from '../xp/service.js';
 import type { XpCategory } from '../xp/service.js';
-import * as coins from '../coins/repository.js';
 import * as game from '../game/repository.js';
 
 export const DEMO_YEAR = { id: '9b6f3b9e-3d0f-4b1e-9b1e-202620270001', label: '2026–2027', startsOn: '2026-09-01', endsOn: '2027-07-01' } as const;
@@ -30,30 +29,13 @@ const xpPlan = [
   [1, 2, 3], [3, 3, 3], [3, 3, 3, 3, 3, 3, 3], [1, 1, 1], [2, 2], [3, 3, 3], [1], [2, 2, 2, 2],
   [1, 2], [3, 3, 3, 3, 3, 3], [3, 3, 3, 3, 3, 3, 3], [1, 1, 1, 1, 1], [2, 2, 2], [3, 3, 3, 3, 3, 3], [1, 1], [2, 2, 2, 2, 2, 2, 2],
 ] as const;
-const coinGrantPlan = [2, 0, 1, 3, 0, 1, 0, 3, 0, 1, 2, 0, 1, 0, 3, 0] as const;
-const coinGrantIds = Array.from({ length: coinGrantPlan.reduce((sum, count) => sum + count, 0 as number) }, (_, index) => `7c2f1a90-5d44-4c61-8f20-20262027${String(index + 1).padStart(4, '0')}`);
-const coinGrantSources = ['PERSONAL_IMPROVEMENT', 'EXCEPTIONAL_FRENCH', 'EXCEPTIONAL_COLLABORATION', 'SPECIAL_CHALLENGE'] as const;
 
 export const DEMO_STUDENTS: readonly DemoRosterStudent[] = names.map((value, index) => ({ id: studentIds[index], realName: value[0], alias: value[1], avatar: value[2], specialty: value[3] })) as readonly DemoRosterStudent[];
 
 const categories = ['COMMUNICATION', 'PRECISION', 'CONSISTENCY', 'COLLABORATION'] as const;
 const categoryFor = (specialty: string | null): XpCategory => categories[['Leader', 'Diplomat'].includes(specialty ?? '') ? 0 : ['Strategist', 'Analyst'].includes(specialty ?? '') ? 1 : ['Disciplined', 'Perseverant'].includes(specialty ?? '') ? 2 : 3];
 
-function plannedCoinGrants() {
-  let cursor = 0;
-  return DEMO_STUDENTS.flatMap((student, studentIndex) => Array.from({ length: coinGrantPlan[studentIndex] }, () => ({ id: coinGrantIds[cursor++], studentId: student.id, source: coinGrantSources[(cursor - 1) % coinGrantSources.length] })));
-}
-
 function preflightDemo(database: Database.Database, teacherId: string) {
-  const existing = coinGrantIds.map((id) => database.prepare('SELECT id,student_id AS studentId,academic_year_id AS academicYearId,amount,source,correction_of_id AS correctionOfId,redemption_id AS redemptionId FROM coin_ledger WHERE id=?').get(id) as any);
-  const grants = plannedCoinGrants();
-  existing.forEach((entry, index) => {
-    if (!entry) return;
-    const expected = grants[index];
-    if (entry.studentId !== expected.studentId || entry.academicYearId !== DEMO_YEAR.id || entry.amount !== 1 || entry.source !== expected.source || entry.correctionOfId !== null || entry.redemptionId !== null) {
-      throw new Error(`Demo coin collision: grant ${entry.id}`);
-    }
-  });
   const requests = xpPlan.flatMap((plan, studentIndex) => plan.map((baseXp, eventIndex) => ({ requestId: requestIds[studentIndex === 0 ? eventIndex : xpPlan.slice(0, studentIndex).reduce((sum, values) => sum + values.length, 0) + eventIndex], studentId: DEMO_STUDENTS[studentIndex].id, category: categoryFor(DEMO_STUDENTS[studentIndex].specialty), baseXp })));
   requests.forEach((request) => {
     const entry = database.prepare('SELECT student_id AS studentId, academic_year_id AS academicYearId, category, base_xp AS baseXp FROM xp_evidence_events WHERE owner_teacher_id=? AND client_request_id=?').get(teacherId, request.requestId) as any;
@@ -68,15 +50,6 @@ function preflightDemo(database: Database.Database, teacherId: string) {
   if (preparedEvent && (preparedEvent.ownerTeacherId !== teacherId || preparedEvent.groupId !== DEMO_GROUP.id || preparedEvent.title !== DEMO_PREPARED_EVENT.title || preparedEvent.description !== DEMO_PREPARED_EVENT.description || preparedEvent.status !== 'DRAFT' || preparedEvent.showOnProjection !== 0 || preparedEvent.theme !== DEMO_PREPARED_EVENT.theme || preparedEvent.archivedAt !== null)) throw new Error(`Demo prepared event collision: ${DEMO_PREPARED_EVENT.id}`);
   const preparedChallenge = database.prepare('SELECT owner_teacher_id AS ownerTeacherId,group_id AS groupId,title,description,target,progress,status,show_on_projection AS showOnProjection,archived_at AS archivedAt FROM classroom_challenges WHERE id=?').get(DEMO_PREPARED_CHALLENGE.id) as any;
   if (preparedChallenge && (preparedChallenge.ownerTeacherId !== teacherId || preparedChallenge.groupId !== DEMO_GROUP.id || preparedChallenge.title !== DEMO_PREPARED_CHALLENGE.title || preparedChallenge.description !== DEMO_PREPARED_CHALLENGE.description || preparedChallenge.target !== DEMO_PREPARED_CHALLENGE.target || preparedChallenge.progress !== 0 || preparedChallenge.status !== 'DRAFT' || preparedChallenge.showOnProjection !== 0 || preparedChallenge.archivedAt !== null)) throw new Error(`Demo prepared challenge collision: ${DEMO_PREPARED_CHALLENGE.id}`);
-}
-
-function seedDemoCoins(database: Database.Database) {
-  const existing = new Set(coinGrantIds.filter((id) => database.prepare('SELECT 1 FROM coin_ledger WHERE id=?').get(id)));
-  return plannedCoinGrants().map((grant) => {
-    if (existing.has(grant.id)) return { id: grant.id, replay: true };
-    coins.grant(database, { id: grant.id, studentId: grant.studentId, academicYearId: DEMO_YEAR.id, source: grant.source });
-    return { id: grant.id, replay: false };
-  });
 }
 
 function seedDemoGameplay(database: Database.Database, teacherId: string) {
@@ -109,8 +82,7 @@ export function seedDemo(database: Database.Database, teacherId: string) {
     const events = roster.students.flatMap((student, index) => xpPlan[index].map((baseXp) => xp.create(database, teacherId, student.id, {
       category: categoryFor(student.specialty), baseXp: baseXp as 1 | 2 | 3,
     }, requestIds[keyIndex++])));
-    const coinGrants = seedDemoCoins(database);
     const gameplay = seedDemoGameplay(database, teacherId);
-    return { roster, events, coinGrants, gameplay };
+    return { roster, events, gameplay };
   })();
 }
