@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { activeAssessmentContexts, mapXpEvidence, workspaceApi } from './workspace-api';
+import { assessmentContextsForSelector, mapXpEvidence, workspaceApi } from './workspace-api';
+import { isAmbiguousGemMutationFailure } from './StudentPanel';
+import { isSelectedYearHistorical, requestedYearNeedsAuthoritativeLookup, requestedYearRequiresArchivedLookup, selectRequestedStudent, selectRequestedYear } from './WorkspaceApp';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -14,18 +16,77 @@ describe('workspace XP idempotency', () => {
     ]);
   });
 
-  it('keeps the same idempotency key for a coin redemption retry', async () => {
+  it('keeps the same idempotency key for a gem redemption retry', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ id: 'redemption' }), { status: 201, headers: { 'content-type': 'application/json' } }));
-    await workspaceApi.redeemAdvantage('student', 'context', 'standard-assessment-advantage', undefined, '00000000-0000-4000-8000-000000000009');
+    await workspaceApi.redeemGem('student', 'context', 'emerald-assessment-advantage', undefined, '00000000-0000-4000-8000-000000000009');
     expect((fetchMock.mock.calls[0][1] as RequestInit).headers).toEqual({ 'content-type': 'application/json', 'Idempotency-Key': '00000000-0000-4000-8000-000000000009' });
   });
 
-  it('targets manual point grant and correction routes with idempotency keys', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ id: 'entry', studentId: 'student', academicYearId: 'year', balance: 1, grantId: 'grant', source: 'MANUAL_CORRECTION', amount: -1, replay: false }), { status: 201, headers: { 'content-type': 'application/json' } }));
-    await workspaceApi.grantManualCoin('student', 'year', 'PERSONAL_IMPROVEMENT', undefined, '00000000-0000-4000-8000-000000000010');
-    await workspaceApi.reverseManualCoin('grant', undefined, '00000000-0000-4000-8000-000000000011');
-    expect(fetchMock.mock.calls.map(call => call[0])).toEqual(['/api/v1/students/student/coin-grants', '/api/v1/coin-grants/grant/reversal']);
-    expect((fetchMock.mock.calls[1][1] as RequestInit).headers).toEqual({ 'content-type': 'application/json', 'Idempotency-Key': '00000000-0000-4000-8000-000000000011' });
+  it('reads the tuple-scoped action state with both ownership selectors', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ studentId: 'student', academicYearId: 'year', assessmentContextId: 'context', resultReward: null, advantageRedemption: null }), { status: 200 }));
+    await expect(workspaceApi.gemActionState('student', 'year', 'context')).resolves.toMatchObject({ assessmentContextId: 'context' });
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/students/student/gem-action-state?academicYearId=year&assessmentContextId=context');
+  });
+
+  it('loads year metadata without browser caching so reload preserves server authority', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('[]', { status: 200 }));
+    await workspaceApi.years(true);
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ cache: 'no-store' });
+    expect(fetchMock.mock.calls[0][0]).toMatch(/^\/api\/v1\/academic-years\?includeArchived=true&reload=/);
+  });
+
+  it('retains one supplied key across an ambiguous result-reward retry', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ id: 'reward', tier: 'EMERALD_1', state: 'ACTIVE' }), { status: 201 }));
+    const key = '00000000-0000-4000-8000-000000000010';
+    await workspaceApi.grantResultReward('student', 'context', '8', undefined, key);
+    await workspaceApi.grantResultReward('student', 'context', '8', undefined, key);
+    expect(fetchMock.mock.calls.map(call => (call[1] as RequestInit).headers)).toEqual([
+      { 'content-type': 'application/json', 'Idempotency-Key': key },
+      { 'content-type': 'application/json', 'Idempotency-Key': key },
+    ]);
+  });
+
+});
+
+describe('SPEC-0027 Build correction boundaries', () => {
+  it('keeps an active year active after reload selection', () => {
+    const active = [{ id: 'active', label: 'Current', startsOn: '', endsOn: '', archivedAt: null }];
+    expect(requestedYearRequiresArchivedLookup('active', active)).toBe(false);
+    expect(requestedYearNeedsAuthoritativeLookup('active')).toBe(true);
+    expect(selectRequestedYear('active', active)).toEqual({ id: 'active', historical: false });
+    expect(isSelectedYearHistorical('active', active)).toBe(false);
+  });
+
+  it('rehydrates an archived year as historical after reload even when active years exist', () => {
+    const active = [{ id: 'active', label: 'Current', startsOn: '', endsOn: '', archivedAt: null }];
+    const archived = { id: 'archived', label: 'Old', startsOn: '', endsOn: '', archivedAt: '2026-01-01' };
+    expect(requestedYearRequiresArchivedLookup('archived', active)).toBe(true);
+    expect(requestedYearNeedsAuthoritativeLookup('archived')).toBe(true);
+    expect(selectRequestedYear('archived', [active[0], archived])).toEqual({ id: 'archived', historical: true });
+    expect(isSelectedYearHistorical('archived', [active[0], archived])).toBe(true);
+    expect(selectRequestedYear('active', [active[0], archived])).toEqual({ id: 'active', historical: false });
+    expect(isSelectedYearHistorical('active', [active[0], archived])).toBe(false);
+  });
+
+  it('revalidates a stale selected year after it is archived live', () => {
+    const staleActiveList = [{ id: 'archived', label: 'Old', startsOn: '', endsOn: '', archivedAt: null }];
+    const authoritativeList = [{ id: 'active', label: 'Current', startsOn: '', endsOn: '', archivedAt: null }, { id: 'archived', label: 'Old', startsOn: '', endsOn: '', archivedAt: '2026-01-01' }];
+    expect(selectRequestedYear('archived', staleActiveList)).toEqual({ id: 'archived', historical: false });
+    expect(requestedYearNeedsAuthoritativeLookup('archived')).toBe(true);
+    expect(selectRequestedYear('archived', authoritativeList)).toEqual({ id: 'archived', historical: true });
+    expect(isSelectedYearHistorical('archived', authoritativeList)).toBe(true);
+  });
+
+  it('restores a valid archived student and clears an invalid selection', () => {
+    const students = [{ id: 'student', groupId: 'group', realName: 'Ada', alias: 'Ada', avatar: '', specialty: null, archivedAt: '2026-01-01' }];
+    expect(selectRequestedStudent('student', students)).toBe('student');
+    expect(selectRequestedStudent('missing', students)).toBeNull();
+  });
+
+  it('retains a gem key only for ambiguous failures', () => {
+    expect(isAmbiguousGemMutationFailure(new Error('network timeout'))).toBe(true);
+    expect(isAmbiguousGemMutationFailure(Object.assign(new Error('conflict'), { status: 409 }))).toBe(false);
+    expect(isAmbiguousGemMutationFailure(Object.assign(new Error('bad request'), { status: 422 }))).toBe(false);
   });
 });
 
@@ -36,11 +97,11 @@ describe('assessment context workspace contract', () => {
     expect(JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)).toEqual({ groupId: 'group', name: '  Quiz  ' });
   });
 
-  it('keeps only active assessment contexts for the inline selector', () => {
-    expect(activeAssessmentContexts([
+  it('keeps owned archived assessment contexts readable for the selector', () => {
+    expect(assessmentContextsForSelector([
       { id: 'active', groupId: 'group', name: 'Quiz', archivedAt: null },
       { id: 'archived', groupId: 'group', name: 'Old quiz', archivedAt: '2026-01-01' },
-    ])).toEqual([{ id: 'active', groupId: 'group', name: 'Quiz', archivedAt: null }]);
+    ])).toHaveLength(2);
   });
 });
 

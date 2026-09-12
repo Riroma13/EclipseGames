@@ -4,7 +4,7 @@ import { activityState, classSummaryState, deriveClassSummary } from './workspac
 import { makeUndoOpportunity, parseContext, reducer, initialWorkspaceState } from './workspace-state';
 
 const student = { id: '00000000-0000-4000-8000-000000000001', groupId: '00000000-0000-4000-8000-000000000002', realName: 'Camille Martin', alias: 'Camille', avatar: 'fox', specialty: 'Leader', archivedAt: null };
-const summary = { studentId: student.id, academicYearId: '00000000-0000-4000-8000-000000000003', annualEffectiveXp: 12, level: 2 as const, progress: { current: 2, required: 15, nextLevel: 3 as const, isMaxLevel: false }, badges: [{ category: 'COMMUNICATION' as const, label: 'Voz activa', unlockedAt: '2026-09-01' }] };
+const summary = { studentId: student.id, academicYearId: '00000000-0000-4000-8000-000000000003', annualEffectiveXp: 12, level: 2 as const, progress: { progressPercent: 13, xpToNextLevel: 13, nextLevel: 3 as const, isMaxLevel: false as const }, badges: [{ category: 'COMMUNICATION' as const, label: 'Voz activa', unlockedAt: '2026-09-01' }] };
 
 describe('workspace demo presentation', () => {
   it('distinguishes truthful zero activity from unavailable activity', () => {

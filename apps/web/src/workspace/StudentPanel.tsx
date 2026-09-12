@@ -1,402 +1,45 @@
 import { useEffect, useRef, useState } from 'react';
-import { activeAssessmentContexts, workspaceApi, type AdvantageRedemption, type ApiFailure, type AssessmentContext, type CoinLedgerEntry, type CoinReward, type CoinSummary, type ManualCoinSource, type TeacherStudent, type XpCategory, type XpSummary } from './workspace-api';
+import { assessmentContextsForSelector, workspaceApi, type ApiFailure, type AssessmentContext, type CoinLedgerEntry, type CoinReward, type CoinSummary, type GemActionState, type GemBalances, type GemCatalogueItem, type TeacherStudent, type XpCategory, type XpSummary } from './workspace-api';
 import type { WorkspaceStudentContext } from './workspace-state';
 import { studentInitials } from './StudentCard';
 import { UndoBanner } from './UndoBanner';
-import { disciplineForSpecialty, effectiveXpForAction, presentationForDiscipline } from './xp-presentation';
+import { disciplineForSpecialty, presentationForDiscipline } from './xp-presentation';
 
-type XpValue = 1 | 2 | 3;
+export function isAmbiguousGemMutationFailure(error: unknown) {
+  return !Boolean((error as ApiFailure | null)?.status);
+}
 
 const categories: XpCategory[] = ['COMMUNICATION', 'PRECISION', 'CONSISTENCY', 'COLLABORATION'];
-const specialtyBonusLabel = 'Specialty bonus +1';
-const manualSources: Array<{ value: ManualCoinSource; label: string; description: string }> = [
-  { value: 'PERSONAL_IMPROVEMENT', label: 'Personal improvement', description: 'Visible progress' },
-  { value: 'EXCEPTIONAL_FRENCH', label: 'Exceptional French', description: 'French used exceptionally well' },
-  { value: 'EXCEPTIONAL_COLLABORATION', label: 'Exceptional collaboration', description: 'Meaningful help to the group' },
-  { value: 'SPECIAL_CHALLENGE', label: 'Special challenge', description: 'A challenge worth marking' },
-];
+type XpValue = 1 | 2 | 3;
 
-function manualSourceLabel(source: string) { return manualSources.find(item => item.value === source)?.label ?? source; }
-
-function progressPercent(summary: XpSummary) {
-  if (summary.progress.isMaxLevel) return 100;
-  if (!summary.progress.required) return 0;
-  return Math.min(100, Math.max(0, (summary.progress.current / summary.progress.required) * 100));
-}
-
-type AwardNotice = { id: number; baseXp: XpValue; bonusXp: number; effectiveXp: number };
-
-function RegisterXp({ studentId, specialty, onSummary, onFeedback, onUndo, contextKey }: { studentId: string; specialty: string | null; onSummary: (summary: XpSummary) => void; onFeedback: (message: string) => void; onUndo: (event: { id: string }) => void; contextKey: string }) {
+function RegisterXp({ studentId, specialty, onSummary, onFeedback, onUndo, contextKey }: { studentId: string; specialty: string | null; onSummary: (value: XpSummary) => void; onFeedback: (value: string) => void; onUndo: (value: { id: string }) => void; contextKey: string }) {
   const [category, setCategory] = useState<XpCategory | null>(null);
-  const [pending, setPending] = useState(false);
-  const [comment, setComment] = useState('');
-  const [operationKey, setOperationKey] = useState<string | null>(null);
   const [error, setError] = useState('');
-  const [lastBaseXp, setLastBaseXp] = useState<XpValue | null>(null);
-  const [award, setAward] = useState<AwardNotice | null>(null);
-  const requestGeneration = useRef(0);
-  const currentContextKey = useRef(contextKey);
-
-  if (currentContextKey.current !== contextKey) {
-    currentContextKey.current = contextKey;
-    requestGeneration.current += 1;
-  }
-
-  useEffect(() => {
-    setPending(false);
-    setOperationKey(null);
-    setCategory(null);
-    setComment('');
-    setError('');
-    setLastBaseXp(null);
-    setAward(null);
-  }, [contextKey]);
-
-  useEffect(() => {
-    if (!award) return;
-    const timer = window.setTimeout(() => setAward(null), 1_200);
-    return () => window.clearTimeout(timer);
-  }, [award]);
-
-  const specialtyDiscipline = disciplineForSpecialty(specialty);
-  const specialtyBonus = category ? effectiveXpForAction(1, specialty, category) - 1 : 0;
-  const specialtyBonusId = specialtyBonus > 0 ? `xp-${category?.toLowerCase()}-specialty-bonus` : undefined;
-
+  const [pending, setPending] = useState(false);
+  useEffect(() => { setCategory(null); setError(''); setPending(false); }, [contextKey]);
   async function submit(baseXp: XpValue) {
-    if (!category || pending || currentContextKey.current !== contextKey) return;
-    const generation = ++requestGeneration.current;
-    const key = operationKey ?? crypto.randomUUID();
-    setOperationKey(key);
-    setLastBaseXp(baseXp);
-    setPending(true);
-    setError('');
-    const isCurrentRequest = () => generation === requestGeneration.current && currentContextKey.current === contextKey;
-    try {
-      const result = await workspaceApi.registerXp(studentId, { category, baseXp, ...(comment.trim() ? { comment: comment.trim() } : {}) }, undefined, key);
-      if (!isCurrentRequest()) return;
-      onSummary(result.value.summary);
-      onFeedback(`Base XP +${baseXp} · ${result.value.event.specialtyBonusXp ? specialtyBonusLabel : 'No specialty bonus'} · Effective XP +${result.value.event.effectiveXp}`);
-      setAward({ id: Date.now(), baseXp, bonusXp: result.value.event.specialtyBonusXp, effectiveXp: result.value.event.effectiveXp });
-      onUndo(result.value.event);
-      setOperationKey(null);
-      setCategory(null);
-      setComment('');
-      setLastBaseXp(null);
-    } catch (caught) {
-      if (!isCurrentRequest()) return;
-      const failure = caught as ApiFailure;
-      if (typeof failure.status === 'number' && failure.status >= 400 && failure.status < 500) setOperationKey(null);
-      const message = failure.status === 401 ? 'Your session expired. Sign in again.' : 'Could not register XP. Try again.';
-      setError(message);
-    } finally {
-      if (isCurrentRequest()) setPending(false);
-    }
+    if (!category || pending) return;
+    setPending(true); setError('');
+    try { const result = await workspaceApi.registerXp(studentId, { category, baseXp }); onSummary(result.value.summary); onFeedback(`XP base +${baseXp} · XP efectivo +${result.value.event.effectiveXp}`); onUndo(result.value.event); setCategory(null); }
+    catch (caught) { setError((caught as ApiFailure).status === 401 ? 'La sesión ha caducado. Vuelve a iniciar sesión.' : 'No se pudo registrar el XP. Reintentar.'); }
+    finally { setPending(false); }
   }
-
-  return <section className="xp-action panel-section" aria-label="Register XP">
-    <div className="action-heading">
-      <div className="action-heading-copy"><p className="eyebrow">QUICK CLASSROOM ACTION</p><h3>Quick XP</h3></div>
-      <span className="action-hint">One tap to record</span>
-    </div>
-    {award && <div key={award.id} className="xp-award" role="status" aria-live="polite"><strong>+{award.effectiveXp} XP</strong><span>Base +{award.baseXp}{award.bonusXp ? ' · Specialty bonus +1' : ''}</span></div>}
-    {!category ? <div className="xp-categories" aria-label="XP categories">
-      {categories.map(value => {
-        const meta = presentationForDiscipline(value);
-        const hasSpecialtyBonus = specialtyDiscipline === value;
-        return <button className={`discipline-choice discipline-${value.toLowerCase()}${hasSpecialtyBonus ? ' is-specialty-match' : ''}`} type="button" key={value} aria-label={`${value}${hasSpecialtyBonus ? `, ${specialtyBonusLabel}` : ''}`} aria-expanded="false" disabled={pending} onClick={() => { setOperationKey(null); setError(''); setAward(null); setCategory(value); }}>
-          <span className="discipline-glyph" aria-hidden="true">{meta.glyph}</span>
-          <span className="discipline-copy"><strong>{value}</strong><small>{meta.cue}</small>{hasSpecialtyBonus && <span className="specialty-bonus-note">{specialtyBonusLabel}</span>}</span>
-          <span className="discipline-arrow" aria-hidden="true">+</span>
-        </button>;
-      })}
-    </div> : <>
-      <div className={`selected-category discipline-${category.toLowerCase()}${specialtyDiscipline === category ? ' is-specialty-match' : ''}`}>
-        <span className="discipline-glyph" aria-hidden="true">{presentationForDiscipline(category).glyph}</span>
-        <span className="selected-category-copy"><strong>{category}</strong><small>{presentationForDiscipline(category).cue}</small>{specialtyBonus > 0 && <span id={specialtyBonusId} className="specialty-bonus-note">{specialtyBonusLabel}</span>}</span>
-      </div>
-      <div className="xp-values" id="xp-options" aria-label={`${category} XP value`}>
-        {([1, 2, 3] as const).map(value => {
-          const effectiveXp = effectiveXpForAction(value, specialty, category);
-          return <button type="button" key={value} aria-label={`+${effectiveXp} ${presentationForDiscipline(category).actions[value]}`} aria-describedby={specialtyBonusId} disabled={pending} onClick={() => submit(value)}>
-            <span className="xp-value">+{effectiveXp}</span><span className="xp-action-label">{presentationForDiscipline(category).actions[value]}</span>
-          </button>;
-        })}
-      </div>
-      {pending && <p className="action-status" role="status" aria-live="polite" aria-label="Action feedback">Saving XP…</p>}
-      {error && <div className="action-error" role="alert"><span>{error}</span>{lastBaseXp && <button type="button" className="quiet-button" disabled={pending} onClick={() => submit(lastBaseXp)}>Retry</button>}</div>}
-      <button type="button" className="quiet-button change-category" disabled={pending} onClick={() => { setCategory(null); setOperationKey(null); setError(''); setLastBaseXp(null); }}>Choose another category</button>
-      <details><summary>Add optional note</summary><label htmlFor="xp-note">Note<span className="sr-only"> (optional)</span></label><textarea id="xp-note" value={comment} onChange={event => setComment(event.target.value)} maxLength={240} /></details>
-    </>}
-  </section>;
+  const match = disciplineForSpecialty(specialty);
+  return <section className="xp-action panel-section" aria-label="Registrar XP"><div className="action-heading"><div><p className="eyebrow">ACCIÓN RÁPIDA DE CLASE</p><h3>XP rápido</h3></div><span className="action-hint">Un toque para registrar</span></div>{!category ? <div className="xp-categories" aria-label="Categorías de XP">{categories.map(value => <button key={value} type="button" className={`discipline-choice${match === value ? ' is-specialty-match' : ''}`} aria-label={`${value}${match === value ? ', bonus de especialidad +1' : ''}`} onClick={() => setCategory(value)}>{presentationForDiscipline(value).glyph} {presentationForDiscipline(value).cue}</button>)}</div> : <div className="xp-values" aria-label="Valor de XP"><p>{category}</p>{([1, 2, 3] as XpValue[]).map(value => <button key={value} type="button" disabled={pending} onClick={() => submit(value)}>+{value}</button>)}<button type="button" onClick={() => setCategory(null)}>Cancelar</button></div>}{error && <p className="error" role="alert">{error}</p>}</section>;
 }
 
-function CoinActions({ context, readOnly, onFeedback }: { context: WorkspaceStudentContext; readOnly: boolean; onFeedback: (message: string) => void }) {
-  const [summary, setSummary] = useState<CoinSummary | null>(null);
-  const [ledger, setLedger] = useState<CoinLedgerEntry[]>([]);
-  const [rewards, setRewards] = useState<CoinReward[]>([]);
-  const [contexts, setContexts] = useState<AssessmentContext[]>([]);
-  const [assessmentContextId, setAssessmentContextId] = useState('');
-  const [assessmentName, setAssessmentName] = useState('');
-  const [activeRedemption, setActiveRedemption] = useState<AdvantageRedemption | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState('');
-  const walletContextKey = `${context.academicYearId}:${context.groupId}:${context.studentId}`;
-  const walletContextRef = useRef(walletContextKey);
-  walletContextRef.current = walletContextKey;
-
-  useEffect(() => {
-    if (readOnly) return;
-    const controller = new AbortController();
-    const requestContextKey = walletContextKey;
-    let cancelled = false;
-    setLoading(true);
-    setPending(false);
-    setError('');
-    Promise.all([workspaceApi.coins(context.studentId, controller.signal), workspaceApi.coinLedger(context.studentId, context.academicYearId, controller.signal), workspaceApi.coinRewards(controller.signal), workspaceApi.assessmentContexts(context.groupId, controller.signal)]).then(([coins, entries, fixedRewards, availableContexts]) => {
-      if (cancelled || walletContextRef.current !== requestContextKey) return;
-      setSummary(coins);
-      setLedger(entries);
-      setRewards(fixedRewards);
-      const writableContexts = activeAssessmentContexts(availableContexts);
-      setContexts(writableContexts);
-      setAssessmentContextId(writableContexts[0]?.id ?? '');
-      setActiveRedemption(null);
-      setError('');
-    }).catch((caught: unknown) => {
-      if (cancelled || walletContextRef.current !== requestContextKey) return;
-      if (caught instanceof DOMException && caught.name === 'AbortError') return;
-      setError('Could not load coin advantages.');
-    }).finally(() => { if (!cancelled && walletContextRef.current === requestContextKey) setLoading(false); });
-    return () => { cancelled = true; controller.abort(); };
-  }, [context.studentId, context.groupId, context.academicYearId, readOnly]);
-
-  async function refreshWallet(requestContextKey = walletContextKey) {
-    const [coins, entries] = await Promise.all([workspaceApi.coins(context.studentId), workspaceApi.coinLedger(context.studentId, context.academicYearId)]);
-    if (walletContextRef.current !== requestContextKey) return false;
-    setSummary(coins);
-    setLedger(entries);
-    return true;
-  }
-
-  async function grantManual(source: ManualCoinSource) {
-    if (pending) return;
-    const requestContextKey = walletContextKey;
-    setPending(true);
-    setError('');
-    try {
-      const result = await workspaceApi.grantManualCoin(context.studentId, context.academicYearId, source);
-      if (walletContextRef.current !== requestContextKey) return;
-      setSummary(result.value);
-      try {
-        const entries = await workspaceApi.coinLedger(context.studentId, context.academicYearId);
-        if (walletContextRef.current === requestContextKey) setLedger(entries);
-      } catch { /* the balance response remains authoritative */ }
-      if (walletContextRef.current !== requestContextKey) return;
-      onFeedback(result.replayed ? 'Eclipse Point grant replayed.' : `${manualSourceLabel(source)} point granted.`);
-    } catch (caught) {
-      if (walletContextRef.current !== requestContextKey) return;
-      const failure = caught as ApiFailure;
-      setError(failure.status === 409 ? 'This point grant could not be applied safely.' : failure.message);
-    } finally {
-      if (walletContextRef.current === requestContextKey) setPending(false);
-    }
-  }
-
-  async function correctManual(grant: CoinLedgerEntry) {
-    if (pending) return;
-    const requestContextKey = walletContextKey;
-    setPending(true);
-    setError('');
-    try {
-      const result = await workspaceApi.reverseManualCoin(grant.id);
-      if (!(await refreshWallet(requestContextKey)) || walletContextRef.current !== requestContextKey) return;
-      onFeedback(result.replayed ? 'Point correction replayed.' : 'Point correction recorded.');
-    } catch (caught) {
-      if (walletContextRef.current !== requestContextKey) return;
-      const failure = caught as ApiFailure;
-      setError(failure.status === 409 ? 'This point cannot be corrected because it is already corrected or allocated.' : failure.message);
-    } finally {
-      if (walletContextRef.current === requestContextKey) setPending(false);
-    }
-  }
-
-  async function createOrSelectAssessment(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const name = assessmentName.trim();
-    if (!name || pending) return;
-    const requestContextKey = walletContextKey;
-    setPending(true);
-    setError('');
-    try {
-      const result = await workspaceApi.createAssessmentContext(context.groupId, assessmentName);
-      if (walletContextRef.current !== requestContextKey) return;
-      const canonical = result.value;
-      setContexts(current => current.some(item => item.id === canonical.id) ? current : [...current, canonical]);
-      setAssessmentContextId(canonical.id);
-      setAssessmentName('');
-      onFeedback(result.replayed ? `${canonical.name} selected.` : `${canonical.name} created and selected.`);
-    } catch (caught) {
-      if (walletContextRef.current !== requestContextKey) return;
-      const failure = caught as ApiFailure;
-      setError(failure.status === 422 ? 'Enter an assessment name.' : failure.message);
-    } finally {
-      if (walletContextRef.current === requestContextKey) setPending(false);
-    }
-  }
-
-  async function redeem(reward: CoinReward) {
-    if (!assessmentContextId || pending || activeRedemption) return;
-    const requestContextKey = walletContextKey;
-    setPending(true);
-    setError('');
-    try {
-      const result = await workspaceApi.redeemAdvantage(context.studentId, assessmentContextId, reward.id);
-      if (walletContextRef.current !== requestContextKey) return;
-      setSummary(current => current ? { ...current, balance: current.balance - reward.cost } : current);
-      setActiveRedemption(result.value);
-      onFeedback(result.replayed ? 'Advantage request replayed.' : `${reward.name} reserved.`);
-    } catch (caught) {
-      if (walletContextRef.current !== requestContextKey) return;
-      const failure = caught as ApiFailure;
-      setError(failure.status === 409 ? 'This assessment already has an advantage.' : failure.message);
-    } finally {
-      if (walletContextRef.current === requestContextKey) setPending(false);
-    }
-  }
-
-  async function reverse() {
-    if (!activeRedemption || pending) return;
-    const requestContextKey = walletContextKey;
-    const redemption = activeRedemption;
-    setPending(true);
-    setError('');
-    try {
-      await workspaceApi.reverseAdvantage(redemption.id);
-      if (walletContextRef.current !== requestContextKey) return;
-      setSummary(current => current ? { ...current, balance: current.balance + redemption.cost } : current);
-      setActiveRedemption(null);
-      onFeedback('Assessment advantage undone.');
-    } catch (caught) {
-      if (walletContextRef.current !== requestContextKey) return;
-      const failure = caught as ApiFailure;
-      setError(failure.status === 409 ? 'This assessment advantage is already reversed.' : failure.message);
-    } finally {
-      if (walletContextRef.current === requestContextKey) setPending(false);
-    }
-  }
-
-  if (readOnly) return null;
-  const correctedGrantIds = new Set(ledger.flatMap(entry => entry.correctionOfId ? [entry.correctionOfId] : []));
-  const recentManualGrants = ledger.filter(entry => entry.amount === 1 && entry.correctionOfId === null && manualSources.some(source => source.value === entry.source)).slice(-6).reverse();
-  return <section className="coin-action panel-section" aria-label="Assessment advantages">
-    <details className="coin-action-details">
-      <summary className="coin-action-heading action-heading">
-        <span className="coin-title"><span className="eclipse-coin" aria-hidden="true">◈</span><span><span className="eyebrow">ECLIPSE POINTS</span><strong>Assessment advantage</strong></span></span>
-        <strong aria-label="Eclipse Points balance">{summary?.balance ?? '—'} points</strong>
-      </summary>
-      <div className="coin-action-body">
-        <p className="coin-description">A rare academy token for a carefully chosen assessment.</p>
-        <section className="manual-coin-section" aria-label="Manual Eclipse Points">
-          <div className="manual-coin-heading"><div><p className="eyebrow">TEACHER AWARD</p><h4>Grant one Eclipse Point</h4></div><span>+1 each</span></div>
-          {loading && <p className="action-status" role="status">Loading Eclipse Points…</p>}
-          <div className="manual-coin-grid">{manualSources.map(source => <button type="button" key={source.value} disabled={pending || loading} onClick={() => grantManual(source.value)}><strong>{source.label}</strong><small>{source.description}</small></button>)}</div>
-          <details className="manual-coin-history"><summary>Recent manual points</summary>{recentManualGrants.length ? <ul>{recentManualGrants.map(grant => <li key={grant.id}><span><strong>{manualSourceLabel(grant.source)}</strong><time dateTime={grant.createdAt}>{new Date(grant.createdAt).toLocaleDateString()}</time></span>{correctedGrantIds.has(grant.id) ? <em>Corrected</em> : <button type="button" className="quiet-button" disabled={pending} onClick={() => correctManual(grant)}>Correct</button>}</li>)}</ul> : <p className="muted">No manual points recorded for this student.</p>}</details>
-        </section>
-        <form className="assessment-context-form" onSubmit={createOrSelectAssessment}><label htmlFor="assessment-name">Create/select Assessment<input id="assessment-name" value={assessmentName} onChange={event => setAssessmentName(event.target.value)} placeholder="e.g. Unit quiz" maxLength={100} /></label><button type="submit" disabled={pending || !assessmentName.trim()}>Create/select Assessment</button></form>
-        {contexts.length ? <label htmlFor="assessment-context">Assessment<select id="assessment-context" value={assessmentContextId} onChange={event => setAssessmentContextId(event.target.value)}>{contexts.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : <p className="muted">Create an assessment to continue.</p>}
-        <div className="coin-rewards">{rewards.map(reward => <button type="button" key={reward.id} disabled={pending || !assessmentContextId || Boolean(activeRedemption) || (summary?.balance ?? 0) < reward.cost} onClick={() => redeem(reward)}>{reward.name} · {reward.cost} points</button>)}</div>
-        {activeRedemption && <button type="button" className="quiet-button" disabled={pending} onClick={reverse}>Undo assessment advantage</button>}
-        {error && <p className="error" role="alert">{error}</p>}
-      </div>
-    </details>
-  </section>;
+function GemActions({ context, readOnly, onFeedback }: { context: WorkspaceStudentContext; readOnly: boolean; onFeedback: (value: string) => void }) {
+  const [gems, setGems] = useState<GemBalances | null>(null); const [items, setItems] = useState<GemCatalogueItem[]>([]); const [contexts, setContexts] = useState<AssessmentContext[]>([]); const [contextId, setContextId] = useState(''); const [state, setState] = useState<GemActionState | null>(null); const [stateError, setStateError] = useState(''); const [dataError, setDataError] = useState(''); const [dataAttempt, setDataAttempt] = useState(0); const [pending, setPending] = useState(false); const [reason, setReason] = useState(''); const [score, setScore] = useState('8'); const keyRef = useRef<string | null>(null);
+  const scopeKey = `${context.studentId}:${context.academicYearId}:${context.groupId}`;
+  useEffect(() => { keyRef.current = null; }, [scopeKey, contextId]);
+  useEffect(() => { let cancelled = false; setState(null); setStateError(''); setDataError(''); setContextId(''); Promise.all([workspaceApi.gems(context.studentId, context.academicYearId), workspaceApi.gemCatalogue(), workspaceApi.assessmentContexts(context.groupId)]).then(([balance, catalogue, available]) => { if (cancelled) return; setGems(balance); setItems(catalogue); const selectable = assessmentContextsForSelector(available); setContexts(selectable); setContextId(selectable[0]?.id ?? ''); }).catch(() => { if (!cancelled) setDataError('No se pudo cargar. Reintentar'); }); return () => { cancelled = true; }; }, [context.studentId, context.academicYearId, context.groupId, dataAttempt]);
+  useEffect(() => { if (!contextId) { setState(null); return; } let cancelled = false; setState(null); setStateError(''); workspaceApi.gemActionState(context.studentId, context.academicYearId, contextId).then(value => { if (!cancelled) setState(value); }).catch(() => { if (!cancelled) setStateError('No se pudo cargar el estado. Reintentar'); }); return () => { cancelled = true; }; }, [context.studentId, context.academicYearId, contextId]);
+   async function refresh() { if (!contextId) return; try { const [balance, action] = await Promise.all([workspaceApi.gems(context.studentId, context.academicYearId), workspaceApi.gemActionState(context.studentId, context.academicYearId, contextId)]); setGems(balance); setState(action); setStateError(''); } catch (error) { setStateError('No se pudo cargar el estado. Reintentar'); throw error; } }
+   async function mutate(run: (key: string) => Promise<unknown>, success: string) { if (pending || readOnly || !state || stateError) return; const key = keyRef.current ?? crypto.randomUUID(); keyRef.current = key; setPending(true); try { await run(key); await refresh(); keyRef.current = null; onFeedback(success); } catch (caught) { if (!isAmbiguousGemMutationFailure(caught)) keyRef.current = null; setStateError((caught as ApiFailure).status === 409 ? 'La acción ya fue utilizada o no es válida.' : 'No se pudo guardar. Reintentar'); } finally { setPending(false); } }
+  const selectedContext = contexts.find(item => item.id === contextId); const disabled = readOnly || Boolean(selectedContext?.archivedAt) || pending || !state || Boolean(stateError); const reward = state?.resultReward; const redemption = state?.advantageRedemption;
+  return <section className="coin-action panel-section" aria-label="Gemas"><div className="action-heading"><h3>Gemas</h3><strong>{gems ? `Esmeraldas ${gems.balances.EMERALD} · Rubíes ${gems.balances.RUBY} · Diamantes ${gems.balances.DIAMOND}` : 'Cargando gemas…'}</strong></div>{dataError ? <p role="alert">{dataError} <button type="button" onClick={() => setDataAttempt(attempt => attempt + 1)}>Reintentar</button></p> : contexts.length ? <label>Evaluación<select aria-label="Evaluación" value={contextId} onChange={event => setContextId(event.target.value)}>{contexts.map(item => <option key={item.id} value={item.id}>{item.name}{item.archivedAt ? ' (archivada)' : ''}</option>)}</select></label> : <p>Crea una evaluación para continuar.</p>}{(readOnly || selectedContext?.archivedAt) && <p className="read-only-note" role="status">Este registro es de solo lectura.</p>}{stateError ? <p role="alert">{stateError} <button type="button" onClick={() => void refresh()}>Reintentar</button></p> : state && <div className="gem-actions"><div aria-label="Recompensa de resultado"><h4>Recompensa de resultado</h4>{!reward && <><label>Puntuación<input aria-label="Puntuación" value={score} onChange={event => setScore(event.target.value)} disabled={disabled} /></label><button type="button" disabled={disabled} onClick={() => mutate(key => workspaceApi.grantResultReward(context.studentId, contextId, score, undefined, key), 'Guardado')}>Otorgar recompensa</button></>}{reward?.state === 'ACTIVE' && <><p>Recompensa activa</p><label>Motivo<textarea aria-label="Motivo de corrección" value={reason} onChange={event => setReason(event.target.value)} disabled={disabled} /></label><button type="button" disabled={disabled || !reason.trim()} onClick={() => mutate(key => workspaceApi.correctResultReward(reward.id, reason, undefined, key), 'Corrección aplicada')}>Corregir recompensa</button></>}{reward?.state === 'REVERSED' && <p role="status">Corrección aplicada</p>}</div><div aria-label="Ventaja"><h4>Ventaja</h4>{redemption?.state === 'ACTIVE' ? <><p>Ya utilizada</p><label>Motivo<textarea aria-label="Motivo de reversión" value={reason} onChange={event => setReason(event.target.value)} disabled={disabled} /></label><button type="button" disabled={disabled || !reason.trim()} onClick={() => mutate(key => workspaceApi.reverseGem(redemption.id, reason, undefined, key), 'Recompensa revertida')}>Revertir</button></> : redemption?.state === 'REVERSED' ? <p>Recompensa revertida</p> : <div>{items.map(item => <button key={item.id} type="button" disabled={disabled} onClick={() => mutate(key => workspaceApi.redeemGem(context.studentId, contextId, item.id, undefined, key), 'Guardado')}>{item.currency} · {item.cost}</button>)}</div>}</div></div>}</section>;
 }
 
-export function StudentPanel({ student, context, historical, feedback, undo, onClose, originRef, onUndoResult, summary, onSummary, onFeedback, onUndo }: { student: TeacherStudent | null; context: WorkspaceStudentContext | null; historical: boolean; feedback: string; undo: any; onClose: () => void; originRef?: { current: HTMLElement | null }; onUndoResult: (message: string) => void; summary: XpSummary | null; onSummary: (summary: XpSummary) => void; onFeedback: (message: string) => void; onUndo: (event: { id: string }) => void }) {
-  const headingRef = useRef<HTMLHeadingElement>(null);
-  const closeRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLElement>(null);
-  const previousStudent = useRef<string | null>(null);
-  const dialog = typeof window !== 'undefined' && window.innerWidth < 900;
+function LegacyCoinHistory({ context }: { context: WorkspaceStudentContext }) { const [summary, setSummary] = useState<CoinSummary | null>(null); const [ledger, setLedger] = useState<CoinLedgerEntry[]>([]); const [rewards, setRewards] = useState<CoinReward[]>([]); const [error, setError] = useState(''); async function load() { setError(''); try { const [balance, entries, catalogue] = await Promise.all([workspaceApi.coins(context.studentId), workspaceApi.coinLedger(context.studentId, context.academicYearId), workspaceApi.coinRewards()]); setSummary(balance); setLedger(entries); setRewards(catalogue); } catch { setError('No se pudo cargar el historial. Reintentar'); } } useEffect(() => { void load(); }, [context.studentId, context.academicYearId]); return <section className="panel-section" aria-label="Historial de monedas (solo lectura)"><h3>Historial de monedas (solo lectura)</h3>{error ? <p role="alert">{error} <button type="button" onClick={() => void load()}>Reintentar</button></p> : <><p>Saldo histórico: {summary?.balance ?? '—'}</p><p>Catálogo histórico de ventajas: {rewards.length}</p>{ledger.length ? <ul>{ledger.slice(-6).reverse().map(entry => <li key={entry.id}>{entry.source} · {entry.amount}</li>)}</ul> : <p>Sin movimientos históricos</p>}<p className="muted">No se pueden otorgar, gastar, corregir ni revertir monedas.</p></>}</section>; }
 
-  useEffect(() => {
-    if (student && dialog && student.id !== previousStudent.current) (closeRef.current ?? headingRef.current)?.focus();
-    previousStudent.current = student?.id ?? null;
-  }, [student, dialog]);
-
-  useEffect(() => {
-    if (!dialog || !student) return;
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onClose();
-        window.requestAnimationFrame(() => originRef?.current?.focus());
-      }
-    };
-    document.addEventListener('keydown', escape);
-    return () => document.removeEventListener('keydown', escape);
-  }, [dialog, student, onClose, originRef]);
-
-  useEffect(() => {
-    if (!dialog || !student) return;
-    const trap = (event: KeyboardEvent) => {
-      if (event.key !== 'Tab') return;
-      const panel = panelRef.current;
-      if (!panel) return;
-      const focusable = [...panel.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), summary, a[href], [tabindex]:not([tabindex="-1"])')].filter(element => element.getClientRects().length > 0);
-      if (!focusable.length) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const active = document.activeElement;
-      if (event.shiftKey && active === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && (active === last || active?.tagName === 'SUMMARY')) {
-        event.preventDefault();
-        first.focus();
-      } else if (!panel.contains(active)) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener('keydown', trap);
-    return () => document.removeEventListener('keydown', trap);
-  }, [dialog, student]);
-
-  if (!student || !context) return <aside className="student-panel panel-empty"><p className="muted">Select a student to inspect their classroom context.</p>{feedback && <p role="status" aria-live="polite">{feedback}</p>}</aside>;
-
-  const close = () => {
-    onClose();
-    originRef?.current?.focus();
-    window.requestAnimationFrame(() => originRef?.current?.focus());
-  };
-  const readOnly = historical || Boolean(student.archivedAt);
-  const percent = summary ? progressPercent(summary) : 0;
-  const specialtyDiscipline = disciplineForSpecialty(student.specialty);
-  const specialtyGlyph = specialtyDiscipline ? presentationForDiscipline(specialtyDiscipline).glyph : '✦';
-
-  return <aside ref={panelRef} className="student-panel" role={dialog ? 'dialog' : undefined} aria-modal={dialog ? true : undefined} aria-labelledby="student-panel-title">
-    <button ref={closeRef} className="panel-close" type="button" onClick={close} aria-label="Close student panel">×</button>
-    <header className="panel-identity">
-      <span className="character-crest student-crest avatar" aria-hidden="true"><span className="crest-initials">{studentInitials(student.realName)}</span><span className="crest-orbit" /></span>
-      <div><p className="eyebrow">CHARACTER SHEET · SELECTED STUDENT</p><h2 ref={headingRef} id="student-panel-title" tabIndex={-1}>{student.realName}</h2><p className="student-alias">{student.alias}</p></div>
-    </header>
-    <div className="sheet-specialty"><span className="specialty-glyph" aria-hidden="true">{specialtyGlyph}</span><div><small>Specialty</small><strong>{student.specialty ?? 'Not assigned'}</strong></div>{summary && <span className="level-mark">Level {summary.level}</span>}</div>
-    <section className="student-facts" aria-label="Student XP summary">
-      <span><small>Annual record</small>{summary ? <strong>Annual XP: {summary.annualEffectiveXp} · Level {summary.level}</strong> : <strong>XP summary unavailable</strong>}</span>
-    </section>
-    {summary && <div className="xp-progress" aria-label={`${summary.progress.current} of ${summary.progress.required} XP to next level`}>
-      <div className="xp-progress-heading"><span>Progress to Level {summary.progress.nextLevel ?? 'max'}</span><strong>{summary.progress.isMaxLevel ? 'Maximum level' : `${summary.progress.current} / ${summary.progress.required} XP`}</strong></div>
-      <div className="progress-track" role="progressbar" aria-label="XP progression" aria-valuemin={0} aria-valuemax={summary.progress.required} aria-valuenow={summary.progress.current}><span style={{ width: `${percent}%` }} /></div>
-    </div>}
-    {readOnly ? <p className="read-only-note" role="status">Historical record · read-only</p> : <><RegisterXp studentId={student.id} specialty={student.specialty} contextKey={`${context.academicYearId}:${context.groupId}:${context.studentId}`} onSummary={onSummary} onFeedback={onFeedback} onUndo={onUndo} /><UndoBanner opportunity={undo} onResult={onUndoResult} /></>}
-    <section className="achievement-section" aria-label="Achievements">
-      <div className="section-heading"><div><p className="eyebrow">ACADEMY SEALS</p><h3>Achievements</h3></div><span className="achievement-count">{summary?.badges.length ?? 0}</span></div>
-      {summary?.badges.length ? <div className="badge-list">{summary.badges.map(badge => <span className="badge-seal" key={`${badge.category}-${badge.unlockedAt}`}><span className="badge-medallion" aria-hidden="true">{presentationForDiscipline(badge.category).glyph}</span><span>{badge.label}</span></span>)}</div> : <p className="muted">Seals appear as classroom evidence accumulates.</p>}
-    </section>
-    {summary?.badges.length ? <p className="badge-callout" role="status">Badge unlocked: {summary.badges.map(badge => badge.label).join(', ')}</p> : null}
-    {!readOnly && <CoinActions context={context} readOnly={readOnly} onFeedback={onFeedback} />}
-    {feedback && <p key={feedback} className="feedback" role="status" aria-live="polite">{feedback}</p>}
-  </aside>;
-}
+export function StudentPanel({ student, context, historical, feedback, undo, onClose, originRef, onUndoResult, summary, onSummary, onFeedback, onUndo }: { student: TeacherStudent | null; context: WorkspaceStudentContext | null; historical: boolean; feedback: string; undo: any; onClose: () => void; originRef?: { current: HTMLElement | null }; onUndoResult: (message: string) => void; summary: XpSummary | null; onSummary: (value: XpSummary) => void; onFeedback: (value: string) => void; onUndo: (value: { id: string }) => void }) { const closeRef = useRef<HTMLButtonElement>(null); const panelRef = useRef<HTMLElement>(null); const previous = useRef<string | null>(null); const dialog = typeof window !== 'undefined' && window.innerWidth < 900; useEffect(() => { if (student && dialog && student.id !== previous.current) closeRef.current?.focus(); previous.current = student?.id ?? null; }, [student, dialog]); useEffect(() => { if (!dialog || !student) return; const trap = (event: KeyboardEvent) => { if (event.key !== 'Tab') return; const panel = panelRef.current; if (!panel) return; const focusable = [...panel.querySelectorAll<HTMLElement>('button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),a[href]')].filter(element => element.getClientRects().length); if (!focusable.length) return; const first = focusable[0], last = focusable[focusable.length - 1]; if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); } }; document.addEventListener('keydown', trap); return () => document.removeEventListener('keydown', trap); }, [dialog, student]); if (!student || !context) return <aside className="student-panel panel-empty"><p className="muted">Selecciona un estudiante para consultar su contexto de clase.</p></aside>; const readOnly = historical || Boolean(student.archivedAt); const percent = summary?.progress.progressPercent ?? 0; return <aside ref={panelRef} className="student-panel" role={dialog ? 'dialog' : undefined} aria-modal={dialog || undefined}><div className="panel-header"><div className="student-identity"><span className="avatar large" aria-hidden="true">{studentInitials(student.realName)}</span><div><p className="eyebrow">FICHA PRIVADA DEL ESTUDIANTE</p><h2>{student.realName}</h2><p className="muted">{student.alias}</p></div></div><button ref={closeRef} type="button" aria-label="Cerrar ficha del estudiante" onClick={() => { onClose(); originRef?.current?.focus(); }}>Cerrar</button></div>{readOnly && <p className="read-only-note" role="status">Este registro es de solo lectura.</p>}<section className="panel-section" aria-label="Resumen de XP"><h3>XP anual</h3><strong>{summary?.annualEffectiveXp ?? '—'}</strong><div className="progress-track" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${percent}%` }} /></div></section><RegisterXp studentId={student.id} specialty={student.specialty} contextKey={`${context.studentId}:${context.academicYearId}`} onSummary={onSummary} onFeedback={onFeedback} onUndo={onUndo} /><GemActions context={context} readOnly={readOnly} onFeedback={onFeedback} /><LegacyCoinHistory context={context} />{feedback && <p role="status" className="feedback">{feedback}</p>}<UndoBanner opportunity={undo} onResult={onUndoResult} /></aside>; }

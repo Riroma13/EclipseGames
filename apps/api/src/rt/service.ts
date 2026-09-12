@@ -4,7 +4,8 @@ import { ApiError } from '../http/errors.js';
 import { getOwnedRealClassSessionContext } from '../calendar/service.js';
 import { getOwnedAcademicYearGroupContext } from '../roster/calendar-context.js';
 import { lockStudentGroupCorrection } from '../roster/service.js';
-import { runTransaction } from '../services/transactions.js';
+import { runImmediateTransaction, type GemSourceTx } from '../services/transactions.js';
+import type { GemSourceOrchestrator } from '../gems/source-orchestrator.js';
 import { replayRt, type RtValue } from './domain.js';
 
 type Tx = Database.Database;
@@ -51,28 +52,43 @@ export function listEntries(db: Tx, owner: string, sessionId: string) {
   return { sessionId, termId: context.termId, students: roster, entries };
 }
 
-export function upsertEntries(db: Tx, owner: string, sessionId: string, entries: EntryInput[], idempotencyKey: string) {
+export function upsertEntries(db: Tx, owner: string, sessionId: string, entries: EntryInput[], idempotencyKey: string, coordinator: GemSourceOrchestrator) {
   if (!keyIsUuidV4(idempotencyKey)) fail('Idempotency-Key must be a UUID-v4.');
   if (!entries.length) fail('Entries must not be empty.');
   if (new Set(entries.map(entry => entry.studentId)).size !== entries.length) fail('Each student may appear only once.');
-  const context = getOwnedRealClassSessionContext(db, owner, sessionId);
-  return runTransaction(db, () => {
+  const work=(txDb:Tx, tx?:GemSourceTx) => {
+    const db=txDb;
+    const context = getOwnedRealClassSessionContext(db, owner, sessionId);
     const fp = fingerprint(sessionId, entries); const prior = db.prepare('SELECT * FROM rt_requests WHERE owner_teacher_id=? AND idempotency_key=?').get(owner, idempotencyKey) as any;
-    if (prior) { if (prior.fingerprint !== fp) fail('Idempotency key was already used for another request.', 409); return { status: 200, ...listEntries(db, owner, sessionId), replay: true }; }
+    if (prior) {
+      if (prior.fingerprint !== fp) fail('Idempotency key was already used for another request.', 409);
+      const affected = [...new Set(entries.map(entry => entry.studentId))].sort();
+      for (const studentId of affected) coordinator.applyRtScope(tx!, studentId, context.termId);
+      return { status: 200, ...listEntries(db, owner, sessionId), replay: true };
+    }
     if (context.endedAt) fail('Closed sessions are read-only.', 409);
     snapshotRoster(db, context);
     const roster = new Set((db.prepare('SELECT student_id AS id FROM real_class_session_rt_roster WHERE session_id=?').all(sessionId) as Array<{id:string}>).map(row => row.id));
     if (entries.some(entry => !roster.has(entry.studentId))) fail('All entries must belong to the session roster.');
     const stamp = now();
-    for (const entry of entries) {
+    const orderedEntries = [...entries].sort((a, b) => a.studentId.localeCompare(b.studentId));
+    for (const entry of orderedEntries) {
       const current = db.prepare('SELECT id FROM rt_entries WHERE session_id=? AND student_id=?').get(sessionId, entry.studentId) as {id:string}|undefined;
       if (current) db.prepare('UPDATE rt_entries SET value=?,updated_at=? WHERE id=?').run(String(entry.value), stamp, current.id);
       else db.prepare('INSERT INTO rt_entries (id,session_id,student_id,term_id,value,created_at,updated_at) VALUES (?,?,?,?,?,?,?)').run(randomUUID(), sessionId, entry.studentId, context.termId, String(entry.value), stamp, stamp);
-      reconcileEntitlements(db, entry.studentId, context.termId, entriesForStudent(db, entry.studentId, context.termId));
+    }
+    // Establish every source fact and affected entitlement state before any gem
+    // application. This is deliberately separate from the stable coordinator loop.
+    for (const studentId of orderedEntries.map(entry => entry.studentId)) {
+      reconcileEntitlements(db, studentId, context.termId, entriesForStudent(db, studentId, context.termId));
+    }
+    for (const studentId of [...new Set(orderedEntries.map(entry => entry.studentId))].sort()) {
+      coordinator.applyRtScope(tx!, studentId, context.termId);
     }
     db.prepare('INSERT INTO rt_requests (id,owner_teacher_id,idempotency_key,operation,session_id,fingerprint,created_at) VALUES (?,?,?,?,?,?,?)').run(randomUUID(), owner, idempotencyKey, 'BULK_UPSERT', sessionId, fp, stamp);
     return { status: 201, ...listEntries(db, owner, sessionId), replay: false };
-  });
+  };
+  return runImmediateTransaction(db, fingerprint(sessionId, entries), tx => work(tx.db, tx));
 }
 
 export function summaries(db: Tx, owner: string, groupId: string, academicYearId: string, termId: string) {
@@ -87,11 +103,22 @@ export type RtStreakEmeraldEntitlementState = Omit<EntitlementRow, 'active' | 'c
 const entitlementState = (row: EntitlementRow): RtStreakEmeraldEntitlementState => ({ id: row.id, sourceKey: row.sourceKey, sourceEntryId: row.sourceEntryId, studentId: row.studentId, termId: row.termId, active: Boolean(row.active), revision: row.revision, consumption: row.consumerId === null ? null : { consumerId: row.consumerId, grantId: row.grantId!, consumedRevision: row.consumedRevision!, consumedAt: row.consumedAt! } });
 
 export const RtStreakEmeraldEntitlementPort = {
-  listForReconciliation(studentId: string, termId: string, db: Tx) { return (db.prepare('SELECT id,source_key AS sourceKey,source_entry_id AS sourceEntryId,student_id AS studentId,term_id AS termId,active,revision,consumer_id AS consumerId,grant_id AS grantId,consumed_revision AS consumedRevision,consumed_at AS consumedAt FROM rt_streak_emerald_entitlements WHERE student_id=? AND term_id=? ORDER BY id').all(studentId, termId) as EntitlementRow[]).map(entitlementState); },
+  listForReconciliation(studentId: string, termId: string, db: Tx) { return (db.prepare('SELECT e.id,e.source_key AS sourceKey,e.source_entry_id AS sourceEntryId,e.student_id AS studentId,e.term_id AS termId,e.active,e.revision,e.consumer_id AS consumerId,e.grant_id AS grantId,e.consumed_revision AS consumedRevision,e.consumed_at AS consumedAt,g.owner_teacher_id AS ownerTeacherId,g.academic_year_id AS academicYearId FROM rt_streak_emerald_entitlements e JOIN students s ON s.id=e.student_id JOIN groups g ON g.id=s.group_id WHERE e.student_id=? AND e.term_id=? ORDER BY e.id').all(studentId, termId) as any[]).map(row => ({ ...entitlementState(row), ownerTeacherId: row.ownerTeacherId, academicYearId: row.academicYearId })); },
   getForReconciliation(id: string, db: Tx) { const row = db.prepare('SELECT id,source_key AS sourceKey,source_entry_id AS sourceEntryId,student_id AS studentId,term_id AS termId,active,revision,consumer_id AS consumerId,grant_id AS grantId,consumed_revision AS consumedRevision,consumed_at AS consumedAt FROM rt_streak_emerald_entitlements WHERE id=?').get(id) as EntitlementRow | undefined; return row ? entitlementState(row) : null; },
   consumeActive(id: string, expectedRevision: number, consumerId: string, grantId: string, db: Tx) {
     const result = db.prepare('UPDATE rt_streak_emerald_entitlements SET consumer_id=?,grant_id=?,consumed_revision=?,consumed_at=? WHERE id=? AND active=1 AND consumer_id IS NULL AND revision=?').run(consumerId, grantId, expectedRevision, now(), id, expectedRevision);
     if (result.changes !== 1) fail('Entitlement is stale, inactive, or already consumed.', 409);
     return RtStreakEmeraldEntitlementPort.getForReconciliation(id, db);
+  },
+  listCurrentForBaselineAfter(afterEntitlementId: string | null, limit: number, db: Tx) {
+    const rows = db.prepare(`SELECT e.id,e.source_key AS sourceKey,e.source_entry_id AS sourceEntryId,e.student_id AS studentId,e.term_id AS termId,e.active,e.revision,e.consumer_id AS consumerId,e.grant_id AS grantId,e.consumed_revision AS consumedRevision,e.consumed_at AS consumedAt,g.owner_teacher_id AS ownerTeacherId,g.academic_year_id AS academicYearId
+      FROM rt_streak_emerald_entitlements e JOIN students s ON s.id=e.student_id JOIN groups g ON g.id=s.group_id
+      WHERE (? IS NULL OR e.id > ?) ORDER BY e.id LIMIT ?`).all(afterEntitlementId, afterEntitlementId, limit) as any[];
+    return rows.map(row => ({ ...entitlementState(row), ownerTeacherId: row.ownerTeacherId, academicYearId: row.academicYearId }));
+  },
+  getCurrentForBaseline(entitlementId: string, db: Tx) {
+    const row = db.prepare(`SELECT e.id,e.source_key AS sourceKey,e.source_entry_id AS sourceEntryId,e.student_id AS studentId,e.term_id AS termId,e.active,e.revision,e.consumer_id AS consumerId,e.grant_id AS grantId,e.consumed_revision AS consumedRevision,e.consumed_at AS consumedAt,g.owner_teacher_id AS ownerTeacherId,g.academic_year_id AS academicYearId
+      FROM rt_streak_emerald_entitlements e JOIN students s ON s.id=e.student_id JOIN groups g ON g.id=s.group_id WHERE e.id=?`).get(entitlementId) as any;
+    return row ? { ...entitlementState(row), ownerTeacherId: row.ownerTeacherId, academicYearId: row.academicYearId } : null;
   },
 };

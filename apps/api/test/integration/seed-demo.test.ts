@@ -34,7 +34,6 @@ describe('service-owned demo seed', () => {
     expect(first.events).toHaveLength(64);
     expect(first.gameplay).toMatchObject({ event: DEMO_EVENT.id, challenge: DEMO_CHALLENGE.id, preset: DEMO_PRESET.id, promptDeck: DEMO_PROMPT_DECK.id, preparedEvent: DEMO_PREPARED_EVENT.id, preparedChallenge: DEMO_PREPARED_CHALLENGE.id });
     expect(second.events.every((event) => event.replay)).toBe(true);
-    expect(second.coinGrants.every((grant) => grant.replay)).toBe(true);
     expect(counts()).toEqual(before);
     expect(value.prepare('SELECT COUNT(*) AS count FROM coin_rewards').get()).toEqual({ count: 2 });
     expect(value.prepare('SELECT COUNT(*) AS count FROM minigame_presets').get()).toEqual({ count: 1 });
@@ -46,24 +45,16 @@ describe('service-owned demo seed', () => {
     expect(value.prepare('SELECT id,title,prompts FROM prompt_decks').get()).toEqual({ id: DEMO_PROMPT_DECK.id, title: DEMO_PROMPT_DECK.title, prompts: JSON.stringify(DEMO_PROMPT_DECK.prompts) });
     expect(value.prepare('SELECT id,status,show_on_projection AS showOnProjection FROM classroom_events WHERE id=?').get(DEMO_PREPARED_EVENT.id)).toEqual({ id: DEMO_PREPARED_EVENT.id, status: 'DRAFT', showOnProjection: 0 });
     expect(value.prepare('SELECT id,status,progress FROM classroom_challenges WHERE id=?').get(DEMO_PREPARED_CHALLENGE.id)).toEqual({ id: DEMO_PREPARED_CHALLENGE.id, status: 'DRAFT', progress: 0 });
-    expect(value.prepare('SELECT SUM(amount) AS balance FROM coin_ledger WHERE student_id=? AND academic_year_id=?').get(DEMO_STUDENTS[0].id, DEMO_YEAR.id)).toEqual({ balance: 2 });
     const expectedTotals = [9, 12, 28, 6, 6, 12, 2, 12, 5, 24, 28, 10, 9, 24, 4, 21];
     const expectedBadges = [1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1];
     const expectedBalances = [2, 0, 1, 3, 0, 1, 0, 3, 0, 1, 2, 0, 1, 0, 3, 0];
     DEMO_STUDENTS.forEach((student, index) => {
       expect(value.prepare('SELECT COALESCE(SUM(effective_xp),0) AS total FROM xp_evidence_events WHERE student_id=? AND academic_year_id=?').get(student.id, DEMO_YEAR.id)).toEqual({ total: expectedTotals[index] });
       expect(value.prepare('SELECT COUNT(*) AS count FROM xp_badge_unlocks WHERE student_id=? AND academic_year_id=? AND active=1').get(student.id, DEMO_YEAR.id)).toEqual({ count: expectedBadges[index] });
-      expect(value.prepare('SELECT COALESCE(SUM(amount),0) AS balance FROM coin_ledger WHERE student_id=? AND academic_year_id=?').get(student.id, DEMO_YEAR.id)).toEqual({ balance: expectedBalances[index] });
     });
     expect(value.prepare('SELECT COUNT(*) AS count FROM xp_evidence_events WHERE specialty_bonus_xp=1').get()).toEqual({ count: 64 });
     expect(value.prepare('SELECT COUNT(*) AS count FROM coin_rewards').get()).toEqual({ count: 2 });
-    expect(value.prepare('SELECT COUNT(*) AS count FROM coin_ledger').get()).toEqual({ count: 17 });
     expect(value.prepare('SELECT COUNT(*) AS count FROM xp_level_unlocks WHERE active=1 AND level=3').get()).toEqual({ count: 2 });
-    expect(value.prepare('SELECT id,source FROM coin_ledger ORDER BY id').all()).toEqual(expect.arrayContaining([
-      { id: '7c2f1a90-5d44-4c61-8f20-202620270001', source: 'PERSONAL_IMPROVEMENT' },
-      { id: '7c2f1a90-5d44-4c61-8f20-202620270002', source: 'EXCEPTIONAL_FRENCH' },
-      { id: '7c2f1a90-5d44-4c61-8f20-202620270003', source: 'EXCEPTIONAL_COLLABORATION' },
-    ]));
   });
 
   it('preflights collisions before creating any missing row', () => {
@@ -75,15 +66,15 @@ describe('service-owned demo seed', () => {
     expect(value.prepare('SELECT COUNT(*) AS count FROM students').get()).toEqual({ count: 0 });
   });
 
-  it('fails closed when a fixed points grant identity is occupied', () => {
+  it('preserves pre-existing legacy coin evidence without writing new rows', () => {
     const value = db();
     value.prepare('INSERT INTO academic_years VALUES (?, ?, ?, ?, ?, ?, ?)').run(DEMO_YEAR.id, 'teacher-demo', DEMO_YEAR.label, DEMO_YEAR.startsOn, DEMO_YEAR.endsOn, null, '2026-01-01');
     value.prepare('INSERT INTO groups VALUES (?, ?, ?, ?, ?)').run(DEMO_GROUP.id, 'teacher-demo', DEMO_YEAR.id, DEMO_GROUP.name, '2026-01-01');
     value.prepare('INSERT INTO students VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(DEMO_STUDENTS[0].id, DEMO_GROUP.id, DEMO_STUDENTS[0].realName, DEMO_STUDENTS[0].alias, DEMO_STUDENTS[0].avatar, DEMO_STUDENTS[0].specialty, null, null, '2026-01-01');
-    value.prepare('INSERT INTO coin_ledger (id,student_id,academic_year_id,amount,source,created_at) VALUES (?,?,?,?,?,?)').run('7c2f1a90-5d44-4c61-8f20-202620270001', DEMO_STUDENTS[0].id, DEMO_YEAR.id, 1, 'SPECIAL_CHALLENGE', '2026-01-01');
-    expect(() => seedDemo(value, 'teacher-demo')).toThrow(/Demo coin collision/);
+     value.prepare('INSERT INTO coin_ledger (id,student_id,academic_year_id,amount,source,created_at) VALUES (?,?,?,?,?,?)').run('legacy-coin', DEMO_STUDENTS[0].id, DEMO_YEAR.id, 1, 'SPECIAL_CHALLENGE', '2026-01-01');
+     expect(() => seedDemo(value, 'teacher-demo')).not.toThrow();
     expect(value.prepare('SELECT COUNT(*) AS count FROM academic_years').get()).toEqual({ count: 1 });
-    expect(value.prepare('SELECT COUNT(*) AS count FROM coin_ledger').get()).toEqual({ count: 1 });
+     expect(value.prepare('SELECT COUNT(*) AS count FROM coin_ledger').get()).toEqual({ count: 1 });
   });
 
   it('fails closed when fixed prepared content is changed after the first seed', () => {
@@ -106,12 +97,11 @@ describe('service-owned demo seed', () => {
 
   it('rolls back the complete seed transaction when a later fixed write fails', () => {
     const value = db();
-    value.prepare(`CREATE TRIGGER fail_demo_coin_insert BEFORE INSERT ON coin_ledger WHEN NEW.id='7c2f1a90-5d44-4c61-8f20-202620270003' BEGIN SELECT RAISE(ABORT, 'synthetic seed failure'); END`).run();
+     value.prepare(`CREATE TRIGGER fail_demo_event_insert BEFORE INSERT ON classroom_events WHEN NEW.id='${DEMO_EVENT.id}' BEGIN SELECT RAISE(ABORT, 'synthetic seed failure'); END`).run();
     expect(() => seedDemo(value, 'teacher-demo')).toThrow('synthetic seed failure');
     expect(value.prepare('SELECT COUNT(*) AS count FROM academic_years').get()).toEqual({ count: 0 });
     expect(value.prepare('SELECT COUNT(*) AS count FROM groups').get()).toEqual({ count: 0 });
     expect(value.prepare('SELECT COUNT(*) AS count FROM students').get()).toEqual({ count: 0 });
     expect(value.prepare('SELECT COUNT(*) AS count FROM xp_evidence_events').get()).toEqual({ count: 0 });
-    expect(value.prepare('SELECT COUNT(*) AS count FROM coin_ledger').get()).toEqual({ count: 0 });
   });
 });
