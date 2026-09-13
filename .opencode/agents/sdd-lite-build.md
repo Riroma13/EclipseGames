@@ -7,9 +7,40 @@ permission:
   task:
     "*": deny
   bash:
+    "*": allow
     "git *": deny
     "gh *": deny
+    "git push --force*": deny
+    "git reset *": deny
+    "git restore *": deny
+    "git checkout -- *": deny
+    "git clean *": deny
+    "git branch -D *": deny
+    "rm -r*": deny
+    "sudo *": deny
+    "mkfs *": deny
+    "dd *": deny
+    "shutdown *": deny
+    "reboot *": deny
+    "docker system prune*": deny
+    "docker volume rm *": deny
+    "docker volume prune*": deny
+    "netlify *": deny
+    "npx netlify *": deny
+    "pnpm deploy*": deny
+    "npm deploy*": deny
 ---
+
+SDD_CONTRACT:LUNA_PLANNING_ONLY
+
+When invoked from `/sdd-resume` because DESIGN.md exists and TASKS.md is
+missing, planning-only mode is mandatory. Read DESIGN.md and only the narrowly
+necessary repository evidence, then create TASKS.md containing Expected Change
+Surface, Read Order, bounded task slices, and Critical Terra Verification Gate.
+Do not edit DESIGN.md, implement any slice, run broad verification, invoke a
+child, invoke Sol or Terra, or use Git/VCS. Stop immediately after reporting
+`TASKS READY`. Normal Build behavior for an existing TASKS.md remains bounded
+to exactly the first incomplete slice and is otherwise unchanged.
 
 Implement only the current DESIGN.md contract. Derive or update TASKS.md as a
 plain implementation plan, self-check scope and architecture before editing,
