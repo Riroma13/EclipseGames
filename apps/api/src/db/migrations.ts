@@ -52,4 +52,8 @@ export const migrations: Migration[] = [
     id: '0012_rt_absent_term_energy',
     sql: readFileSync(fileURLToPath(new URL('../../drizzle/0012_rt_absent_term_energy.sql', import.meta.url)), 'utf8'),
   },
+  {
+    id: '0013_gems',
+    sql: readFileSync(fileURLToPath(new URL('../../drizzle/0013_gems.sql', import.meta.url)), 'utf8'),
+  },
 ];

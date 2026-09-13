@@ -32,7 +32,7 @@ test('projection remains a separately labelled fixture handoff without private r
   await page.getByLabel('Email').fill('teacher@example.test');
   await page.getByLabel('Password').fill('change-me-in-development');
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByRole('heading', { name: 'Classroom workspace' })).toBeVisible();
+   await expect(page.locator('header.workspace-header').getByRole('heading')).toBeVisible();
   await expect(page.getByLabel('Search students')).toBeVisible();
 
   const handoff = page.getByRole('link', { name: 'Open Classroom Preview' });

@@ -12,6 +12,29 @@ import { CalendarControls } from './CalendarControls';
 import { RtGrid } from './RtGrid';
 import type { Session } from './workspace-api';
 
+export function requestedYearRequiresArchivedLookup(requestedYearId: string | null, activeYears: AcademicYear[]) {
+  return Boolean(requestedYearId && !activeYears.some(year => year.id === requestedYearId));
+}
+
+// An explicit URL selection must be checked against the authoritative
+// include-archived response because the active-years response can be stale.
+export function requestedYearNeedsAuthoritativeLookup(requestedYearId: string | null) {
+  return Boolean(requestedYearId);
+}
+
+export function selectRequestedYear(requestedYearId: string | null, availableYears: AcademicYear[]) {
+  const selected = availableYears.find(year => year.id === requestedYearId) ?? availableYears[0];
+  return selected ? { id: selected.id, historical: Boolean(selected.archivedAt) } : null;
+}
+
+export function isSelectedYearHistorical(yearId: string | null, availableYears: AcademicYear[]) {
+  return Boolean(availableYears.find(year => year.id === yearId)?.archivedAt);
+}
+
+export function selectRequestedStudent(requestedStudentId: string | null, loadedStudents: TeacherStudent[]) {
+  return requestedStudentId && loadedStudents.some(student => student.id === requestedStudentId) ? requestedStudentId : null;
+}
+
 function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
   const [error, setError] = useState('');
 
@@ -62,12 +85,12 @@ export function WorkspaceApp() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [auth, setAuth] = useState(true);
-  const [historical, setHistorical] = useState(false);
   const [activity, setActivity] = useState<ActivityState>({ kind: 'zero' });
   const [activeSession, setActiveSession] = useState<Session | null>(null);
   const generation = useRef(0);
   const originRef = useRef<HTMLElement | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const yearsRequestGeneration = useRef(0);
   const selectedStudentRef = useRef(state.selectedStudentId);
   selectedStudentRef.current = state.selectedStudentId ?? parseContext(params.get('student'));
   const authRef = useRef(auth);
@@ -78,12 +101,19 @@ export function WorkspaceApp() {
     const nextYear = parseContext(nextParams.get('year'));
     const nextGroup = parseContext(nextParams.get('group'));
     const nextStudent = parseContext(nextParams.get('student'));
-    if (nextYear && nextYear !== yearId) {
+    if (nextYear !== yearId) {
       setYearId(nextYear);
       setGroupId(nextGroup);
       dispatch({ type: 'context-changed' });
+    } else if (nextGroup !== groupId) {
+      setGroupId(nextGroup);
+      setStudents([]);
+      setSummaries({});
+      dispatch({ type: 'context-changed' });
     }
-    if (nextStudent !== state.selectedStudentId && nextStudent) dispatch({ type: 'select', studentId: nextStudent });
+    if (nextStudent !== state.selectedStudentId) {
+      dispatch({ type: 'select', studentId: nextStudent ?? '' });
+    }
   }, [location]);
 
   function clearPrivateState() {
@@ -92,7 +122,6 @@ export function WorkspaceApp() {
     setGroups([]);
     setStudents([]);
     setSummaries({});
-    setHistorical(false);
     setActivity({ kind: 'zero' });
     dispatch({ type: 'context-changed' });
     setError('');
@@ -101,26 +130,30 @@ export function WorkspaceApp() {
 
   useEffect(() => {
     const controller = new AbortController();
-    workspaceApi.years(false, controller.signal).then(async loaded => {
+    const currentYearsRequest = ++yearsRequestGeneration.current;
+    const requestedYearId = parseContext(new URLSearchParams(location.hash.split('?')[1] ?? location.search).get('year'));
+    const yearsRequest = requestedYearNeedsAuthoritativeLookup(requestedYearId)
+      ? workspaceApi.years(true, controller.signal)
+      : workspaceApi.years(false, controller.signal);
+    yearsRequest.then(async loaded => {
+      if (currentYearsRequest !== yearsRequestGeneration.current) return;
       let available = loaded;
-      let historic = false;
-      if (!available.length) {
-        available = await workspaceApi.years(true, controller.signal);
-        historic = true;
-      }
+      if (!available.length && !requestedYearId) available = await workspaceApi.years(true, controller.signal);
+      if (currentYearsRequest !== yearsRequestGeneration.current) return;
       setYears(available);
-      setHistorical(historic || Boolean(available.find(year => year.id === yearId)?.archivedAt));
-      const chosen = available.find(year => year.id === yearId) ?? available[0];
-      if (chosen) setYearId(chosen.id);
+      const chosen = selectRequestedYear(requestedYearId, available);
+       if (chosen) {
+         setYearId(chosen.id);
+       }
       else setError('No academic years available');
     }).catch((caught: any) => {
       if (caught.name !== 'AbortError') {
         if (caught.status === 401) clearPrivateState();
         else setError('Could not load academic years. Try again.');
       }
-    }).finally(() => setLoading(false));
+    }).finally(() => { if (currentYearsRequest === yearsRequestGeneration.current) setLoading(false); });
     return () => controller.abort();
-  }, []);
+  }, [location]);
 
   useEffect(() => {
     if (!yearId || !years.some(year => year.id === yearId)) return;
@@ -159,7 +192,8 @@ export function WorkspaceApp() {
     setActivity({ kind: 'zero' });
     setError('');
     setLoading(true);
-    Promise.all([workspaceApi.students(groupId, historical, controller.signal), workspaceApi.xpSummaries(groupId, yearId, controller.signal).catch(() => null)]).then(([loaded, summaryResult]) => {
+      const selectedYearIsHistorical = isSelectedYearHistorical(yearId, years);
+     Promise.all([workspaceApi.students(groupId, selectedYearIsHistorical || Boolean(selectedStudentRef.current), controller.signal), workspaceApi.xpSummaries(groupId, yearId, controller.signal).catch(() => null)]).then(([loaded, summaryResult]) => {
       if (current !== generation.current) return;
       setStudents(loaded);
       setError('');
@@ -170,7 +204,9 @@ export function WorkspaceApp() {
         setSummaries({});
         setSummaryAvailable(false);
       }
-      if (selectedAtRequest && !loaded.some(student => student.id === selectedAtRequest)) dispatch({ type: 'selection-invalidated' });
+        const selectedStudent = selectRequestedStudent(selectedAtRequest, loaded);
+        if (selectedStudent) dispatch({ type: 'select', studentId: selectedStudent });
+       else if (selectedAtRequest) dispatch({ type: 'selection-invalidated' });
     }).catch((caught: any) => {
       if (caught.name !== 'AbortError' && current === generation.current) {
         setStudents([]);
@@ -182,7 +218,7 @@ export function WorkspaceApp() {
       }
     }).finally(() => { if (current === generation.current) setLoading(false); });
     return () => controller.abort();
-  }, [groupId, yearId, historical, groups, summaryRetry]);
+  }, [groupId, yearId, groups, summaryRetry]);
 
   const selected = students.find(student => student.id === state.selectedStudentId) ?? null;
   useEffect(() => {
@@ -212,7 +248,8 @@ export function WorkspaceApp() {
   }, [students, state.selectedStudentId, loading, groupId, groups]);
 
   const visibleStudents = useMemo(() => filterStudents(students, state.search), [students, state.search]);
-  const context: WorkspaceStudentContext | null = selected && yearId && groupId ? { academicYearId: yearId, groupId, studentId: selected.id, realName: selected.realName, alias: selected.alias, readOnly: historical || Boolean(selected.archivedAt) } : null;
+    const currentYearIsHistorical = isSelectedYearHistorical(yearId, years);
+   const context: WorkspaceStudentContext | null = selected && yearId && groupId ? { academicYearId: yearId, groupId, studentId: selected.id, realName: selected.realName, alias: selected.alias, readOnly: currentYearIsHistorical || Boolean(selected.archivedAt) } : null;
   const currentContextRef = useRef<WorkspaceStudentContext | null>(context);
   currentContextRef.current = context;
   const currentGroupContextRef = useRef({ academicYearId: yearId, groupId });
@@ -257,6 +294,7 @@ export function WorkspaceApp() {
   </section> : <p className="error" role="alert">{compactState.message} <button type="button" onClick={() => { setSummaryAvailable(true); setSummaryRetry(value => value + 1); }}>Retry</button></p>;
   const currentYear = years.find(year => year.id === yearId);
   const currentGroup = groups.find(group => group.id === groupId);
+  const showingHistorical = isSelectedYearHistorical(yearId, years);
 
   return <WorkspaceShell>
     <header className="workspace-header">
@@ -267,7 +305,7 @@ export function WorkspaceApp() {
       </div>
       <div className="workspace-header-tools">
         <div className="teacher-mode"><span className="mode-seal" aria-hidden="true">✦</span><span><strong>Game Master desk</strong><small>Private classroom view</small></span></div>
-        <YearContextControl years={years} value={yearId ?? ''} historical={historical} onChange={id => { setYearId(id); setGroupId(null); setStudents([]); setSummaries({}); setSummaryAvailable(true); setActivity({ kind: 'zero' }); dispatch({ type: 'context-changed' }); }} />
+        <YearContextControl years={years} value={yearId ?? ''} historical={showingHistorical} onChange={id => { setYearId(id); setGroupId(null); setStudents([]); setSummaries({}); setSummaryAvailable(true); setActivity({ kind: 'zero' }); dispatch({ type: 'context-changed' }); }} />
       </div>
     </header>
     {error && <p className="error" role="alert">{error} <button type="button" onClick={() => window.location.reload()}>Retry</button></p>}
@@ -277,14 +315,14 @@ export function WorkspaceApp() {
       <label className="search-control" htmlFor="student-search">Search students<input ref={searchRef} id="student-search" type="search" value={state.search} placeholder="Name or alias" onChange={event => dispatch({ type: 'search', value: event.target.value })} onKeyDown={event => { if (event.key === 'Escape') { dispatch({ type: 'search', value: '' }); searchRef.current?.focus(); } }} /></label>
       {state.search && <button type="button" aria-label="Clear student search" onClick={() => { dispatch({ type: 'search', value: '' }); searchRef.current?.focus(); }}>Clear</button>}
     </div>
-    {historical && <p className="read-only-note" role="status">Historical year — records are read-only.</p>}
+     {showingHistorical && <p className="read-only-note" role="status">Historical year — records are read-only.</p>}
      {groupId && summary}
       {currentYear && currentGroup && <CalendarControls year={currentYear} group={currentGroup} onSessionChange={setActiveSession} />}
       {currentGroup && <RtGrid group={currentGroup} session={activeSession} students={students} />}
     {!groups.length && !error ? <p className="empty-state">No groups in this year.</p> : <div className="workspace-grid">
       <section className="roster-section"><div className="section-heading"><div><p className="eyebrow">ACADEMY ROSTER</p><h2 className="section-title">Roster <span>{visibleStudents.length}</span></h2></div><span className="section-note">Select a character to open their sheet</span></div><StudentRoster students={visibleStudents} summaries={summaries} selectedId={state.selectedStudentId} query={state.search} onSelect={id => { originRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; dispatch({ type: 'select', studentId: id }); }} /></section>
       <ActivitySummary activity={activity} onRetry={() => { if (selected) workspaceApi.xpEvidence(selected.id, yearId!, 3).then(result => setActivity(activityState(result))).catch(() => setActivity(activityState(null))); }} />
-      <StudentPanel student={selected} context={context} historical={historical} feedback={state.feedback} undo={state.undo} onClose={() => dispatch({ type: 'select', studentId: '' })} originRef={originRef} onUndoResult={message => dispatch({ type: 'undo-result', message })} summary={selected ? summaries[selected.id] ?? null : null} onSummary={setSummary} onFeedback={message => dispatch({ type: 'action-result', message, undo: null })} onUndo={registerUndo} />
+       <StudentPanel student={selected} context={context} historical={currentYearIsHistorical} feedback={state.feedback} undo={state.undo} onClose={() => dispatch({ type: 'select', studentId: '' })} originRef={originRef} onUndoResult={message => dispatch({ type: 'undo-result', message })} summary={selected ? summaries[selected.id] ?? null : null} onSummary={setSummary} onFeedback={message => dispatch({ type: 'action-result', message, undo: null })} onUndo={registerUndo} />
     </div>}
   </WorkspaceShell>;
 }

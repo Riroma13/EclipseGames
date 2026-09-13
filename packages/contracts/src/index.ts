@@ -30,7 +30,19 @@ export const xpCategorySchema = z.enum(xpCategories);
 export const xpCreateBodySchema = z.object({ category: xpCategorySchema, baseXp: z.union([z.literal(1), z.literal(2), z.literal(3)]), comment: z.string().trim().max(500).optional() });
 export const xpReverseBodySchema = z.object({ reason: z.string().trim().max(500).optional() });
 export type XpCategory = (typeof xpCategories)[number];
-export type XpAnnualSummaryDto = { studentId: string; academicYearId: string; annualEffectiveXp: number; level: 1|2|3|4|5|6|7|8; progress: { current: number; required: number; nextLevel: number|null; isMaxLevel: boolean }; badges: Array<{ category: XpCategory; label: string; unlockedAt: string }> };
+export type XpAnnualSummaryDto = { studentId: string; academicYearId: string; annualEffectiveXp: number; level: 1|2|3|4|5|6|7|8; progress: { isMaxLevel: false; progressPercent: number; nextLevel: 2|3|4|5|6|7|8; xpToNextLevel: number } | { isMaxLevel: true; progressPercent: 100; nextLevel: null; xpToNextLevel: null }; badges: Array<{ category: XpCategory; label: string; unlockedAt: string }> };
+export type GemCurrency = 'EMERALD'|'RUBY'|'DIAMOND';
+export type GemBalancesDto = { studentId: string; academicYearId: string; balances: Record<GemCurrency, number> };
+export type GemLedgerEntryDto = { currency: GemCurrency; amount: 1|-1; kind: 'GRANT'|'REVOKE'|'REINSTATE'|'CORRECTION'|'SPEND'|'SPEND_REVERSAL'; createdAt: string };
+export type GemLedgerPageDto = { studentId: string; academicYearId: string; entries: GemLedgerEntryDto[]; nextCursor: string|null };
+export type GemCatalogueItemDto = { id: 'emerald-assessment-advantage'|'ruby-assessment-advantage'|'diamond-assessment-advantage'; currency: GemCurrency; cost: 1|2; type: 'ASSESSMENT_ADVANTAGE' };
+export type GemActionStateDto = {
+  studentId: string;
+  academicYearId: string;
+  assessmentContextId: string;
+  resultReward: null | { id: string; tier: 'NONE'|'EMERALD_1'|'EMERALD_2'|'RUBY_1'|'DIAMOND_1'; state: 'ACTIVE'|'REVERSED' };
+  advantageRedemption: null | { id: string; currency: GemCurrency; cost: 1|2; state: 'ACTIVE'|'REVERSED' };
+};
 
 export const coinSourceSchema = z.enum(['LEVEL_ENTITLEMENT', 'PERSONAL_IMPROVEMENT', 'EXCEPTIONAL_FRENCH', 'EXCEPTIONAL_COLLABORATION', 'SPECIAL_CHALLENGE']);
 export const manualCoinSourceSchema = z.enum(['PERSONAL_IMPROVEMENT', 'EXCEPTIONAL_FRENCH', 'EXCEPTIONAL_COLLABORATION', 'SPECIAL_CHALLENGE']);

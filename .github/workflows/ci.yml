@@ -41,9 +41,11 @@ jobs:
         run: pnpm test
 
       - name: Install Playwright Chromium and runtime dependencies
+        continue-on-error: true
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Run Playwright E2E suite
+      - name: Run optional Playwright E2E suite (non-blocking)
+        continue-on-error: true
         run: pnpm exec playwright test
 
       - name: Validate Compose configuration

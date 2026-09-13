@@ -25,7 +25,7 @@ export function registerErrorBoundary(app: FastifyInstance, audit?: (entry: Audi
     const requestId = request.id;
 
     audit?.({ code: apiError.code, requestId });
-    request.log.error({ requestId, code: apiError.code }, 'request failed');
+    app.log.error({ event: 'http.request.error', requestId, method: request.method, statusCode: apiError.statusCode, code: apiError.code }, 'http request failed');
     return reply
       .status(apiError.statusCode)
       .header('x-request-id', requestId)

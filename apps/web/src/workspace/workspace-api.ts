@@ -11,18 +11,19 @@ export type RtSummary = { studentId: string; termId: string; average: number | n
 export type TeacherStudent = { id: string; groupId: string; realName: string; alias: string; avatar: string; specialty: string | null; archivedAt: string | null };
 export type ApiFailure = Error & { status?: number; code?: string };
 export type XpCategory = 'COMMUNICATION'|'PRECISION'|'CONSISTENCY'|'COLLABORATION';
-export type XpSummary = { studentId:string; academicYearId:string; annualEffectiveXp:number; level:1|2|3|4|5|6|7|8; progress:{current:number;required:number;nextLevel:number|null;isMaxLevel:boolean}; badges:Array<{category:XpCategory;label:string;unlockedAt:string}> };
+export type XpSummary = { studentId:string; academicYearId:string; annualEffectiveXp:number; level:1|2|3|4|5|6|7|8; progress:{isMaxLevel:false;progressPercent:number;nextLevel:2|3|4|5|6|7|8;xpToNextLevel:number}|{isMaxLevel:true;progressPercent:100;nextLevel:null;xpToNextLevel:null}; badges:Array<{category:XpCategory;label:string;unlockedAt:string}> };
 export type CoinSummary = { studentId:string; academicYearId:string; balance:number };
-export type ManualCoinSource = 'PERSONAL_IMPROVEMENT'|'EXCEPTIONAL_FRENCH'|'EXCEPTIONAL_COLLABORATION'|'SPECIAL_CHALLENGE';
 export type CoinLedgerEntry = { id:string; amount:number; source:string; createdAt:string; correctionOfId:string|null };
-export type ManualCoinGrantResponse = { id:string } & CoinSummary;
-export type ManualCoinCorrectionResponse = { id:string; grantId:string; studentId:string; academicYearId:string; source:'MANUAL_CORRECTION'; amount:-1; replay:boolean };
 export type CoinReward = { id:string; name:string; cost:2|3; type:'ASSESSMENT_ADVANTAGE' };
-export type AdvantageRedemption = { id:string; studentId:string; assessmentContextId:string; rewardId:string; cost:2|3; createdAt:string; reversedAt:string|null };
+export type GemCurrency = 'EMERALD'|'RUBY'|'DIAMOND';
+export type GemBalances = { studentId:string; academicYearId:string; balances:Record<GemCurrency,number> };
+export type GemCatalogueItem = { id:'emerald-assessment-advantage'|'ruby-assessment-advantage'|'diamond-assessment-advantage'; currency:GemCurrency; cost:1|2; type:'ASSESSMENT_ADVANTAGE' };
+export type GemRedemption = { id:string; currency:GemCurrency; cost:1|2; state:'ACTIVE'|'REVERSED' };
+export type GemActionState = { studentId:string; academicYearId:string; assessmentContextId:string; resultReward:null|{id:string;tier:'NONE'|'EMERALD_1'|'EMERALD_2'|'RUBY_1'|'DIAMOND_1';state:'ACTIVE'|'REVERSED'}; advantageRedemption:null|GemRedemption };
 export type AssessmentContext = { id:string; groupId:string; name:string; archivedAt:string|null };
 export type XpEvidence = { id:string; category:XpCategory; baseXp:number; bonusXp:number; effectiveXp:number; reversedAt:string|null; createdAt:string };
 export type XpEvidenceResponse = { items:XpEvidence[]; nextCursor:string|null };
-export const activeAssessmentContexts = (contexts: AssessmentContext[]) => contexts.filter(context => !context.archivedAt);
+export const assessmentContextsForSelector = (contexts: AssessmentContext[]) => contexts;
 export function mapXpEvidence(event: { id:string; category:XpCategory; baseXp:number; specialtyBonusXp:number; effectiveXp:number; createdAt:string; reversedAt:string|null }): XpEvidence { return { id:event.id, category:event.category, baseXp:event.baseXp, bonusXp:event.specialtyBonusXp, effectiveXp:event.effectiveXp, reversedAt:event.reversedAt, createdAt:event.createdAt }; }
 export type ActivityState = { kind:'zero' } | { kind:'available'; items:XpEvidence[] } | { kind:'unavailable'; message:string };
 export function activityState(response: XpEvidenceResponse|null): ActivityState { if (!response) return { kind:'unavailable', message:'Recent activity is unavailable. Retry.' }; return response.items.length ? { kind:'available', items:response.items.slice(0, 3) } : { kind:'zero' }; }
@@ -30,8 +31,8 @@ export function deriveClassSummary(students: TeacherStudent[], summaries: Record
 export type ClassSummaryState = { kind:'available'; summary:ReturnType<typeof deriveClassSummary> } | { kind:'unavailable'; message:string };
 export function classSummaryState(students: TeacherStudent[], summaries: Record<string, XpSummary>, available = true): ClassSummaryState { return available ? { kind:'available', summary:deriveClassSummary(students, summaries) } : { kind:'unavailable', message:'Class summary is unavailable. Retry.' }; }
 
-async function get<T>(url: string, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(url, { credentials: 'same-origin', signal });
+async function get<T>(url: string, signal?: AbortSignal, cache: RequestCache = 'default'): Promise<T> {
+  const response = await fetch(url, { credentials: 'same-origin', signal, cache });
   if (!response.ok) {
     let body: { code?: string; message?: string } = {};
     try { body = await response.json(); } catch { /* safe fallback */ }
@@ -44,7 +45,9 @@ async function post<T>(url:string, body:unknown, key:string|undefined, signal?:A
 const newKey=()=>crypto.randomUUID();
 
 export const workspaceApi = {
-  years: (includeArchived = false, signal?: AbortSignal) => get<AcademicYear[]>(`/api/v1/academic-years${includeArchived ? '?includeArchived=true' : ''}`, signal),
+  // Year metadata controls the private historical/read-only boundary. It must
+  // always come from the server after reload, not from a cached active list.
+  years: (includeArchived = false, signal?: AbortSignal) => get<AcademicYear[]>(`/api/v1/academic-years?${includeArchived ? 'includeArchived=true&' : ''}reload=${crypto.randomUUID()}`, signal, 'no-store'),
   createYear: (input: { label: string; startsOn: string; endsOn: string }, signal?: AbortSignal) => post<AcademicYear>('/api/v1/academic-years', input, undefined, signal),
   groups: (yearId: string, signal?: AbortSignal) => get<Group[]>(`/api/v1/academic-years/${yearId}/groups`, signal),
   createGroup: (yearId: string, name: string, signal?: AbortSignal) => post<Group>(`/api/v1/academic-years/${yearId}/groups`, { name }, undefined, signal),
@@ -57,12 +60,15 @@ export const workspaceApi = {
   coins: (studentId:string, signal?:AbortSignal) => get<CoinSummary>(`/api/v1/students/${studentId}/coins`,signal),
   coinRewards: (signal?:AbortSignal) => get<CoinReward[]>('/api/v1/coin-rewards',signal),
   coinLedger: (studentId:string, academicYearId:string, signal?:AbortSignal) => get<CoinLedgerEntry[]>(`/api/v1/students/${studentId}/coin-ledger?academicYearId=${academicYearId}`,signal),
-  grantManualCoin: (studentId:string, academicYearId:string, source:ManualCoinSource, signal?:AbortSignal, idempotencyKey?:string) => post<ManualCoinGrantResponse>(`/api/v1/students/${studentId}/coin-grants`,{academicYearId,source},idempotencyKey ?? newKey(),signal),
-  reverseManualCoin: (grantId:string, signal?:AbortSignal, idempotencyKey?:string) => post<ManualCoinCorrectionResponse>(`/api/v1/coin-grants/${grantId}/reversal`,{},idempotencyKey ?? newKey(),signal),
+  gems: (studentId:string, academicYearId:string, signal?:AbortSignal) => get<GemBalances>(`/api/v1/students/${studentId}/gems?academicYearId=${academicYearId}`,signal),
+  gemCatalogue: (signal?:AbortSignal) => get<GemCatalogueItem[]>('/api/v1/gem-rewards',signal),
+  gemActionState: (studentId:string, academicYearId:string, assessmentContextId:string, signal?:AbortSignal) => get<GemActionState>(`/api/v1/students/${studentId}/gem-action-state?academicYearId=${academicYearId}&assessmentContextId=${assessmentContextId}`,signal),
+  grantResultReward: (studentId:string, assessmentContextId:string, score:string, signal?:AbortSignal, idempotencyKey?:string) => post<{id:string;tier:'NONE'|'EMERALD_1'|'EMERALD_2'|'RUBY_1'|'DIAMOND_1';state:'ACTIVE'}>(`/api/v1/students/${studentId}/gem-result-rewards`,{assessmentContextId,score},idempotencyKey ?? newKey(),signal),
+  correctResultReward: (rewardId:string, reason:string, signal?:AbortSignal, idempotencyKey?:string) => post<{rewardId:string;state:'REVERSED'}>(`/api/v1/gem-result-rewards/${rewardId}/correction`,{reason},idempotencyKey ?? newKey(),signal),
+  redeemGem: (studentId:string, assessmentContextId:string, rewardId:string, signal?:AbortSignal, idempotencyKey?:string) => post<GemRedemption>(`/api/v1/students/${studentId}/advantages`,{assessmentContextId,rewardId},idempotencyKey ?? newKey(),signal),
+  reverseGem: (redemptionId:string, reason:string, signal?:AbortSignal, idempotencyKey?:string) => post<{redemptionId:string;state:'REVERSED'}>(`/api/v1/advantage-redemptions/${redemptionId}/reversal`,{reason},idempotencyKey ?? newKey(),signal),
   assessmentContexts: (groupId:string, signal?:AbortSignal) => get<AssessmentContext[]>(`/api/v1/groups/${groupId}/assessment-contexts`,signal),
   createAssessmentContext: (groupId:string, name:string, signal?:AbortSignal) => post<AssessmentContext>('/api/v1/assessment-contexts',{groupId,name},undefined,signal),
-  redeemAdvantage: (studentId:string, assessmentContextId:string, rewardId:string, signal?:AbortSignal, idempotencyKey?:string) => post<AdvantageRedemption>(`/api/v1/students/${studentId}/advantages`,{assessmentContextId,rewardId},idempotencyKey ?? newKey(),signal),
-  reverseAdvantage: (redemptionId:string, signal?:AbortSignal) => post<unknown>(`/api/v1/advantage-redemptions/${redemptionId}/reversal`,{},newKey(),signal),
   calendar: (yearId:string, signal?:AbortSignal) => get<Calendar>(`/api/v1/academic-years/${yearId}/calendar`, signal),
   replaceCalendar: (yearId:string, value:{ timezone:string; terms: Array<{ code:'T1'|'T2'|'T3'; startsOn:string; endsOn:string }>; holidays:Array<{ startsOn:string; endsOn:string }>; slots:Array<{ groupId:string; weekday:number; startsAt:string; endsAt:string }> }, signal?:AbortSignal) => fetchJson<Calendar>(`/api/v1/academic-years/${yearId}/calendar`, 'PUT', value, signal),
   sessionStatus: (groupId:string, yearId:string, signal?:AbortSignal) => get<SessionStatus>(`/api/v1/groups/${groupId}/real-class-session-status?academicYearId=${yearId}`, signal),

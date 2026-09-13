@@ -12,7 +12,7 @@ export function studentInitials(name: string) {
 
 export function StudentCard({ student, summary, selected, onSelect }: { student: TeacherStudent; summary?: XpSummary; selected: boolean; onSelect: () => void }) {
   const badge = summary?.badges[0]?.label;
-  const progress = summary?.progress.isMaxLevel ? 100 : summary?.progress.required ? Math.min(100, Math.max(0, (summary.progress.current / summary.progress.required) * 100)) : 0;
+  const progress = summary?.progress.progressPercent ?? 0;
   return <button type="button" className={`workspace-student-card${selected ? ' is-selected' : ''}${student.archivedAt ? ' is-archived' : ''}`} aria-pressed={selected} aria-label={`${student.realName}, ${student.alias}${student.specialty ? `, ${student.specialty}` : ''}${student.archivedAt ? ', archived' : ''}`} onClick={onSelect}>
     <span className="student-crest avatar" aria-hidden="true"><span className="crest-initials">{studentInitials(student.realName)}</span><span className="crest-orbit" /></span>
     <span className="student-card-copy">

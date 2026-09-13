@@ -11,6 +11,7 @@
     "@fastify/cookie": "11.0.2",
     "@fastify/static": "8.2.0",
     "@eclipse/contracts": "workspace:*",
+    "@eclipse/domain": "workspace:*",
     "argon2": "0.41.1",
     "better-sqlite3": "11.10.0",
     "drizzle-orm": "0.44.5",
