@@ -3,6 +3,7 @@ description: Review Level C SDD Lite Designs with Terra after Sol authors them.
 mode: subagent
 model: openai/gpt-5.6-terra
 permission:
+  doom_loop: deny
   edit: deny
   task:
     "*": deny

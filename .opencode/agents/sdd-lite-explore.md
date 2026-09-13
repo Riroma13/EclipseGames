@@ -3,6 +3,7 @@ description: Explore and classify SDD Lite changes with Luna.
 mode: subagent
 model: openai/gpt-5.6-luna
 permission:
+  doom_loop: deny
   edit: deny
   task:
     "*": deny

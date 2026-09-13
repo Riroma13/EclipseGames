@@ -19,9 +19,13 @@ repository evidence. There is no runtime state machine, trace, fingerprint,
 checkpoint, recovery, rebaseline, Apply, Archive, Health, or Repository Ready.
 
 - Design decides scope, architecture, privacy, migration, and acceptance.
-- Build implements the approved Design with Luna and never Ships.
+- Build implements the approved Design with Luna in one bounded cohesive slice
+  at a time and never Ships.
 - Verify records commands, results, findings, and residual risk in `VERIFY.md`.
 - Ship requires explicit `/sdd-ship` and is the only SDD Git/VCS boundary.
+- Start and Resume use repository evidence only. They do not create lifecycle
+  state, automatically promote work to Sol/Terra, or preload unrelated SPECs.
+- Terra is a targeted Level C review/verification gate, not a default reviewer.
 
 ## Product constraints
 
