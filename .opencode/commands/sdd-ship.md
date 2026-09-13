@@ -20,3 +20,16 @@ to a sensible candidate branch, then stage only the selected change and its
 genuinely related fixes, create a conventional commit, push to origin, create
 the PR, wait for required CI, and merge only when green. Never force, reset,
 rewrite history, tag, release, deploy, or include unrelated work.
+
+Ship is read-only with respect to work content: it must not edit DESIGN.md,
+TASKS.md, VERIFY.md, implementation, tests, configuration, or candidate
+documentation. Stale, contradictory, incomplete, or failing evidence requires
+a bounded correction-required report and a stop; never silently fix it.
+SDD_CONTRACT:SHIP_VERIFY_FRESHNESS_CANDIDATE_SCOPED
+
+For non-trivial PR Markdown, create a literal-safe temporary body file under
+`/tmp` using a literal-safe method such as a quoted heredoc, use `gh pr create
+... --body-file <file>` or `gh pr edit ... --body-file <file>`, then clean up
+the temporary file. Never stage temporary files and never
+interpolate non-trivial Markdown through `--body`; preserve literal Markdown
+metacharacters.
