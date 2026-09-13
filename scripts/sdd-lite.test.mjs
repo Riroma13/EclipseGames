@@ -378,3 +378,53 @@ test('SPEC-0031 defaults Verify to Luna and has no runtime circuit-breaker machi
     assert.doesNotMatch(source, /(?:create|persist|store|implement|add)\s+(?:an?\s+)?(?:attempt counter|runtime tracking framework|automatic Terra-Build-Terra)/i);
   }
 });
+
+test('SPEC-0032 keeps context targeted and SDD Lite independent from Engram', () => {
+  const authority = read('AGENTS.md');
+  assert.match(authority, /Do not automatically load all five `\.ai\/context` files/);
+  assert.match(authority, /only when a concrete unresolved need requires it/);
+  assert.match(authority, /`DESIGN\.md`, `TASKS\.md`, and `VERIFY\.md`[\s\S]*normal working memory/);
+  assert.match(authority, /Historical context is exceptional, not\s+the default/);
+  assert.match(authority, /Do not execute the global Engram protocol/);
+  assert.match(authority, /automatic `engram_\*` calls/);
+  assert.match(authority, /Engram may remain installed or connected/);
+  assert.match(authority, /must not require Engram for routing,\s*state, evidence, or completion/);
+
+  const commandAndAgentSources = [
+    ...[
+      'sdd-start.md',
+      'sdd-resume.md',
+      'sdd-verify.md',
+      'sdd-ship.md',
+    ].map((name) => read(`.opencode/commands/${name}`)),
+    ...[
+      'sdd-lite-orchestrator.md',
+      'sdd-lite-explore.md',
+      'sdd-lite-design.md',
+      'sdd-lite-review-terra.md',
+      'sdd-lite-build.md',
+      'sdd-lite-verify-luna.md',
+      'sdd-lite-verify-terra.md',
+      'sdd-lite-ship.md',
+    ].map((name) => read(`.opencode/agents/${name}`)),
+  ];
+  for (const source of commandAndAgentSources) {
+    assert.doesNotMatch(source, /engram/i, 'project commands and agents must not require Engram');
+    assert.doesNotMatch(source, /engram_mem_\*/i);
+  }
+
+  assert.doesNotMatch(JSON.stringify(config), /engram|memory_state|runtime_state/i);
+  for (const path of [
+    'scripts/sdd-runtime.mjs',
+    'scripts/sdd-memory.mjs',
+    '.opencode/sdd-runtime.json',
+    '.opencode/sdd-memory.json',
+    '.sdd-runtime',
+  ]) {
+    assert.equal(exists(path), false, path);
+  }
+  assert.doesNotMatch(
+    commandAndAgentSources.join('\n'),
+    /(?:create|persist|store|implement|add)\s+(?:an?\s+)?(?:runtime\s+)?(?:memory|state)\s+(?:subsystem|store|tracking)/i,
+  );
+});
