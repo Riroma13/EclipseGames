@@ -4,11 +4,30 @@ mode: primary
 model: openai/gpt-5.6-luna
 permission:
   doom_loop: deny
-  edit: deny
+  edit: allow
   bash:
-    "*": ask
+    "*": allow
     "git *": deny
     "gh *": deny
+    "git push --force*": deny
+    "git reset *": deny
+    "git restore *": deny
+    "git checkout -- *": deny
+    "git clean *": deny
+    "git branch -D *": deny
+    "rm -r*": deny
+    "sudo *": deny
+    "mkfs *": deny
+    "dd *": deny
+    "shutdown *": deny
+    "reboot *": deny
+    "docker system prune*": deny
+    "docker volume rm *": deny
+    "docker volume prune*": deny
+    "netlify *": deny
+    "npx netlify *": deny
+    "pnpm deploy*": deny
+    "npm deploy*": deny
   task:
     "*": deny
     "sdd-lite-explore": allow

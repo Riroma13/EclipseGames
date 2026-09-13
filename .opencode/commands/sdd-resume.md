@@ -3,16 +3,39 @@ description: Resume incomplete SDD Lite work from repository evidence.
 agent: sdd-lite-orchestrator
 ---
 
-Resume SDD Lite work for `$ARGUMENTS`.
+Resume SDD Lite work for `$ARGUMENTS` using this deterministic state machine.
 
-Inspect the repository and select the evident incomplete SPEC, then select one
-bounded incomplete task slice. Read DESIGN.md,
-TASKS.md when present, VERIFY.md when present, current code/tests, and the
-worktree. Continue the incomplete BUILD work without runtime state, traces,
-fingerprints, checkpoints, or lifecycle markers. Never reactivate completed
-work, guess between ambiguous SPECs, invoke Ship, or perform Git/VCS actions.
-Return to Design only for a material scope, architecture, privacy, security,
-migration, or data-integrity decision.
+SDD_CONTRACT:RESUME_MISSING_TASKS_LUNA_PLANNING_ONLY
+SDD_CONTRACT:RESUME_IMPLEMENT_ONE_SLICE_ONLY
+SDD_CONTRACT:RESUME_NO_DESIGN_REENTRY
+
+Select one evident SPEC from repository evidence without runtime state, traces,
+fingerprints, checkpoints, or lifecycle markers. Never guess between ambiguous
+SPECs, invoke Ship, or perform Git/VCS actions.
+
+CASE A — DESIGN.md is missing:
+- STOP and instruct the maintainer to use `/sdd-start`.
+- Do not invoke `sdd-lite-design`, Sol, or any replacement.
+
+CASE B — DESIGN.md exists and TASKS.md is missing:
+- Invoke exactly one `sdd-lite-build` running Luna with the explicit
+  `SDD_CONTRACT:LUNA_PLANNING_ONLY` contract.
+- The child may read DESIGN.md and narrowly inspect evidence needed to create
+  TASKS.md with Expected Change Surface, Read Order, bounded task slices, and
+  Critical Terra Verification Gate.
+- It must not edit DESIGN.md, implement a slice, invoke another child, invoke
+  Sol or Terra, run broad verification, or use Git/VCS.
+- After TASKS.md exists, return exactly `TASKS READY` and STOP. Do not continue
+  into implementation.
+
+CASE C — DESIGN.md and TASKS.md exist with incomplete work:
+- Invoke exactly one `sdd-lite-build` running Luna for only the first incomplete
+  bounded task slice, then STOP.
+- Do not automatically execute the next slice.
+
+CASE D — all TASKS.md work is complete:
+- STOP and direct the maintainer to `/sdd-verify`.
+- Never re-enter Design.
 
 Resume Build only through the exact real agent `sdd-lite-build` running Luna. Do
 not automatically invoke Sol or Terra unless the selected Design explicitly

@@ -72,7 +72,7 @@ test('SDD Lite enforces real model-routed child stages', () => {
 
   assert.match(orchestrator, /^mode:\s*primary$/m);
   assert.match(orchestrator, /^model:\s*openai\/gpt-5\.6-luna$/m);
-  assert.match(orchestrator, /^\s*edit:\s*deny$/m);
+  assert.match(orchestrator, /^\s*edit:\s*allow$/m);
   assert.match(orchestrator, /^\s*"\*":\s*deny$/m);
 
   const taskBlock = orchestrator.match(/^  task:\n((?:    "[^"]+": (?:allow|deny)\n?)+)/m)?.[1];
@@ -327,7 +327,9 @@ test('SPEC-0031 keeps autonomy bounded and permissions fail closed', () => {
     assert.match(read(`.opencode/agents/${agent}`), /^\s*doom_loop:\s*deny$/m);
   }
 
-  assert.match(read('.opencode/commands/sdd-resume.md'), /one\nbounded incomplete task slice/);
+  assertContracts(read('.opencode/commands/sdd-resume.md'), [
+    'RESUME_IMPLEMENT_ONE_SLICE_ONLY',
+  ], 'Resume command');
   assert.match(read('.opencode/agents/sdd-lite-build.md'), /Do not run Playwright by default/);
   assert.match(read('.opencode/agents/sdd-lite-build.md'), /Git\/VCS\s+operations/);
   assert.match(read('.opencode/agents/sdd-lite-orchestrator.md'), /Do not automatically promote/);
@@ -336,7 +338,7 @@ test('SPEC-0031 keeps autonomy bounded and permissions fail closed', () => {
 test('SPEC-0031 has explicit mutation denial', () => {
   const orchestrator = read('.opencode/agents/sdd-lite-orchestrator.md');
   assert.match(orchestrator, /^\s*bash:\n/m);
-  assert.match(orchestrator, /^\s+"\*": ask$/m);
+  assert.match(orchestrator, /^\s+"\*": allow$/m);
   assert.match(orchestrator, /^\s+"git \*": deny$/m);
   assert.match(orchestrator, /^\s+"gh \*": deny$/m);
 
@@ -518,4 +520,45 @@ test('SPEC-0033 scopes circuit breakers to fresh bounded tasks without runtime s
     assert.ok(textWithTerms(text, ['tracking']), label);
     assert.ok(textWithTerms(text, ['state', 'machinery']), label);
   }
+});
+
+test('SPEC-0034 makes Resume fail closed and bounded', () => {
+  const resume = read('.opencode/commands/sdd-resume.md');
+  const build = read('.opencode/agents/sdd-lite-build.md');
+
+  assertContracts(resume, [
+    'RESUME_MISSING_TASKS_LUNA_PLANNING_ONLY',
+    'RESUME_IMPLEMENT_ONE_SLICE_ONLY',
+    'RESUME_NO_DESIGN_REENTRY',
+  ], 'Resume command');
+  assertContracts(build, ['LUNA_PLANNING_ONLY'], 'Build agent');
+  assert.match(resume, /DESIGN\.md is missing[\s\S]*\/sdd-start/);
+  assert.match(resume, /DESIGN\.md exists and TASKS\.md is missing[\s\S]*sdd-lite-build[\s\S]*TASKS READY/);
+  assert.match(resume, /DESIGN\.md and TASKS\.md exist with incomplete work[\s\S]*first incomplete/);
+  assert.match(resume, /all TASKS\.md work is complete[\s\S]*\/sdd-verify/);
+  assert.match(build, /planning-only mode is mandatory[\s\S]*TASKS READY/);
+  assert.doesNotMatch(resume, /Return to Design/);
+});
+
+test('SPEC-0034 configures routine agent Bash autonomy with destructive denials', () => {
+  const orchestrator = read('.opencode/agents/sdd-lite-orchestrator.md');
+  const build = read('.opencode/agents/sdd-lite-build.md');
+
+  for (const [label, source] of [['orchestrator', orchestrator], ['build', build]]) {
+    assert.match(source, /^\s+bash:\n/m, `${label} Bash permission block`);
+    assert.match(source, /^\s+"\*": allow$/m, `${label} routine Bash must allow`);
+    for (const pattern of [
+      'git *', 'gh *', 'git push --force*', 'git reset *', 'git restore *',
+      'git clean *', 'git branch -D *', 'rm -r*', 'sudo *', 'mkfs *', 'dd *',
+      'shutdown *', 'reboot *', 'docker system prune*',
+      'docker volume rm *', 'docker volume prune*', 'netlify *',
+    ]) {
+      const escaped = pattern.replace(/[.*+?^${}()|[\[\]\\]/g, '\\$&');
+      assert.match(source, new RegExp(`"${escaped}": deny`), `${label} must deny ${pattern}`);
+    }
+    assert.match(source, /^\s+doom_loop:\s*deny$/m);
+  }
+
+  assert.match(orchestrator, /^\s*task:\n/m);
+  assert.match(orchestrator, /^\s+"sdd-lite-build": allow$/m);
 });
