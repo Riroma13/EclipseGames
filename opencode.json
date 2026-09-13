@@ -1,8 +1,13 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
+    "doom_loop": "deny",
     "bash": {
-    "npm publish*": "deny",
+      "node --test scripts/sdd-lite.test.mjs": "allow",
+      "pnpm test:sdd-lite": "allow",
+      "opencode debug config": "allow",
+      "opencode debug agent *": "allow",
+      "npm publish*": "deny",
       "pnpm publish*": "deny",
       "docker push *": "deny",
       "docker compose up -d*": "deny",

@@ -22,7 +22,7 @@ tokens, or artifact-materialisation protocol.
 |---|---|---|
 | A | Small/local; no migration, sensitive boundary, or cross-domain effect | Luna throughout; concise artifacts |
 | B | Normal feature | Sol Design -> Luna Build -> Luna Verify |
-| C | Architecture, migration, privacy/security, or significant cross-domain change | Luna Explore -> Sol Design -> separate Terra Review -> Luna Build -> Terra Verify |
+| C | Architecture, migration, privacy/security, or significant cross-domain change | Luna Explore -> Sol Design -> separate Terra Review -> Luna Build -> Luna Verify by default; Terra Verify only with an explicit gate |
 
 Terra reviews the completed Sol Design separately and verifies Level C work; it
 never replaces Sol as the Design author.
@@ -30,7 +30,7 @@ never replaces Sol as the Design author.
 The exact non-Ship route is Explore → `sdd-lite-explore` (Luna) → Design →
 `sdd-lite-design` (Sol) → Level C Review → `sdd-lite-review-terra` (Terra) →
 Build → `sdd-lite-build` (Luna) → Verify A/B → `sdd-lite-verify-luna` (Luna),
-or Verify C → `sdd-lite-verify-terra` (Terra). Every required phase uses its
+or explicitly gated Terra Verify → `sdd-lite-verify-terra` (Terra). Every required phase uses its
 exact real agent. If an agent is unavailable, disallowed, or cannot be invoked,
 stop with `ROUTING ERROR`; never substitute General, another phase agent, or
 persona simulation. Design-review blockers return to `sdd-lite-design`.
@@ -58,6 +58,14 @@ and acceptance; run sufficient checks and record commands, results, and risk in
 current evidence satisfies every criterion without essential failures, never
 because a parser found a magic marker.
 
+**Circuit breaker:** within one bounded Luna task, after the same debugging or
+testing strategy fails twice, stop and report exactly: Task, Repeated strategy,
+Evidence from attempt 1, Evidence from attempt 2, Why another repetition is
+unlikely to add information, Recommended next narrower investigation. Permit a
+second execution only after concrete lower-layer root-cause evidence and a fix;
+prohibit a third automatic repetition, expensive model escalation, Terra/Sol,
+scope broadening, repeated Playwright, and runtime tracking.
+
 **Ship:** invoking `/sdd-ship` is itself explicit maintainer authorization for
 final verification, intended-diff staging, conventional commit, push, PR, CI
 wait, and green merge. An optional SPEC can narrow scope; without one, Ship
@@ -69,13 +77,15 @@ unsuitable candidate branch before committing.
 
 ## Command Contracts
 
-These are all public commands; Start or Resume enters Build.
+These are all public commands; Start or Resume enters Build when the selected
+route explicitly requires it. Commands are lightweight evidence-driven entry
+points, not an automatic lifecycle engine.
 
 | Command | Responsibility |
 |---|---|
-| `/sdd-start <change>` | Check active work, classify A/B/C, create SPEC and Design, route Luna/Sol and Level C Terra review, then Build. Never Ship. |
-| `/sdd-resume [SPEC]` | Inspect branch, artifacts, worktree, code, and tests; continue evident incomplete work. Ask only when candidates require human selection; never reactivate completed work or Ship. |
-| `/sdd-verify [SPEC]` | Route Luna/Terra by level, permit bounded Build corrections, and create/refresh `VERIFY.md`. Never mutate Git. |
+| `/sdd-start <change>` | Check active work, classify A/B/C, create/refine the Design, and continue only through the Design-selected exact route. Never Ship. |
+| `/sdd-resume [SPEC]` | Inspect repository evidence and continue one evident incomplete task slice. Ask only when candidates require human selection; never reactivate completed work or Ship. |
+| `/sdd-verify [SPEC]` | Route to Luna by default; use Terra only for `Critical Terra Verification Gate: REQUIRED` in TASKS.md or an explicit maintainer request; permit bounded Build corrections and create/refresh `VERIFY.md`. Never mutate Git. |
 | `/sdd-ship [SPEC]` | Require explicit invocation, rerun verification, isolate the intended diff, commit, push, create the PR, wait for CI, and merge only when green. |
 
 ## Stop and Privacy

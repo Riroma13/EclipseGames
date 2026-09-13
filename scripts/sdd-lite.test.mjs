@@ -39,9 +39,9 @@ test('SDD Lite routing and Git boundary are explicit', () => {
 
   assert.equal(start.agent, 'sdd-lite-orchestrator');
   assert.equal(verifyCommand.agent, 'sdd-lite-orchestrator');
-  assert.match(verifyCommand.prompt, /Levels A\/B go directly to `sdd-lite-verify-luna`/);
-  assert.match(verifyCommand.prompt, /Level C goes directly to the\s+existing `sdd-lite-verify-terra` agent/);
-  assert.match(verifyCommand.prompt, /SPEC-0018 is Level C and must use Terra/);
+  assert.match(verifyCommand.prompt, /default to `sdd-lite-verify-luna`, including Level C/);
+  assert.match(verifyCommand.prompt, /Critical Terra Verification Gate: REQUIRED/);
+  assert.match(verifyCommand.prompt, /Never use Terra merely due to Level C, after every Build, or in\s+an automatic Terra-Build-Terra loop/);
   assert.doesNotMatch(verifyCommand.prompt, /gentle-orchestrator|Portable orchestrator/);
   assert.match(orchestrator, /sdd-lite-explore[\s\S]*Luna[\s\S]*sdd-lite-design[\s\S]*Sol[\s\S]*sdd-lite-review-terra[\s\S]*Terra[\s\S]*sdd-lite-build[\s\S]*Luna[\s\S]*sdd-lite-verify-terra/);
   assert.match(orchestrator, /Terra must never author or rewrite DESIGN\.md/);
@@ -169,8 +169,8 @@ test('Non-Ship command docs state exact phase routing and fail closed', () => {
   assert.match(start.prompt, /Level C[\s\S]*sdd-lite-review-terra[\s\S]*Terra/);
   assert.match(start.prompt, /Build[\s\S]*sdd-lite-build[\s\S]*Luna/);
   assert.match(resume.prompt, /Build[\s\S]*sdd-lite-build[\s\S]*Luna/);
-  assert.match(verify.prompt, /A\/B[\s\S]*sdd-lite-verify-luna[\s\S]*Luna/);
-  assert.match(verify.prompt, /Level C[\s\S]*sdd-lite-verify-terra[\s\S]*Terra/);
+  assert.match(verify.prompt, /default[\s\S]*sdd-lite-verify-luna[\s\S]*Luna/);
+  assert.match(verify.prompt, /explicitly gated[\s\S]*sdd-lite-verify-terra[\s\S]*Terra/);
   assert.match(start.prompt, /blockers[\s\S]*sdd-lite-design/);
 
   for (const authority of ['docs/SDD-WORKFLOW.md', 'docs/architecture/sdd-lite.md']) {
@@ -296,4 +296,85 @@ test('SPEC-0017 closes with preserved Design, Tasks, review history, and Verify 
   assert.match(read('docs/specs/SPEC-0017-functional-canonicalization-gap-audit/TASKS.md'), /Complete under SDD Lite/);
   assert.match(read('docs/specs/SPEC-0017-functional-canonicalization-gap-audit/ARCHITECTURE-REVIEW.md'), /PASS WITH CONDITIONS/);
   assert.match(read('docs/specs/SPEC-0017-functional-canonicalization-gap-audit/VERIFY.md'), /C-01 remains an open production privacy\/recoverability gate/);
+});
+
+test('SPEC-0031 keeps autonomy bounded and permissions fail closed', () => {
+  assert.equal(config.permission.doom_loop, 'deny');
+  assert.equal(config.permission.bash['*'], 'ask');
+  assert.equal(config.permission.bash['pnpm test:sdd-lite'], 'allow');
+  assert.equal(config.permission.bash['node --test scripts/sdd-lite.test.mjs'], 'allow');
+
+  const tasks = read('docs/specs/SPEC-0031-sdd-lite-efficiency-autonomy/TASKS.md');
+  assert.match(tasks, /Expected Change Surface/);
+  assert.match(tasks, /review forecast, not an allowlist/);
+  assert.match(tasks, /one bounded incomplete task slice|one implementation slice/);
+
+  const authority = read('AGENTS.md');
+  assert.match(authority, /do not create lifecycle\s+state/i);
+  assert.match(authority, /targeted Level C review\/verification gate/);
+
+  for (const agent of [
+    'sdd-lite-orchestrator.md',
+    'sdd-lite-explore.md',
+    'sdd-lite-design.md',
+    'sdd-lite-review-terra.md',
+    'sdd-lite-build.md',
+    'sdd-lite-verify-luna.md',
+    'sdd-lite-verify-terra.md',
+    'sdd-lite-ship.md',
+  ]) {
+    assert.match(read(`.opencode/agents/${agent}`), /^\s*doom_loop:\s*deny$/m);
+  }
+
+  assert.match(read('.opencode/commands/sdd-resume.md'), /one\nbounded incomplete task slice/);
+  assert.match(read('.opencode/agents/sdd-lite-build.md'), /Do not run Playwright by default/);
+  assert.match(read('.opencode/agents/sdd-lite-build.md'), /Git\/VCS\s+operations/);
+  assert.match(read('.opencode/agents/sdd-lite-orchestrator.md'), /Do not automatically promote/);
+});
+
+test('SPEC-0031 has explicit mutation denial and the two-failure circuit breaker', () => {
+  const orchestrator = read('.opencode/agents/sdd-lite-orchestrator.md');
+  assert.match(orchestrator, /^\s*bash:\n/m);
+  assert.match(orchestrator, /^\s+"\*": ask$/m);
+  assert.match(orchestrator, /^\s+"git \*": deny$/m);
+  assert.match(orchestrator, /^\s+"gh \*": deny$/m);
+
+  const circuitBreakerSources = [
+    read('.opencode/commands/sdd-verify.md'),
+    read('.opencode/agents/sdd-lite-orchestrator.md'),
+    read('.opencode/agents/sdd-lite-build.md'),
+    read('.opencode/agents/sdd-lite-verify-luna.md'),
+  ];
+  for (const source of circuitBreakerSources) {
+    for (const field of [
+      /Task/,
+      /Repeated\s+strategy/,
+      /Evidence\s+from\s+attempt\s+1/,
+      /Evidence\s+from\s+attempt\s+2/,
+      /Why another\s+repetition is unlikely to\s+add\s+information/,
+      /Recommended next narrower\s+investigation/,
+    ]) assert.match(source, field);
+    assert.match(source, /second\s+execution/i);
+    assert.match(source, /concrete\s+lower-layer\s+root-cause evidence and a fix/i);
+    assert.match(source, /third (?:automatic )?(?:repetition|time)/i);
+    assert.match(source, /expensive model escalation|escalate(?: to)? models?|escalate to an expensive model/i);
+    assert.match(source, /Terra\/Sol/);
+    assert.match(source, /scope\s+broadening|broaden\s+scope/);
+    assert.match(source, /repeat(?:ed)?\s+Playwright/);
+  }
+});
+
+test('SPEC-0031 defaults Verify to Luna and has no runtime circuit-breaker machinery', () => {
+  const verifyCommand = read('.opencode/commands/sdd-verify.md');
+  const terra = read('.opencode/agents/sdd-lite-verify-terra.md');
+  const tasks = read('docs/specs/SPEC-0031-sdd-lite-efficiency-autonomy/TASKS.md');
+  assert.match(verifyCommand, /default to `sdd-lite-verify-luna`, including Level C/);
+  assert.match(verifyCommand, /TASKS\.md explicitly says[\s\S]*Critical Terra Verification Gate: REQUIRED/);
+  assert.match(terra, /Level C alone is not a\s+trigger/);
+  assert.match(tasks, /Critical Terra Verification Gate: NOT REQUIRED/);
+  assert.doesNotMatch(verifyCommand, /SPEC-0018 is Level C and must use Terra/);
+  assert.doesNotMatch(verifyCommand, /Level C goes directly to.*sdd-lite-verify-terra/);
+  for (const source of [verifyCommand, tasks, read('docs/architecture/sdd-lite.md')]) {
+    assert.doesNotMatch(source, /(?:create|persist|store|implement|add)\s+(?:an?\s+)?(?:attempt counter|runtime tracking framework|automatic Terra-Build-Terra)/i);
+  }
 });

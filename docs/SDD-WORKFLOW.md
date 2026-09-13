@@ -27,14 +27,14 @@ authoritative.
 - Level B: normal feature; Sol Design, Luna Build, Luna Verify.
 - Level C: architecture, migration, privacy/security, or significant
   cross-domain work; Luna Explore, Sol Design, separate Terra review, Luna
-  Build, Terra Verify.
+  Build, then Luna Verify unless a Critical Terra Verification Gate is explicit.
 
 Terra reviews the completed Sol Design and never authors or rewrites it.
 
 The exact non-Ship route is: Explore → `sdd-lite-explore` (Luna) → Design →
 `sdd-lite-design` (Sol) → Level C Review → `sdd-lite-review-terra` (Terra) →
 Build → `sdd-lite-build` (Luna) → Verify A/B → `sdd-lite-verify-luna` (Luna),
-or Verify C → `sdd-lite-verify-terra` (Terra). Every required phase uses its
+or explicitly gated Terra Verify → `sdd-lite-verify-terra` (Terra). Every required phase uses its
 exact real agent. If an agent is unavailable, disallowed, or cannot be invoked,
 stop with `ROUTING ERROR`; never substitute General, another phase agent, or
 persona simulation. Design-review blockers return to `sdd-lite-design`.
@@ -78,15 +78,18 @@ approval is not required.
 
 ## Commands
 
-- `/sdd-start <change>` creates or refines Design and enters Build.
-- `/sdd-resume [SPEC]` continues evident incomplete work from repository
-  artifacts and implementation evidence.
+- `/sdd-start <change>` inspects evidence, creates or refines Design, and enters
+  Build only after the required route is explicit.
+- `/sdd-resume [SPEC]` continues exactly one evident incomplete slice from
+  repository artifacts and implementation evidence.
 - `/sdd-verify [SPEC]` creates or refreshes `VERIFY.md` without Git/VCS work.
 - `/sdd-ship [SPEC]` is the sole explicit Git/VCS handoff; `[SPEC]` is optional
   when repository evidence identifies one obvious verified change.
 
 Resume never reactivates completed work, guesses between ambiguous SPECs, or
-uses hidden runtime state. Start and Resume stop for material ambiguity.
+uses hidden runtime state. Start and Resume do not automatically invoke Sol or
+Terra outside the Design-selected route. Start and Resume stop for material
+ambiguity.
 
 ### Local demo development
 

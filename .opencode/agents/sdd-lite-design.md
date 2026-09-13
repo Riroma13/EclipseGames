@@ -3,6 +3,7 @@ description: Author SDD Lite Design contracts with Sol.
 mode: subagent
 model: openai/gpt-5.6-sol
 permission:
+  doom_loop: deny
   task:
     "*": deny
   bash:

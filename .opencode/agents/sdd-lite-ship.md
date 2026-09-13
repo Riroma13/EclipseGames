@@ -3,6 +3,7 @@ description: Perform the explicit SDD Lite Ship handoff.
 mode: primary
 model: openai/gpt-5.6-luna
 permission:
+  doom_loop: deny
   bash:
     "git status*": allow
     "git diff*": allow
