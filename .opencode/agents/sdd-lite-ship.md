@@ -34,3 +34,30 @@ committing. Stage only files belonging to that change and genuinely related
 fixes, leaving unrelated worktree changes untouched. Never force, reset,
 rewrite history, tag, release, deploy, or act on ambiguous scope. This is the
 sole SDD Lite agent allowed to perform Git/VCS actions.
+
+Ship is read-only with respect to work content. Do not edit DESIGN.md, TASKS.md,
+VERIFY.md, implementation, tests, configuration, or candidate documentation.
+If evidence is stale, contradictory, incomplete, or failing, return a bounded
+`correction-required` report naming the evidence and stop; never silently fix
+content. Branch correction and the authorized Git/VCS handoff are the only
+content-adjacent mutations permitted.
+SDD_CONTRACT:SHIP_CANDIDATE_CONTENT_READ_ONLY
+SDD_CONTRACT:SHIP_STOP_ON_STALE_EVIDENCE
+SDD_CONTRACT:SHIP_VERIFY_FRESHNESS_CANDIDATE_SCOPED
+Prior successful VERIFY.md evidence is reusable when it records verification for
+the active candidate, its scope matches, no known material candidate change
+occurred afterward, and current repository evidence does not contradict it.
+Freshness is candidate-scoped, not scoped to the current Ship task or session.
+An independent green Ship preflight may corroborate prior verification, but it
+must not make prior VERIFY.md stale, require Ship to rewrite VERIFY.md, or
+require another Verify cycle. Block only for a material candidate change,
+contradictory evidence, failed checks, or genuinely stale acceptance evidence.
+
+Construct non-trivial PR bodies literally in a temporary file under `/tmp`
+(for example, a quoted heredoc `<<'EOF'` or another literal-safe creation
+method), pass that file to `gh pr create` or
+`gh pr edit` with `--body-file`, and clean it up afterward. Never stage a temp
+file. Never use interpolated non-trivial Markdown with `--body`; literal
+Markdown metacharacters must survive unchanged.
+SDD_CONTRACT:SHIP_PR_BODY_FILE_ONLY
+SDD_CONTRACT:SHIP_TEMP_FILES_NOT_STAGED

@@ -6,6 +6,7 @@ import test from 'node:test';
 const root = process.cwd();
 const read = (relativePath) => readFileSync(join(root, relativePath), 'utf8');
 const exists = (relativePath) => existsSync(join(root, relativePath));
+const normalizeProse = (source) => source.replace(/\s+/g, ' ').trim();
 const config = JSON.parse(read('opencode.json'));
 const resolveCommand = (relativePath, argumentsText, userMessage) => {
   const source = read(relativePath);
@@ -332,39 +333,16 @@ test('SPEC-0031 keeps autonomy bounded and permissions fail closed', () => {
   assert.match(read('.opencode/agents/sdd-lite-orchestrator.md'), /Do not automatically promote/);
 });
 
-test('SPEC-0031 has explicit mutation denial and the two-failure circuit breaker', () => {
+test('SPEC-0031 has explicit mutation denial', () => {
   const orchestrator = read('.opencode/agents/sdd-lite-orchestrator.md');
   assert.match(orchestrator, /^\s*bash:\n/m);
   assert.match(orchestrator, /^\s+"\*": ask$/m);
   assert.match(orchestrator, /^\s+"git \*": deny$/m);
   assert.match(orchestrator, /^\s+"gh \*": deny$/m);
 
-  const circuitBreakerSources = [
-    read('.opencode/commands/sdd-verify.md'),
-    read('.opencode/agents/sdd-lite-orchestrator.md'),
-    read('.opencode/agents/sdd-lite-build.md'),
-    read('.opencode/agents/sdd-lite-verify-luna.md'),
-  ];
-  for (const source of circuitBreakerSources) {
-    for (const field of [
-      /Task/,
-      /Repeated\s+strategy/,
-      /Evidence\s+from\s+attempt\s+1/,
-      /Evidence\s+from\s+attempt\s+2/,
-      /Why another\s+repetition is unlikely to\s+add\s+information/,
-      /Recommended next narrower\s+investigation/,
-    ]) assert.match(source, field);
-    assert.match(source, /second\s+execution/i);
-    assert.match(source, /concrete\s+lower-layer\s+root-cause evidence and a fix/i);
-    assert.match(source, /third (?:automatic )?(?:repetition|time)/i);
-    assert.match(source, /expensive model escalation|escalate(?: to)? models?|escalate to an expensive model/i);
-    assert.match(source, /Terra\/Sol/);
-    assert.match(source, /scope\s+broadening|broaden\s+scope/);
-    assert.match(source, /repeat(?:ed)?\s+Playwright/);
-  }
 });
 
-test('SPEC-0031 defaults Verify to Luna and has no runtime circuit-breaker machinery', () => {
+test('SPEC-0031 defaults Verify to Luna', () => {
   const verifyCommand = read('.opencode/commands/sdd-verify.md');
   const terra = read('.opencode/agents/sdd-lite-verify-terra.md');
   const tasks = read('docs/specs/SPEC-0031-sdd-lite-efficiency-autonomy/TASKS.md');
@@ -374,9 +352,6 @@ test('SPEC-0031 defaults Verify to Luna and has no runtime circuit-breaker machi
   assert.match(tasks, /Critical Terra Verification Gate: NOT REQUIRED/);
   assert.doesNotMatch(verifyCommand, /SPEC-0018 is Level C and must use Terra/);
   assert.doesNotMatch(verifyCommand, /Level C goes directly to.*sdd-lite-verify-terra/);
-  for (const source of [verifyCommand, tasks, read('docs/architecture/sdd-lite.md')]) {
-    assert.doesNotMatch(source, /(?:create|persist|store|implement|add)\s+(?:an?\s+)?(?:attempt counter|runtime tracking framework|automatic Terra-Build-Terra)/i);
-  }
 });
 
 test('SPEC-0032 keeps context targeted and SDD Lite independent from Engram', () => {
@@ -427,4 +402,120 @@ test('SPEC-0032 keeps context targeted and SDD Lite independent from Engram', ()
     commandAndAgentSources.join('\n'),
     /(?:create|persist|store|implement|add)\s+(?:an?\s+)?(?:runtime\s+)?(?:memory|state)\s+(?:subsystem|store|tracking)/i,
   );
+});
+
+const contractCount = (source, name) =>
+  [...source.matchAll(new RegExp(`^SDD_CONTRACT:${name}$`, 'gm'))].length;
+const assertContracts = (source, names, label) => {
+  for (const name of names) assert.equal(contractCount(source, name), 1, `${label}: ${name}`);
+};
+const contractBlock = (source, name) => {
+  const marker = `SDD_CONTRACT:${name}`;
+  const start = source.indexOf(marker);
+  assert.ok(start >= 0, `missing contract marker: ${name}`);
+  const body = source.slice(start + marker.length);
+  return body.slice(0, body.search(/\nSDD_CONTRACT:/)).toLowerCase();
+};
+
+test('SPEC-0033 Ship markers and PR body structure are present', () => {
+  const ship = read('.opencode/agents/sdd-lite-ship.md');
+  assertContracts(ship, [
+    'SHIP_CANDIDATE_CONTENT_READ_ONLY',
+    'SHIP_STOP_ON_STALE_EVIDENCE',
+    'SHIP_PR_BODY_FILE_ONLY',
+    'SHIP_TEMP_FILES_NOT_STAGED',
+  ], 'Ship agent');
+  assertContracts(read('.opencode/commands/sdd-ship.md'), [
+    'SHIP_VERIFY_FRESHNESS_CANDIDATE_SCOPED',
+  ], 'Ship command');
+  assert.ok(ship.includes('--body-file'));
+  for (const line of ship.split('\n')) {
+    assert.doesNotMatch(line, /gh pr (?:create|edit)[^\n]*--body\s+(?!-file\b)/);
+  }
+});
+
+test('SPEC-0033 keeps Ship Verify freshness candidate-scoped', () => {
+  const ship = read('.opencode/agents/sdd-lite-ship.md');
+  const command = read('.opencode/commands/sdd-ship.md');
+  const contract = contractBlock(ship, 'SHIP_VERIFY_FRESHNESS_CANDIDATE_SCOPED');
+
+  for (const term of [
+    'prior successful verify.md',
+    'active candidate',
+    'scope matches',
+    'material candidate change',
+    'repository evidence does not contradict',
+    'candidate-scoped',
+    'not scoped to the current ship task or session',
+    'independent green ship preflight',
+    'must not make prior verify.md stale',
+    'require ship to rewrite verify.md',
+    'require another verify cycle',
+    'contradictory evidence',
+    'failed checks',
+    'genuinely stale acceptance evidence',
+  ]) {
+    assert.ok(contract.includes(term), `freshness contract missing: ${term}`);
+  }
+  assert.ok(ship.includes('SDD_CONTRACT:SHIP_CANDIDATE_CONTENT_READ_ONLY'));
+  assert.ok(command.includes('must not edit DESIGN.md,\nTASKS.md, VERIFY.md'));
+  assert.equal(contract.includes('current ship task or session identity'), false);
+  assert.equal(contract.includes('automatic verify→ship→verify'), false);
+});
+
+test('SPEC-0033 Verify markers preserve routing and bounded checks', () => {
+  const command = read('.opencode/commands/sdd-verify.md');
+  const luna = read('.opencode/agents/sdd-lite-verify-luna.md');
+  const tasks = read('docs/specs/SPEC-0033-sdd-lite-hardening/TASKS.md');
+  assertContracts(command, [
+    'VERIFY_LUNA_DEFAULT',
+    'VERIFY_TERRA_EXPLICIT_GATE',
+    'VERIFY_FAIL_CLOSED_ROUTING',
+    'VERIFY_BOUNDED_READ_ORDER',
+    'VERIFY_SCOPE_EXPANSION_GATED',
+    'VERIFY_PLAYWRIGHT_NONDEFAULT',
+  ], 'Verify command');
+  assertContracts(luna, [
+    'VERIFY_BOUNDED_READ_ORDER',
+    'VERIFY_SCOPE_EXPANSION_GATED',
+    'VERIFY_PLAYWRIGHT_NONDEFAULT',
+  ], 'Luna Verify agent');
+  assert.equal(contractCount(luna, 'VERIFY_LUNA_DEFAULT'), 0);
+  assert.equal(contractCount(luna, 'VERIFY_TERRA_EXPLICIT_GATE'), 0);
+  assert.equal(contractCount(luna, 'VERIFY_FAIL_CLOSED_ROUTING'), 0);
+  assert.ok(tasks.includes('Critical Terra Verification Gate: NOT REQUIRED'));
+});
+
+test('SPEC-0033 scopes circuit breakers to fresh bounded tasks without runtime state', () => {
+  const command = read('.opencode/commands/sdd-verify.md');
+  const luna = read('.opencode/agents/sdd-lite-verify-luna.md');
+  const policyLines = (source) => source
+    .split('\n')
+    .map((line) => line.trim().toLowerCase())
+    .filter(Boolean);
+  const textWithTerms = (text, terms) => terms.every((term) => text.includes(term));
+
+  for (const [label, source] of [
+    ['Verify command', command],
+    ['Luna Verify agent', luna],
+  ]) {
+    assertContracts(source, ['CIRCUIT_BREAKER_CURRENT_TASK_ONLY'], label);
+    const lines = policyLines(source);
+    const text = lines.join(' ');
+
+    assert.ok(textWithTerms(text, ['current', 'bounded', 'task']), label);
+    assert.ok(textWithTerms(text, ['fresh', 'task', 'zero']), label);
+    assert.ok(textWithTerms(text, ['historical', 'failures', 'verify.md']), label);
+    assert.ok(textWithTerms(text, ['commands', 'actually', 'executed', 'current', 'task']), label);
+    const repeatedFailure = text.indexOf('same debugging/testing');
+    const stop = text.indexOf('stop', repeatedFailure);
+    assert.ok(repeatedFailure >= 0, label);
+    assert.ok(stop > repeatedFailure, label);
+    assert.ok(textWithTerms(text, ['second', 'execution']), label);
+    assert.ok(textWithTerms(text, ['lower-layer', 'root-cause', 'evidence', 'fix']), label);
+    assert.ok(textWithTerms(text, ['third', 'automatic']), label);
+    assert.ok(textWithTerms(text, ['runtime', 'counters']), label);
+    assert.ok(textWithTerms(text, ['tracking']), label);
+    assert.ok(textWithTerms(text, ['state', 'machinery']), label);
+  }
 });
