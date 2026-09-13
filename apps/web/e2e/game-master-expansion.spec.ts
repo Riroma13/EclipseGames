@@ -31,31 +31,6 @@ async function signIn(page: Page, target: string) {
   }
 }
 
-test('teacher can grant and correct a manual Eclipse Point', async ({ page }) => {
-  const { yearId, groupId } = await seedClassroom(page, `${Date.now()}-manual-point`);
-
-  await signIn(page, route('workspace', yearId, groupId));
-  await expect(page.getByRole('heading', { name: 'Classroom workspace', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Expansion Student One, One, Leader', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Expansion Student One', exact: true })).toBeVisible();
-  await page.locator('.coin-action-details > summary').click();
-
-  const balance = page.getByLabel('Eclipse Points balance');
-  const manualPoints = page.getByRole('region', { name: 'Manual Eclipse Points' });
-  await expect(balance).toHaveText('0 points');
-  await manualPoints.getByRole('button', { name: /^Personal improvement\b/ }).click();
-  await expect(page.getByText('Personal improvement point granted.', { exact: true })).toBeVisible();
-  await expect(balance).toHaveText('1 points');
-
-  await manualPoints.locator('summary').filter({ hasText: 'Recent manual points' }).click();
-  await expect(manualPoints.getByRole('button', { name: 'Correct', exact: true })).toHaveCount(1);
-  await manualPoints.getByRole('button', { name: 'Correct', exact: true }).click();
-  await expect(page.getByText('Point correction recorded.', { exact: true })).toBeVisible();
-  await expect(balance).toHaveText('0 points');
-  await expect(manualPoints.getByText('Corrected', { exact: true })).toBeVisible();
-  await expect(manualPoints.getByRole('button', { name: 'Correct', exact: true })).toHaveCount(0);
-});
-
 test('teacher can pause a challenge and lead Prompt Deck and Team Draw sessions', async ({ page }) => {
   const { yearId, groupId } = await seedClassroom(page, `${Date.now()}-tools`);
 

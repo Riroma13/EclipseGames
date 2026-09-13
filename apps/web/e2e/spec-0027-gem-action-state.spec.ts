@@ -69,7 +69,7 @@ test('SPEC-0027 real built Fastify journey rehydrates ACTIVE and REVERSED gem st
   expect((await page.request.get(`/api/v1/students/${student.id}/gem-action-state?academicYearId=${year.id}&assessmentContextId=${context.id}`, { headers })).status()).toBe(200);
   expect((await page.request.post(`/api/v1/academic-years/${year.id}/archive`, { headers })).status()).toBe(204);
   await page.reload();
-  await expect(page.getByText('Historical year — records are read-only.')).toBeVisible();
+  await expect(page.locator('p.read-only-note').filter({ hasText: 'Historical year — records are read-only.' })).toBeVisible();
   await page.getByRole('button', { name: new RegExp(student.realName) }).click();
   await expect(page.getByRole('region', { name: 'Gemas' }).getByText('Este registro es de solo lectura.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Corregir recompensa' })).toHaveCount(0);

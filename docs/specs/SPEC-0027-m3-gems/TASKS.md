@@ -192,3 +192,48 @@ two legitimate read-only notices matched. The locator was then scoped to the
 - [x] Add deterministic component coverage for isolated legacy coin read
   failure and retry while preserving usable gem state/actions and avoiding
   unrelated gem reloads.
+
+## PR #28 CI test-maintenance cleanup
+
+- [x] Classify the broader CI Playwright failures against the current M3
+  contract before editing: obsolete coin mutation/spend/correction/reversal
+  expectations are Level A and current Spanish/semantic-locator drift is Level
+  B; treat a current product failure as Level C only after cheap isolation.
+  Local focused evidence confirms the known broader failures are A/B; the
+  delayed academic-year destination case remains an isolated Level C runtime
+  regression and is not changed in this slice.
+- [x] Remove or replace only obsolete broader coin-flow assertions with the
+  canonical SPEC-0027 read-only/no-write and Spanish Gemas coverage; preserve
+  unrelated XP, classroom, routing, projection, challenge, and minigame
+  regression protection. Existing focused API suites pass the 404/no-write and
+  retained read contracts; no coin writer was restored.
+- [x] Update remaining broader Playwright setup, text, and selectors to the
+  current Spanish teacher UI and semantic locators without weakening behavior
+  assertions. XP/category and student-panel assertions now follow current
+  rendered semantics; no production UI copy changed.
+- [x] Apply the revised final verification policy: run focused critical evidence,
+  keep typecheck/build blocking, and make the full relevant Playwright suite
+  explicitly optional/non-blocking. Record classifications and exact evidence
+  in `VERIFY.md`; final Terra Verify remains delegated to Terra.
+  Current remediation evidence: the nine recorded Level B failures were grouped
+  into historical-banner copy/structure drift, English XP/workspace text drift,
+  and non-semantic region/button locator drift. Test-only corrections were made
+  in `apps/web/e2e/spec-0027-gem-action-state.spec.ts`,
+  `apps/web/e2e/spec-0004-xp.spec.ts`,
+  `apps/web/e2e/teacher-workspace.spec.ts`, and
+  `apps/web/e2e/auth-projection.spec.ts`. The focused Vitest/typecheck checks
+  passed, but the single browser confirmation was blocked before discovery by
+  the fixed-port conflict; final Terra Verify remains pending.
+
+## Maintainer revised final verification policy
+
+- [x] Keep critical Vitest/integration/component coverage, `pnpm typecheck`, and
+  `pnpm build` blocking in CI while making Playwright installation and E2E
+  execution explicitly optional/non-blocking. Preserve all Playwright files and
+  coverage; final Terra Verify remains owned by the exact Terra agent.
+
+The maintainer decision supersedes the former requirement for a blocking full
+Playwright gate for this final policy slice. The recurring fixed-port `3304`
+leakage is deferred as test-infrastructure debt for future SDD Lite Efficiency &
+Autonomy work. Manual teacher acceptance remains pending after merge and was not
+performed here.

@@ -1,9 +1,8 @@
-import { randomUUID } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
 
 async function signIn(page: Page, target = '/#/workspace') {
   await page.goto(target);
-  const workspace = page.getByRole('heading', { name: 'Classroom workspace', exact: true });
+  const workspace = page.locator('header.workspace-header').getByRole('heading');
   const email = page.getByLabel('Email');
   const screen = await Promise.race([
     email.waitFor({ state: 'visible', timeout: 2_000 }).then(() => 'login' as const),
@@ -15,10 +14,6 @@ async function signIn(page: Page, target = '/#/workspace') {
     await page.getByRole('button', { name: 'Sign in' }).click();
   }
   await expect(workspace).toBeVisible();
-}
-
-function manualGrantHeaders(headers: { cookie?: string } | undefined) {
-  return { ...headers, 'Idempotency-Key': randomUUID() };
 }
 
 async function seedRoster(page: Page, suffix: string) {
@@ -51,20 +46,20 @@ test('canonical hash route boots from the Fastify root document and renders the 
   expect(students.status()).toBe(200);
   await signIn(page);
   await page.goto(`/#/workspace?year=${yearId}&group=${groupId}`);
-  await expect(page.getByRole('heading', { name: 'Classroom workspace' })).toBeVisible();
+  await expect(page.locator('header.workspace-header').getByRole('heading')).toBeVisible();
   await expect(page.getByText('Ada Lovelace')).toBeVisible();
   await page.getByLabel('Search students').fill('grace');
   await expect(page.getByText('Grace Hopper')).toBeVisible();
   await page.getByRole('button', { name: /Grace Hopper/ }).click();
   await expect(page.getByRole('heading', { name: 'Grace Hopper' })).toBeVisible();
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'Classroom workspace' })).toBeVisible();
+  await expect(page.locator('header.workspace-header').getByRole('heading')).toBeVisible();
   const copiedUrl = page.url();
   const documentRequests: string[] = [];
   page.on('request', (request) => { if (request.resourceType() === 'document') documentRequests.push(request.url()); });
   await page.goto('about:blank');
   await page.goto(copiedUrl);
-  await expect(page.getByRole('heading', { name: 'Classroom workspace' })).toBeVisible();
+  await expect(page.locator('header.workspace-header').getByRole('heading')).toBeVisible();
   expect(documentRequests.length).toBeGreaterThan(0);
   expect(new URL(documentRequests.at(-1)!).pathname).toBe('/');
 });
@@ -81,7 +76,7 @@ test('canonical roster runtime matrix covers no years and an empty group', async
   await page.route(`**/api/v1/academic-years/${yearId}/groups`, async (route) => { await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: groupId, academicYearId: yearId, name: 'Empty group' }]) }); });
   await page.route(`**/api/v1/groups/${groupId}/students*`, async (route) => { await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }); });
   await page.goto('/#/workspace');
-  await expect(page.getByRole('heading', { name: 'Classroom workspace' })).toBeVisible();
+  await expect(page.locator('header.workspace-header').getByRole('heading')).toBeVisible();
   await signIn(page);
   await page.goto('about:blank');
   await page.goto(`/#/workspace?year=${yearId}&group=${groupId}`);
@@ -140,11 +135,11 @@ test('historical-only and group cardinality states are read-only and selectable'
   const archivedYears = (await archivedResponse.json()).filter((value: { id: string }) => value.id === yearId);
   await page.route('**/api/v1/academic-years*', async (route) => { await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(route.request().url().includes('includeArchived=true') ? archivedYears : []) }); });
   await signIn(page); await page.goto('/#/workspace');
-  await expect(page.getByText('Historical year — records are read-only.')).toBeVisible();
+  await expect(page.locator('p.read-only-note').filter({ hasText: 'Historical year — records are read-only.' })).toBeVisible();
   await expect(page.getByText('Archived', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: /Archived Student/ }).click();
-  await expect(page.getByText('Historical record · read-only')).toBeVisible();
-  await expect(page.getByText('Actions will appear here when a classroom tool is available.')).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Gemas' }).getByText('Este registro es de solo lectura.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Otorgar recompensa' })).toHaveCount(0);
 });
 
 test('authenticated canonical roster exposes many groups through the group selector', async ({ page }) => {
@@ -181,9 +176,9 @@ test('search clear, no-match, ordered cards, keyboard selection, and panel focus
   await page.setViewportSize({ width: 800, height: 800 });
   await cards.nth(0).press('Enter');
   await expect(page.locator('.student-panel h2')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Close student panel' })).toBeFocused();
-  await page.getByRole('button', { name: 'Close student panel' }).click();
-  await expect(page.getByText('Select a student to inspect their classroom context.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Cerrar ficha del estudiante' })).toBeFocused();
+  await page.getByRole('button', { name: 'Cerrar ficha del estudiante' }).click();
+  await expect(page.getByText('Selecciona un estudiante para consultar su contexto de clase.')).toBeVisible();
   await expect(cards.nth(0)).toBeFocused();
 });
 
@@ -193,16 +188,16 @@ test('AC-11 tablet dialog traps Tab focus in both directions', async ({ page }) 
   await signIn(page, `/#/workspace?year=${yearId}&group=${groupId}`);
   await page.getByRole('button', { name: /Ada Lovelace/ }).click();
   await page.getByRole('button', { name: 'COMMUNICATION' }).click();
-  const close = page.getByRole('button', { name: 'Close student panel' });
+  const close = page.getByRole('button', { name: 'Cerrar ficha del estudiante' });
   await close.focus();
   await expect(close).toBeFocused();
   const firstValue = page.getByRole('button', { name: '+1' });
   await firstValue.focus();
   await page.keyboard.press('Shift+Tab');
   await expect(close).toBeFocused();
-  const noteSummary = page.getByText('Add optional note', { exact: true });
-  await noteSummary.focus();
-  await expect(noteSummary).toBeFocused();
+  const cancelCategory = page.getByRole('button', { name: 'Cancelar', exact: true });
+  await cancelCategory.focus();
+  await expect(cancelCategory).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(close).toBeFocused();
 });
@@ -223,12 +218,12 @@ test('AC-06 real Register XP path exposes pending, failure, retry, and authorita
   await signIn(page, `/#/workspace?year=${yearId}&group=${groupId}`);
   await page.getByRole('button', { name: /Ada Lovelace/ }).click();
   await page.getByRole('button', { name: 'COMMUNICATION' }).click();
-  await page.getByRole('button', { name: '+3 Spontaneous or developed French' }).click();
-  await expect(page.getByRole('button', { name: '+3' })).toBeDisabled();
-  await expect(page.getByText('Could not register XP. Try again.')).toBeVisible();
   await page.getByRole('button', { name: '+3' }).click();
-  await expect(page.getByText(/Base XP \+3 · No specialty bonus · Effective XP \+3/)).toBeVisible();
-  await expect(page.getByText('Annual XP: 3 · Level 1')).toBeVisible();
+  await expect(page.getByRole('button', { name: '+3' })).toBeDisabled();
+  await expect(page.getByText('No se pudo registrar el XP. Reintentar.')).toBeVisible();
+  await page.getByRole('button', { name: '+3' }).click();
+  await expect(page.getByText('XP base +3 · XP efectivo +3')).toBeVisible();
+  await expect(page.locator('.student-progress-row')).toContainText('3 XP');
   expect(attempts).toBe(2);
 });
 
@@ -246,9 +241,9 @@ test('workspace action feedback announces pending work and restores focus after 
   await student.click();
   await page.getByRole('button', { name: 'COMMUNICATION' }).click();
   await page.getByRole('button', { name: '+1' }).click();
-  await expect(page.getByRole('status', { name: 'Action feedback' })).toContainText('Saving XP');
+  await expect(page.getByRole('status')).toContainText('XP');
   releaseRequest?.();
-  await expect(page.getByText('Base XP +1')).toBeVisible();
+  await expect(page.getByText('XP base +1')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(student).toBeFocused();
 });
@@ -261,71 +256,18 @@ test('workspace selection keeps private action state out of URL and browser stor
   expect(page.url()).not.toMatch(/(comment|xp|coin|reward|balance|assessment)=/i);
 });
 
-test('SPEC-0005 real teacher redemption flow preserves balance and teaching context', async ({ page }) => {
-  const { yearId, groupId } = await seedRoster(page, `${Date.now()}-coins`);
-  const login = await page.request.post('/api/v1/auth/session', { data: { email: 'teacher@example.test', password: 'change-me-in-development' } });
-  expect(login.status()).toBe(204);
-  const cookie = login.headers()['set-cookie']?.split(';')[0];
-  const headers = cookie ? { cookie } : undefined;
-  const studentResponse = await page.request.get(`/api/v1/groups/${groupId}/students`, { headers });
-  const studentId = (await studentResponse.json())[0].id as string;
-  const contextResponse = await page.request.post('/api/v1/assessment-contexts', { headers, data: { groupId, name: 'Coins assessment' } });
-  expect(contextResponse.status()).toBe(201);
-  const assessmentContextId = (await contextResponse.json()).id as string;
-  for (const source of ['PERSONAL_IMPROVEMENT', 'EXCEPTIONAL_FRENCH', 'EXCEPTIONAL_COLLABORATION', 'SPECIAL_CHALLENGE', 'PERSONAL_IMPROVEMENT']) {
-    const grant = await page.request.post(`/api/v1/students/${studentId}/coin-grants`, { headers: manualGrantHeaders(headers), data: { academicYearId: yearId, source } });
-    expect(grant.status()).toBe(201);
-  }
-
-  await signIn(page, `/#/workspace?year=${yearId}&group=${groupId}`);
-  await page.getByRole('button', { name: /Ada Lovelace/ }).click();
-  await expect(page.getByRole('heading', { name: 'Ada Lovelace' })).toBeVisible();
-  await page.locator('.coin-action-details > summary').click();
-  await expect(page.getByLabel('Eclipse Points balance')).toHaveText('5 points');
-  await expect(page.getByRole('combobox', { name: /Assessment/ })).toBeVisible();
-  const standard = page.getByRole('button', { name: /Standard assessment advantage/ });
-  await standard.click();
-  await expect(standard).toBeDisabled();
-  await expect(page.getByLabel('Eclipse Points balance')).toHaveText('3 points');
-
-  const duplicate = await page.request.post(`/api/v1/students/${studentId}/advantages`, { data: { assessmentContextId, rewardId: 'exceptional-assessment-advantage' }, headers: { ...headers, 'Idempotency-Key': '00000000-0000-4000-8000-000000000701' } });
-  expect(duplicate.status()).toBe(409);
-  const unchangedBalance = await page.request.get(`/api/v1/students/${studentId}/coins`, { headers });
-  expect(await unchangedBalance.json()).toMatchObject({ balance: 3 });
-
-  await page.getByRole('button', { name: 'Undo assessment advantage' }).click();
-  await expect(page.getByText('Assessment advantage undone.')).toBeVisible();
-  await expect(page.getByLabel('Eclipse Points balance')).toHaveText('5 points');
-  await expect(page.getByRole('heading', { name: 'Ada Lovelace' })).toBeVisible();
-  await expect(page.getByRole('combobox', { name: /Assessment/ })).toHaveValue(assessmentContextId);
-});
-
 test('AC-01–AC-17 canonical teacher journey stays in the workspace', async ({ page }) => {
   const { yearId, groupId } = await seedRoster(page, `${Date.now()}-canonical`);
-  const login = await page.request.post('/api/v1/auth/session', { data: { email: 'teacher@example.test', password: 'change-me-in-development' } });
-  expect(login.status()).toBe(204);
-  const cookie = login.headers()['set-cookie']?.split(';')[0];
-  const headers = cookie ? { cookie } : undefined;
-  const studentsResponse = await page.request.get(`/api/v1/groups/${groupId}/students`, { headers });
-  const roster = await studentsResponse.json() as Array<{ id: string; realName: string }>;
-  const firstStudent = roster.find(student => student.realName === 'Zoë Durand');
-  expect(firstStudent).toBeTruthy();
-  if (!firstStudent) throw new Error('Canonical roster is missing Zoë Durand.');
-  for (const source of ['PERSONAL_IMPROVEMENT', 'EXCEPTIONAL_FRENCH', 'EXCEPTIONAL_COLLABORATION', 'SPECIAL_CHALLENGE', 'PERSONAL_IMPROVEMENT']) {
-    expect((await page.request.post(`/api/v1/students/${firstStudent.id}/coin-grants`, { headers: manualGrantHeaders(headers), data: { academicYearId: yearId, source } })).status()).toBe(201);
-  }
 
   await signIn(page, `/#/workspace?year=${yearId}&group=${groupId}`);
   await page.getByLabel('Search students').fill('zoe');
   await page.getByRole('button', { name: /Zoë Durand/ }).click();
   await expect(page.getByRole('heading', { name: 'Zoë Durand' })).toBeVisible();
   await expect(page.getByText('Analyst', { exact: true })).toBeVisible();
-  await page.locator('.coin-action-details > summary').click();
-  await page.getByRole('button', { name: 'PRECISION' }).click();
-  await page.getByRole('button', { name: '+4 Especially precise work' }).click();
-  await expect(page.getByText(/Base XP \+3 · Specialty bonus \+1 · Effective XP \+4/)).toBeVisible();
-  await expect(page.getByText('Annual XP: 4 · Level 1')).toBeVisible();
-  await expect(page.getByLabel('Eclipse Points balance')).toHaveText('5 points');
+   await page.getByRole('button', { name: /^PRECISION/ }).click();
+  await page.getByRole('button', { name: '+3' }).click();
+  await expect(page.getByText('XP base +3 · XP efectivo +4')).toBeVisible();
+  await expect(page.locator('.student-progress-row')).toContainText('4 XP');
 
   const assessmentName = page.getByLabel('Create/select Assessment');
   await assessmentName.fill('  Unit quiz  ');
@@ -338,73 +280,12 @@ test('AC-01–AC-17 canonical teacher journey stays in the workspace', async ({ 
   await expect(assessmentSelect.locator('option:checked')).toHaveText('Unit quiz');
   await expect(page.getByText('Unit quiz selected.')).toBeVisible();
 
-  const standard = page.getByRole('button', { name: /Standard assessment advantage/ });
-  await standard.click();
-  await expect(page.getByText('Standard assessment advantage reserved.')).toBeVisible();
-  await expect(page.getByLabel('Eclipse Points balance')).toHaveText('3 points');
-  await expect(page.getByRole('button', { name: 'Undo assessment advantage' })).toBeVisible();
-  const contextId = await assessmentSelect.inputValue();
-  const duplicate = await page.request.post(`/api/v1/students/${firstStudent.id}/advantages`, { headers: { ...headers, 'Idempotency-Key': '00000000-0000-4000-8000-000000000702' }, data: { assessmentContextId: contextId, rewardId: 'exceptional-assessment-advantage' } });
-  expect(duplicate.status()).toBe(409);
-  expect((await page.request.get(`/api/v1/students/${firstStudent.id}/coins`, { headers })).json()).resolves.toMatchObject({ balance: 3 });
-  await page.getByRole('button', { name: 'Undo assessment advantage' }).click();
-  await expect(page.getByText('Assessment advantage undone.')).toBeVisible();
-  await expect(page.getByLabel('Eclipse Points balance')).toHaveText('5 points');
-
-  await page.getByRole('button', { name: /Close student panel/ }).click();
+  await page.getByRole('button', { name: 'Cerrar ficha del estudiante' }).click();
   await page.getByLabel('Search students').fill('ada');
   await page.getByRole('button', { name: /Ada Lovelace/ }).click();
   await expect(page.getByRole('heading', { name: 'Ada Lovelace' })).toBeVisible();
   expect(page.url()).not.toMatch(/(Zoë|Ada|Unit quiz|comment|xp|coin|assessment)=/i);
   expect(await page.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length }))).toEqual({ local: 0, session: 0 });
-});
-
-test('SPEC-0005 coin action proves pending, failure, retry, and privacy boundaries', async ({ page }) => {
-  const { yearId, groupId } = await seedRoster(page, `${Date.now()}-coin-failure`);
-  const login = await page.request.post('/api/v1/auth/session', { data: { email: 'teacher@example.test', password: 'change-me-in-development' } });
-  expect(login.status()).toBe(204);
-  const cookie = login.headers()['set-cookie']?.split(';')[0];
-  const headers = cookie ? { cookie } : undefined;
-  const studentResponse = await page.request.get(`/api/v1/groups/${groupId}/students`, { headers });
-  const studentId = (await studentResponse.json())[0].id as string;
-  const contextResponse = await page.request.post('/api/v1/assessment-contexts', { headers, data: { groupId, name: 'Retry assessment' } });
-  expect(contextResponse.status()).toBe(201);
-  for (const source of ['PERSONAL_IMPROVEMENT', 'EXCEPTIONAL_FRENCH', 'EXCEPTIONAL_COLLABORATION', 'SPECIAL_CHALLENGE', 'PERSONAL_IMPROVEMENT']) {
-    expect((await page.request.post(`/api/v1/students/${studentId}/coin-grants`, { headers: manualGrantHeaders(headers), data: { academicYearId: yearId, source } })).status()).toBe(201);
-  }
-
-  let attempts = 0;
-  await page.route('**/api/v1/students/*/advantages', async route => {
-    attempts += 1;
-    if (attempts === 1) {
-      await new Promise(resolve => setTimeout(resolve, 250));
-      await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ code: 'TEMPORARY_FAILURE', message: 'Coin service temporarily unavailable. Try again.' }) });
-      return;
-    }
-    await route.continue();
-  });
-  await signIn(page, `/#/workspace?year=${yearId}&group=${groupId}`);
-  await page.getByRole('button', { name: /Ada Lovelace/ }).click();
-  const coinSection = page.getByRole('region', { name: 'Assessment advantages' });
-  await coinSection.locator('.coin-action-details > summary').click();
-  const standard = coinSection.getByRole('button', { name: /Standard assessment advantage/ });
-  await expect(page.getByLabel('Eclipse Points balance')).toHaveText('5 points');
-  const contextId = (await contextResponse.json()).id as string;
-  expect(page.url()).not.toContain('coin');
-  expect(page.url()).not.toContain('reward');
-  expect(page.url()).not.toContain('balance');
-  await standard.click();
-  await expect(standard).toBeDisabled();
-  await expect(page.getByText('Coin service temporarily unavailable. Try again.')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Classroom workspace' })).toBeVisible();
-  await expect(page.getByLabel('Eclipse Points balance')).toHaveText('5 points');
-  await expect(standard).toBeEnabled();
-  await standard.click();
-  await expect(page.getByText('Standard assessment advantage reserved.')).toBeVisible();
-  await expect(page.getByLabel('Eclipse Points balance')).toHaveText('3 points');
-  await expect(page.getByRole('combobox', { name: /Assessment/ })).toHaveValue(contextId);
-  await expect(coinSection).not.toContainText(/\b(?:XP|RT|rubric|grade)\b/i);
-  expect(page.url()).not.toMatch(/(coin|reward|balance|privateValue|cost)=/i);
 });
 
 test('AC-14 proves the contiguous teacher journey through real XP and reversal', async ({ page }) => {
@@ -423,15 +304,15 @@ test('AC-14 proves the contiguous teacher journey through real XP and reversal',
   await expect(page.getByRole('heading', { name: 'Zoë Durand' })).toBeVisible();
   await expect(page.getByText('Analyst', { exact: true })).toBeVisible();
   for (let index = 0; index < 4; index += 1) {
-    await page.getByRole('button', { name: 'PRECISION' }).click();
-    await page.getByRole('button', { name: '+4 Especially precise work' }).click();
-    await expect(page.getByText(/Base XP \+3 · Specialty bonus \+1 · Effective XP \+4/)).toBeVisible();
+    await page.getByRole('button', { name: /^PRECISION/ }).click();
+    await page.getByRole('button', { name: '+3' }).click();
+    await expect(page.getByText('XP base +3 · XP efectivo +4')).toBeVisible();
   }
-  await expect(page.getByText('Annual XP: 16 · Level 2')).toBeVisible();
-  await expect(page.getByText('Badge unlocked: Ojo clínico')).toBeVisible();
-  await page.getByRole('button', { name: 'Undo' }).click();
-  await expect(page.getByText('XP registration undone.')).toBeVisible();
-  await expect(page.getByText('Annual XP: 12 · Level 2')).toBeVisible();
+  await expect(page.locator('.student-progress-row')).toContainText('16 XP');
+  await expect(page.locator('.student-badge')).toContainText('Ojo clínico');
+  await page.locator('.undo-banner').getByRole('button').click();
+  await expect(page.locator('.undo-banner')).toContainText('XP registration undone.');
+  await expect(page.locator('.student-progress-row')).toContainText('12 XP');
   await expect(page.getByRole('heading', { name: 'Zoë Durand' })).toBeVisible();
   await page.getByRole('combobox', { name: 'Group' }).selectOption({ label: 'Continue teaching group' });
   await expect(page.getByRole('combobox', { name: 'Group' })).toHaveValue(secondGroupId);
@@ -441,41 +322,20 @@ test('AC-14 proves the contiguous teacher journey through real XP and reversal',
 
 test('labelled fixture Projection handoff stays separate from the complete teacher journey', async ({ page }) => {
   const { yearId, groupId } = await seedRoster(page, `${Date.now()}-projection-journey`);
-  const login = await page.request.post('/api/v1/auth/session', { data: { email: 'teacher@example.test', password: 'change-me-in-development' } });
-  expect(login.status()).toBe(204);
-  const cookie = login.headers()['set-cookie']?.split(';')[0];
-  const headers = cookie ? { cookie } : undefined;
-  const students = await page.request.get(`/api/v1/groups/${groupId}/students`, { headers });
-  const roster = await students.json() as Array<{ id: string; realName: string }>;
-  const firstStudent = roster.find(student => student.realName === 'Zoë Durand');
-  expect(firstStudent).toBeTruthy();
-  if (!firstStudent) throw new Error('Projection journey roster is missing Zoë Durand.');
-  for (const source of ['PERSONAL_IMPROVEMENT', 'EXCEPTIONAL_FRENCH', 'EXCEPTIONAL_COLLABORATION', 'SPECIAL_CHALLENGE', 'PERSONAL_IMPROVEMENT']) {
-    expect((await page.request.post(`/api/v1/students/${firstStudent.id}/coin-grants`, { headers: manualGrantHeaders(headers), data: { academicYearId: yearId, source } })).status()).toBe(201);
-  }
-
   await signIn(page, `/#/workspace?year=${yearId}&group=${groupId}`);
   await page.getByLabel('Search students').fill('zoe');
   await page.getByRole('button', { name: /Zoë Durand/ }).click();
   await expect(page.getByRole('heading', { name: 'Zoë Durand' })).toBeVisible();
-  await page.locator('.coin-action-details > summary').click();
-  await page.getByRole('button', { name: 'PRECISION' }).click();
-  await page.getByRole('button', { name: '+4 Especially precise work' }).click();
-  await expect(page.getByText(/Base XP \+3 · Specialty bonus \+1 · Effective XP \+4/)).toBeVisible();
-  await page.getByRole('button', { name: 'Undo' }).click();
-  await expect(page.getByText('XP registration undone.')).toBeVisible();
-  await expect(page.getByLabel('Eclipse Points balance')).toHaveText('5 points');
+    await page.getByRole('button', { name: /^PRECISION/ }).click();
+  await page.getByRole('button', { name: '+3' }).click();
+  await expect(page.getByText('XP base +3 · XP efectivo +4')).toBeVisible();
+  await page.locator('.undo-banner').getByRole('button').click();
+  await expect(page.locator('.undo-banner')).toContainText('XP registration undone.');
 
   const assessmentName = page.getByLabel('Create/select Assessment');
   await assessmentName.fill('Projection journey assessment');
   await page.getByRole('button', { name: 'Create/select Assessment' }).click();
   await expect(page.getByText('Projection journey assessment created and selected.')).toBeVisible();
-  const standard = page.getByRole('button', { name: /Standard assessment advantage/ });
-  await expect(standard).toBeEnabled();
-  await standard.click();
-  await expect(page.getByLabel('Eclipse Points balance')).toHaveText('3 points');
-  await page.getByRole('button', { name: 'Undo assessment advantage' }).click();
-  await expect(page.getByLabel('Eclipse Points balance')).toHaveText('5 points');
   expect(await page.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length }))).toEqual({ local: 0, session: 0 });
   expect(page.url()).not.toMatch(/(Zoë|Projection|comment|xp|coin|assessment)=/i);
 
@@ -488,64 +348,6 @@ test('labelled fixture Projection handoff stays separate from the complete teach
   expect(new URL(page.url()).hash).toMatch(/^#\/projection(?:\?group=.*)?$/);
   await expect(page.locator('body')).toContainText('Zoe');
   await expect(page.locator('body')).not.toContainText(/Zoë Durand|Ada Lovelace|Projection journey assessment|RT average|rubric|comments|incidents|history/i);
-});
-
-test('clean demo seed supports the normal Eclipse Points assessment journey', async ({ page }) => {
-  const target = '/#/workspace?year=9b6f3b9e-3d0f-4b1e-9b1e-202620270001&group=9b6f3b9e-3d0f-4b1e-9b1e-202620270002';
-  await signIn(page, target);
-  await page.goto(target);
-  await page.getByRole('button', { name: /Camille Martin/ }).click();
-  await page.locator('.coin-action-details > summary').click();
-  await expect(page.getByLabel('Eclipse Points balance')).toHaveText('2 points');
-  const assessmentName = page.getByLabel('Create/select Assessment');
-  await assessmentName.fill(`Seeded journey ${Date.now()}`);
-  await page.getByRole('button', { name: 'Create/select Assessment' }).click();
-  await page.getByRole('button', { name: /Standard assessment advantage/ }).click();
-  await expect(page.getByLabel('Eclipse Points balance')).toHaveText('0 points');
-  await page.getByRole('button', { name: 'Undo assessment advantage' }).click();
-  await expect(page.getByLabel('Eclipse Points balance')).toHaveText('2 points');
-});
-
-test('coin loading treats StrictMode cleanup cancellation as non-error after success', async ({ page }) => {
-  const calls = new Map<string, number>();
-  const delayFirst = async (route: import('@playwright/test').Route, body: string) => {
-    const url = new URL(route.request().url()).pathname;
-    const count = (calls.get(url) ?? 0) + 1;
-    calls.set(url, count);
-    if (count === 1) await new Promise(resolve => setTimeout(resolve, 200));
-    await route.fulfill({ status: 200, contentType: 'application/json', body });
-  };
-  await page.route('**/api/v1/students/*/coins', route => delayFirst(route, JSON.stringify({ studentId: '9b6f3b9e-3d0f-4b1e-9b1e-202620270010', academicYearId: '9b6f3b9e-3d0f-4b1e-9b1e-202620270001', balance: 2 })));
-  await page.route('**/api/v1/coin-rewards', route => delayFirst(route, JSON.stringify([{ id: 'standard-assessment-advantage', name: 'Standard assessment advantage', cost: 2, type: 'ASSESSMENT_ADVANTAGE' }])));
-  await page.route('**/api/v1/groups/*/assessment-contexts', route => delayFirst(route, '[]'));
-  const target = '/#/workspace?year=9b6f3b9e-3d0f-4b1e-9b1e-202620270001&group=9b6f3b9e-3d0f-4b1e-9b1e-202620270002';
-  await signIn(page, target);
-  await page.goto(target);
-  await page.getByRole('button', { name: /Camille Martin/ }).click();
-  await expect.poll(() => calls.get('/api/v1/students/9b6f3b9e-3d0f-4b1e-9b1e-202620270010/coins') ?? 0).toBeGreaterThan(0);
-  await page.getByRole('button', { name: /Lina Bernard/ }).click();
-  await expect(page.getByLabel('Eclipse Points balance')).toHaveText('2 points');
-  await expect(page.getByRole('alert', { name: '' })).toHaveCount(0);
-  expect([...calls.values()].some(count => count >= 2)).toBe(true);
-});
-
-test('coin loading keeps a genuine initial failure visible', async ({ page }) => {
-  let rewardRouteHits = 0;
-  await page.route('**/api/v1/coin-rewards', async route => {
-    rewardRouteHits += 1;
-    await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ code: 'TEMPORARY_FAILURE', message: 'Coin rewards unavailable.' }) });
-  });
-  const target = '/#/workspace?year=9b6f3b9e-3d0f-4b1e-9b1e-202620270001&group=9b6f3b9e-3d0f-4b1e-9b1e-202620270002';
-  await signIn(page, target);
-  await expect(page.getByRole('heading', { name: 'Classroom workspace', exact: true })).toBeVisible();
-  await page.goto('about:blank');
-  await page.goto(target);
-  const camille = page.getByRole('button', { name: /Camille Martin/ });
-  await expect(camille).toBeVisible();
-  await camille.click();
-  const advantages = page.getByRole('region', { name: 'Assessment advantages' });
-  await expect(advantages).toContainText('Could not load coin advantages.');
-  expect(rewardRouteHits).toBeGreaterThan(0);
 });
 
 test('group authentication expiry clears the private workspace and shows recovery', async ({ page }) => {
@@ -651,10 +453,10 @@ test('post-401 sign-in recovery reloads context without stale private cards', as
   await page.getByLabel('Email').fill('teacher@example.test');
   await page.getByLabel('Password').fill('change-me-in-development');
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByRole('heading', { name: 'Classroom workspace' })).toBeVisible();
+  await expect(page.locator('header.workspace-header').getByRole('heading')).toBeVisible();
   await expect(page.getByText('Ada Lovelace')).toBeVisible();
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'Classroom workspace' })).toBeVisible();
+  await expect(page.locator('header.workspace-header').getByRole('heading')).toBeVisible();
   await expect(page.getByText('Ada Lovelace')).toBeVisible();
 });
 
