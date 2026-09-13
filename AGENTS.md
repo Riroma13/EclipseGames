@@ -2,14 +2,29 @@
 
 ## Session startup
 
-Read, in order:
+Do not automatically load all five `.ai/context` files. Read a specific
+context file or section only when a concrete unresolved need requires it, and
+keep that read limited to the relevant evidence. The active SPEC's
+`DESIGN.md`, `TASKS.md`, and `VERIFY.md`, together with this explicit task
+read-order, are normal working memory. Historical context is exceptional, not
+the default.
+
+For a concrete context need, use this order and only the relevant file or
+section:
 
 1. `.ai/context/PROJECT.md`
 2. `.ai/context/SESSION.md`
 3. `.ai/context/DECISIONS.md`
 4. `.ai/context/KNOWN_ISSUES.md`
 5. `.ai/context/ROADMAP.md`
-6. The active SPEC `DESIGN.md`, `TASKS.md`, and `VERIFY.md` when present
+
+## Engram boundary
+
+Do not execute the global Engram protocol in this project. Do not make
+automatic `engram_*` calls, save Engram memories, or save Engram session
+summaries. Engram may remain installed or connected; that does not authorize
+use. Project SDD Lite commands and agents must not require Engram for routing,
+state, evidence, or completion.
 
 ## SDD Lite
 
