@@ -7,6 +7,7 @@ import { lockStudentGroupCorrection } from '../roster/service.js';
 import { runImmediateTransaction, type GemSourceTx } from '../services/transactions.js';
 import type { GemSourceOrchestrator } from '../gems/source-orchestrator.js';
 import { replayRt, type RtValue } from './domain.js';
+import { canReceiveGem } from '../behaviour/domain.js';
 
 type Tx = Database.Database;
 type EntryInput = { studentId: string; value: RtValue };
@@ -24,7 +25,7 @@ function snapshotRoster(db: Tx, context: ReturnType<typeof getOwnedRealClassSess
   for (const student of students) lockStudentGroupCorrection(db, context.ownerTeacherId, student.id);
 }
 
-function reconcileEntitlements(db: Tx, studentId: string, termId: string, values: Array<{ id: string; value: RtValue; createdAt: string }>) {
+function reconcileEntitlements(db: Tx, context: ReturnType<typeof getOwnedRealClassSessionContext>, studentId: string, termId: string, values: Array<{ id: string; value: RtValue; createdAt: string }>) {
   const eligible = new Set<string>(); let streak = 0;
   for (const entry of values) {
     if (entry.value === 'ABSENT') continue;
@@ -32,8 +33,10 @@ function reconcileEntitlements(db: Tx, studentId: string, termId: string, values
   }
   const existing = db.prepare('SELECT * FROM rt_streak_emerald_entitlements WHERE student_id=? AND term_id=? ORDER BY id').all(studentId, termId) as any[];
   const bySource = new Map(existing.map(row => [row.source_entry_id, row]));
+  const state = db.prepare(`SELECT current_lives AS currentLives FROM behaviour_student_state WHERE student_id=? AND owner_teacher_id=? AND academic_year_id=? AND group_id=?`).get(studentId, context.ownerTeacherId, context.academicYearId, context.groupId) as { currentLives: number } | undefined;
+  const gemReceiptAllowed = state ? (canReceiveGem(state.currentLives) ? 1 : 0) : 1;
   for (const entry of values.filter(value => eligible.has(value.id))) {
-    if (!bySource.has(entry.id)) db.prepare(`INSERT INTO rt_streak_emerald_entitlements (id,source_key,source_entry_id,student_id,term_id,active,revision) VALUES (?,?,?,?,?,?,?)`).run(randomUUID(), `RT_STREAK:${entry.id}`, entry.id, studentId, termId, 1, 1);
+    if (!bySource.has(entry.id)) db.prepare(`INSERT INTO rt_streak_emerald_entitlements (id,source_key,source_entry_id,student_id,term_id,active,revision,gem_receipt_allowed) VALUES (?,?,?,?,?,?,?,?)`).run(randomUUID(), `RT_STREAK:${entry.id}`, entry.id, studentId, termId, 1, 1, gemReceiptAllowed);
   }
   for (const row of existing) {
     const active = eligible.has(row.source_entry_id) ? 1 : 0;
@@ -80,7 +83,7 @@ export function upsertEntries(db: Tx, owner: string, sessionId: string, entries:
     // Establish every source fact and affected entitlement state before any gem
     // application. This is deliberately separate from the stable coordinator loop.
     for (const studentId of orderedEntries.map(entry => entry.studentId)) {
-      reconcileEntitlements(db, studentId, context.termId, entriesForStudent(db, studentId, context.termId));
+      reconcileEntitlements(db, context, studentId, context.termId, entriesForStudent(db, studentId, context.termId));
     }
     for (const studentId of [...new Set(orderedEntries.map(entry => entry.studentId))].sort()) {
       coordinator.applyRtScope(tx!, studentId, context.termId);
@@ -98,26 +101,26 @@ export function summaries(db: Tx, owner: string, groupId: string, academicYearId
   return { groupId, academicYearId, termId, summaries: students.map(student => summary(db, student.id, termId)) };
 }
 
-type EntitlementRow = { id: string; sourceKey: `RT_STREAK:${string}`; sourceEntryId: string; studentId: string; termId: string; active: number; revision: number; consumerId: string | null; grantId: string | null; consumedRevision: number | null; consumedAt: string | null };
+type EntitlementRow = { id: string; sourceKey: `RT_STREAK:${string}`; sourceEntryId: string; studentId: string; termId: string; active: number; revision: number; gemReceiptAllowed: number; consumerId: string | null; grantId: string | null; consumedRevision: number | null; consumedAt: string | null };
 export type RtStreakEmeraldEntitlementState = Omit<EntitlementRow, 'active' | 'consumerId' | 'grantId' | 'consumedRevision' | 'consumedAt'> & { active: boolean; consumption: null | { consumerId: string; grantId: string; consumedRevision: number; consumedAt: string } };
-const entitlementState = (row: EntitlementRow): RtStreakEmeraldEntitlementState => ({ id: row.id, sourceKey: row.sourceKey, sourceEntryId: row.sourceEntryId, studentId: row.studentId, termId: row.termId, active: Boolean(row.active), revision: row.revision, consumption: row.consumerId === null ? null : { consumerId: row.consumerId, grantId: row.grantId!, consumedRevision: row.consumedRevision!, consumedAt: row.consumedAt! } });
+const entitlementState = (row: EntitlementRow): RtStreakEmeraldEntitlementState => ({ id: row.id, sourceKey: row.sourceKey, sourceEntryId: row.sourceEntryId, studentId: row.studentId, termId: row.termId, active: Boolean(row.active), revision: row.revision, gemReceiptAllowed: row.gemReceiptAllowed, consumption: row.consumerId === null ? null : { consumerId: row.consumerId, grantId: row.grantId!, consumedRevision: row.consumedRevision!, consumedAt: row.consumedAt! } });
 
 export const RtStreakEmeraldEntitlementPort = {
-  listForReconciliation(studentId: string, termId: string, db: Tx) { return (db.prepare('SELECT e.id,e.source_key AS sourceKey,e.source_entry_id AS sourceEntryId,e.student_id AS studentId,e.term_id AS termId,e.active,e.revision,e.consumer_id AS consumerId,e.grant_id AS grantId,e.consumed_revision AS consumedRevision,e.consumed_at AS consumedAt,g.owner_teacher_id AS ownerTeacherId,g.academic_year_id AS academicYearId FROM rt_streak_emerald_entitlements e JOIN students s ON s.id=e.student_id JOIN groups g ON g.id=s.group_id WHERE e.student_id=? AND e.term_id=? ORDER BY e.id').all(studentId, termId) as any[]).map(row => ({ ...entitlementState(row), ownerTeacherId: row.ownerTeacherId, academicYearId: row.academicYearId })); },
-  getForReconciliation(id: string, db: Tx) { const row = db.prepare('SELECT id,source_key AS sourceKey,source_entry_id AS sourceEntryId,student_id AS studentId,term_id AS termId,active,revision,consumer_id AS consumerId,grant_id AS grantId,consumed_revision AS consumedRevision,consumed_at AS consumedAt FROM rt_streak_emerald_entitlements WHERE id=?').get(id) as EntitlementRow | undefined; return row ? entitlementState(row) : null; },
+  listForReconciliation(studentId: string, termId: string, db: Tx) { return (db.prepare('SELECT e.id,e.source_key AS sourceKey,e.source_entry_id AS sourceEntryId,e.student_id AS studentId,e.term_id AS termId,e.active,e.revision,e.gem_receipt_allowed AS gemReceiptAllowed,e.consumer_id AS consumerId,e.grant_id AS grantId,e.consumed_revision AS consumedRevision,e.consumed_at AS consumedAt,g.owner_teacher_id AS ownerTeacherId,g.academic_year_id AS academicYearId FROM rt_streak_emerald_entitlements e JOIN students s ON s.id=e.student_id JOIN groups g ON g.id=s.group_id WHERE e.student_id=? AND e.term_id=? ORDER BY e.id').all(studentId, termId) as any[]).map(row => ({ ...entitlementState(row), ownerTeacherId: row.ownerTeacherId, academicYearId: row.academicYearId })); },
+  getForReconciliation(id: string, db: Tx) { const row = db.prepare('SELECT id,source_key AS sourceKey,source_entry_id AS sourceEntryId,student_id AS studentId,term_id AS termId,active,revision,gem_receipt_allowed AS gemReceiptAllowed,consumer_id AS consumerId,grant_id AS grantId,consumed_revision AS consumedRevision,consumed_at AS consumedAt FROM rt_streak_emerald_entitlements WHERE id=?').get(id) as EntitlementRow | undefined; return row ? entitlementState(row) : null; },
   consumeActive(id: string, expectedRevision: number, consumerId: string, grantId: string, db: Tx) {
     const result = db.prepare('UPDATE rt_streak_emerald_entitlements SET consumer_id=?,grant_id=?,consumed_revision=?,consumed_at=? WHERE id=? AND active=1 AND consumer_id IS NULL AND revision=?').run(consumerId, grantId, expectedRevision, now(), id, expectedRevision);
     if (result.changes !== 1) fail('Entitlement is stale, inactive, or already consumed.', 409);
     return RtStreakEmeraldEntitlementPort.getForReconciliation(id, db);
   },
   listCurrentForBaselineAfter(afterEntitlementId: string | null, limit: number, db: Tx) {
-    const rows = db.prepare(`SELECT e.id,e.source_key AS sourceKey,e.source_entry_id AS sourceEntryId,e.student_id AS studentId,e.term_id AS termId,e.active,e.revision,e.consumer_id AS consumerId,e.grant_id AS grantId,e.consumed_revision AS consumedRevision,e.consumed_at AS consumedAt,g.owner_teacher_id AS ownerTeacherId,g.academic_year_id AS academicYearId
+    const rows = db.prepare(`SELECT e.id,e.source_key AS sourceKey,e.source_entry_id AS sourceEntryId,e.student_id AS studentId,e.term_id AS termId,e.active,e.revision,e.gem_receipt_allowed AS gemReceiptAllowed,e.consumer_id AS consumerId,e.grant_id AS grantId,e.consumed_revision AS consumedRevision,e.consumed_at AS consumedAt,g.owner_teacher_id AS ownerTeacherId,g.academic_year_id AS academicYearId
       FROM rt_streak_emerald_entitlements e JOIN students s ON s.id=e.student_id JOIN groups g ON g.id=s.group_id
       WHERE (? IS NULL OR e.id > ?) ORDER BY e.id LIMIT ?`).all(afterEntitlementId, afterEntitlementId, limit) as any[];
     return rows.map(row => ({ ...entitlementState(row), ownerTeacherId: row.ownerTeacherId, academicYearId: row.academicYearId }));
   },
   getCurrentForBaseline(entitlementId: string, db: Tx) {
-    const row = db.prepare(`SELECT e.id,e.source_key AS sourceKey,e.source_entry_id AS sourceEntryId,e.student_id AS studentId,e.term_id AS termId,e.active,e.revision,e.consumer_id AS consumerId,e.grant_id AS grantId,e.consumed_revision AS consumedRevision,e.consumed_at AS consumedAt,g.owner_teacher_id AS ownerTeacherId,g.academic_year_id AS academicYearId
+    const row = db.prepare(`SELECT e.id,e.source_key AS sourceKey,e.source_entry_id AS sourceEntryId,e.student_id AS studentId,e.term_id AS termId,e.active,e.revision,e.gem_receipt_allowed AS gemReceiptAllowed,e.consumer_id AS consumerId,e.grant_id AS grantId,e.consumed_revision AS consumedRevision,e.consumed_at AS consumedAt,g.owner_teacher_id AS ownerTeacherId,g.academic_year_id AS academicYearId
       FROM rt_streak_emerald_entitlements e JOIN students s ON s.id=e.student_id JOIN groups g ON g.id=s.group_id WHERE e.id=?`).get(entitlementId) as any;
     return row ? { ...entitlementState(row), ownerTeacherId: row.ownerTeacherId, academicYearId: row.academicYearId } : null;
   },

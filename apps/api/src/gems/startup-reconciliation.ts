@@ -3,6 +3,7 @@ import type Database from 'better-sqlite3';
 import { runImmediateTransaction, type GemSourceTx } from '../services/transactions.js';
 import { createLevelGrantTransitionPort } from '../xp/level-grant-transition-port.js';
 import { RtStreakEmeraldEntitlementPort } from '../rt/service.js';
+import { assertRtReconciliationContinuity } from './service.js';
 import type { GemSourceOrchestrator } from './source-orchestrator.js';
 
 export type StartupReconciliationOptions = { onStep?: (step: 'xp-completion'|'xp-page'|'rt-receipt') => void };
@@ -35,7 +36,12 @@ function reconcile(tx: GemSourceTx, coordinator: GemSourceOrchestrator, options:
     const page = RtStreakEmeraldEntitlementPort.listCurrentForBaselineAfter(after, 100, tx.db);
     if (!page.length) break;
     if (page.some((row, index) => index > 0 && row.id <= page[index - 1].id) || (after !== null && page[0].id <= after)) throw new Error('RT baseline page is not strictly ordered.');
-    for (const snapshot of page) { coordinator.applyRtBaselineEntitlement(tx, snapshot); after = snapshot.id; options.onStep?.('rt-receipt'); }
+    for (const snapshot of page) {
+      assertRtReconciliationContinuity(tx.db, snapshot.id, true);
+      coordinator.applyRtBaselineEntitlement(tx, snapshot);
+      after = snapshot.id;
+      options.onStep?.('rt-receipt');
+    }
   }
   if (RtStreakEmeraldEntitlementPort.listCurrentForBaselineAfter(after, 1, tx.db).length !== 0) throw new Error('RT baseline terminal probe failed.');
 }

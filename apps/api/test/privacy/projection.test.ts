@@ -67,7 +67,7 @@ describe('projection privacy boundary', () => {
     expect(JSON.stringify(response.json())).not.toMatch(/realName|rtAverage|rubric|grade|comments|incidents|history|redCode|disciplinary/i);
   });
 
-  it('allows Show Student to add behaviourState but no private fields', async () => {
+  it('keeps Show Student behaviour-free and excludes private fields', async () => {
     const { app, cookie } = await authenticatedApp();
     const response = await app.inject({ method: 'GET', url: `/api/v1/projection/groups/${groupId}/students/${studentId}?showStudent=true`, headers: { origin, cookie } });
     expect(response.statusCode).toBe(200);
@@ -81,8 +81,8 @@ describe('projection privacy boundary', () => {
       energyVisualState: 'stable',
       coinBalance: 0,
       narrativeProgress: 0,
-      behaviourState: 'NORMAL',
     });
+    expect(response.json()).not.toHaveProperty('behaviourState');
   });
 
   it('validates group and student identifiers without exposing records', async () => {

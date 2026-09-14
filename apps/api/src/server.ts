@@ -20,6 +20,8 @@ import { registerGemRoutes } from './gems/routes.js';
 import { createCursorCodec, parseCursorKeys } from './gems/cursor.js';
 import { createGemSourceOrchestrator } from './gems/source-orchestrator.js';
 import { reconcileBeforeReadiness, type StartupReconciliationOptions } from './gems/startup-reconciliation.js';
+import { registerBehaviourRoutes } from './behaviour/routes.js';
+import { sessionStartPort } from './behaviour/service.js';
 
 type ServerOptions = {
   logger?: boolean;
@@ -55,7 +57,8 @@ export function createServer(databaseUrl = databasePathFromEnv(), options: Serve
     registerXpRoutes(instance, db.database, coordinator);
     registerCoinRoutes(instance, db.database);
     registerGameRoutes(instance, db.database);
-    registerCalendarRoutes(instance, db.database);
+    registerCalendarRoutes(instance, db.database, sessionStartPort);
+    registerBehaviourRoutes(instance, db.database);
     registerRtRoutes(instance, db.database, coordinator);
     registerGemRoutes(instance, db.database, cursorCodec);
   });

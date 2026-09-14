@@ -42,7 +42,7 @@ function fixture(path: string) {
     const sessionId = `77777777-7777-4777-8777-77777777777${index + 1}`;
     const entryId = `88888888-8888-4888-8888-88888888888${index + 1}`;
     const date = `2026-09-0${7 + index}`;
-    db.prepare('INSERT INTO real_class_sessions VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(sessionId, ids.teacher, ids.year, ids.group, ids.calendar, ids.term, ids.slot, date, 'Europe/Paris', '08:00', '09:00', `${date}T06:00:00.000Z`, `${date}T07:00:00.000Z`, now);
+    db.prepare('INSERT INTO real_class_sessions (id,owner_teacher_id,academic_year_id,group_id,calendar_id,term_id,slot_id,local_date,timezone,slot_starts_at,slot_ends_at,started_at,ended_at,created_at,behaviour_snapshot_version) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(sessionId, ids.teacher, ids.year, ids.group, ids.calendar, ids.term, ids.slot, date, 'Europe/Paris', '08:00', '09:00', `${date}T06:00:00.000Z`, `${date}T07:00:00.000Z`, now, null);
     db.prepare('INSERT INTO real_class_session_rt_roster VALUES (?,?,?,?,?,?)').run(sessionId, ids.student, ids.teacher, ids.year, ids.group, ids.term);
     db.prepare('INSERT INTO rt_entries VALUES (?,?,?,?,?,?,?)').run(entryId, sessionId, ids.student, ids.term, '10', now, now);
     db.prepare('INSERT INTO rt_streak_emerald_entitlements (id,source_key,source_entry_id,student_id,term_id,active,revision) VALUES (?,?,?,?,?,?,?)').run(entitlementId, `RT_STREAK:${entryId}`, entryId, ids.student, ids.term, 1, 1);

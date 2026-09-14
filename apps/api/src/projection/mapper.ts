@@ -10,7 +10,6 @@ export type ProjectionStudentDto = {
   energyVisualState: string;
   coinBalance: number;
   narrativeProgress: number;
-  behaviourState?: string;
 };
 
 export type TeacherStudentDto = ProjectionStudentDto & {
@@ -26,7 +25,7 @@ export type TeacherStudentDto = ProjectionStudentDto & {
   detailedHistory: string;
 };
 
-export function toProjectionStudentDto(student: ProjectionStudentRecord, showStudent = false): ProjectionStudentDto {
+export function toProjectionStudentDto(student: ProjectionStudentRecord): ProjectionStudentDto {
   return {
     avatar: student.avatar,
     alias: student.alias,
@@ -37,7 +36,6 @@ export function toProjectionStudentDto(student: ProjectionStudentRecord, showStu
     energyVisualState: student.energyVisualState,
     coinBalance: student.coinBalance,
     narrativeProgress: student.narrativeProgress,
-    ...(showStudent ? { behaviourState: student.behaviourState } : {}),
   };
 }
 
