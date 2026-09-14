@@ -340,14 +340,18 @@ export function applyRt(tx: GemSourceTx, studentId: string, termId: string) {
  * against the immutable entitlement identity before the current revision is
  * replayed by applyRtStates.
  */
-export function assertRtReconciliationContinuity(db: Database.Database, entitlementId: string) {
+export function assertRtReconciliationContinuity(db: Database.Database, entitlementId: string, allowCurrentCatchup = false) {
   const entitlement = db.prepare(`SELECT e.id,e.revision,e.gem_receipt_allowed AS allowed,
       e.student_id AS studentId,e.term_id AS termId,g.owner_teacher_id AS owner,g.academic_year_id AS year
     FROM rt_streak_emerald_entitlements e JOIN students s ON s.id=e.student_id
     JOIN groups g ON g.id=s.group_id WHERE e.id=?`).get(entitlementId) as any;
   if (!entitlement || !Number.isSafeInteger(entitlement.revision) || entitlement.revision < 1 || ![0, 1].includes(entitlement.allowed)) fail('RT entitlement lineage is invalid.', 409);
   const revisions = db.prepare('SELECT * FROM gem_reconciliation_revisions WHERE entitlement_id=? ORDER BY revision').all(entitlementId) as any[];
-  if (revisions.length !== entitlement.revision) fail('RT revision chain is incomplete.', 409);
+  // Startup may be catching up the current revision. In that case the
+  // persisted chain contains only the completed historical revisions; the
+  // current receipt is created atomically by applyRtStates below. A fresh
+  // revision 1 therefore legitimately has no persisted receipt yet.
+  if (revisions.length !== entitlement.revision && (!allowCurrentCatchup || revisions.length !== entitlement.revision - 1)) fail('RT revision chain is incomplete.', 409);
   for (let index = 0; index < revisions.length; index += 1) {
     const revision = revisions[index];
     if (revision.revision !== index + 1 || revision.receipt_operation_id !== `rt-revision:${entitlementId}:${revision.revision}` ||

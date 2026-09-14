@@ -83,7 +83,7 @@ describe('startup reconciliation replay chain', () => {
     runImmediateTransaction(db, 'startup-no-movement', tx => coordinator.applyRtScope(tx, ids.student, ids.term));
     expect(db.prepare('SELECT outcome,movement_id FROM gem_reconciliation_revisions WHERE entitlement_id=?').get(id)).toEqual({ outcome: 'NO_MOVEMENT', movement_id: null });
     db.prepare('UPDATE rt_streak_emerald_entitlements SET revision=2 WHERE id=?').run(id);
-    expect(() => reconcileBeforeReadiness(db, coordinator)).toThrow(/revision chain/i);
+    expect(() => reconcileBeforeReadiness(db, coordinator)).toThrow(/revision continuity or CAS is invalid/i);
     expect(db.prepare('SELECT revision FROM rt_streak_emerald_entitlements WHERE id=?').get(id)).toEqual({ revision: 2 });
     expect(db.prepare('SELECT COUNT(*) AS count FROM gem_reconciliation_revisions WHERE entitlement_id=?').get(id)).toEqual({ count: 1 });
     db.close();

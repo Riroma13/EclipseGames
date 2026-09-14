@@ -37,7 +37,7 @@ function reconcile(tx: GemSourceTx, coordinator: GemSourceOrchestrator, options:
     if (!page.length) break;
     if (page.some((row, index) => index > 0 && row.id <= page[index - 1].id) || (after !== null && page[0].id <= after)) throw new Error('RT baseline page is not strictly ordered.');
     for (const snapshot of page) {
-      assertRtReconciliationContinuity(tx.db, snapshot.id);
+      assertRtReconciliationContinuity(tx.db, snapshot.id, true);
       coordinator.applyRtBaselineEntitlement(tx, snapshot);
       after = snapshot.id;
       options.onStep?.('rt-receipt');
