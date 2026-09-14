@@ -1,0 +1,3 @@
+import { ApiError } from '../http/errors.js';
+export type ActiveXpSession = { id:string; ownerTeacherId:string; academicYearId:string; groupId:string; termId:string; active:boolean };
+export function resolveXpAttribution(session: ActiveXpSession|null|undefined, ownerTeacherId:string, academicYearId:string, groupId:string) { if(!session||!session.active||session.ownerTeacherId!==ownerTeacherId||session.academicYearId!==academicYearId||session.groupId!==groupId) throw new ApiError('VALIDATION_FAILED',422,'An active matching real class session is required.'); return {realClassSessionId:session.id,termId:session.termId}; }

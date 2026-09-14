@@ -7,10 +7,25 @@ import { migrateDatabase } from '../../src/db/migrate.js';
 import { migrations } from '../../src/db/migrations.js';
 import { DEMO_CHALLENGE, DEMO_EVENT, DEMO_GROUP, DEMO_PREPARED_CHALLENGE, DEMO_PREPARED_EVENT, DEMO_PRESET, DEMO_PROMPT_DECK, DEMO_STUDENTS, DEMO_YEAR, seedDemo } from '../../src/demo/seed-service.js';
 import { ensureOwnedDemoRoster } from '../../src/roster/service.js';
+import { startFixtureRealClassSession } from '../../src/test-support/real-class-session.js';
 
 const databases: Database.Database[] = [];
 function db() { const value = new Database(':memory:'); value.pragma('foreign_keys = ON'); migrateDatabase(value, migrations); value.prepare('INSERT INTO teacher_accounts VALUES (?, ?, ?, ?)').run('teacher-demo', 'teacher@example.test', 'hash', '2026-01-01'); databases.push(value); return value; }
 afterEach(() => { for (const value of databases.splice(0)) value.close(); });
+function setupFixture(value: Database.Database) {
+  ensureOwnedDemoRoster(value, 'teacher-demo', { year: DEMO_YEAR, group: DEMO_GROUP, students: DEMO_STUDENTS });
+  if (!value.prepare('SELECT 1 FROM real_class_sessions WHERE owner_teacher_id=? AND ended_at IS NULL').get('teacher-demo')) {
+    startFixtureRealClassSession(value, { teacher: 'teacher-demo', year: DEMO_YEAR.id, group: DEMO_GROUP.id, key: '00000000-0000-4000-8000-000000009901' });
+  }
+}
+function seedFixture(value: Database.Database) {
+  setupFixture(value);
+  return seedDemo(value, 'teacher-demo');
+}
+function persistedState(value: Database.Database) {
+  const tables = (value.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all() as Array<{ name: string }>).map(({ name }) => name);
+  return tables.map((name) => ({ name, rows: value.prepare(`SELECT * FROM "${name.replaceAll('"', '""')}" ORDER BY rowid`).all() }));
+}
 
 describe('service-owned demo seed', () => {
   it('refuses production before opening the configured database', () => {
@@ -23,10 +38,10 @@ describe('service-owned demo seed', () => {
 
   it('creates the fixed fictional roster and points through owned services and replays safely', () => {
     const value = db();
-    const first = seedDemo(value, 'teacher-demo');
+     const first = seedFixture(value);
     const counts = () => ({ years: value.prepare('SELECT COUNT(*) AS count FROM academic_years').get(), groups: value.prepare('SELECT COUNT(*) AS count FROM groups').get(), students: value.prepare('SELECT COUNT(*) AS count FROM students').get(), events: value.prepare('SELECT COUNT(*) AS count FROM xp_evidence_events').get(), presets: value.prepare('SELECT COUNT(*) AS count FROM minigame_presets').get(), promptDecks: value.prepare('SELECT COUNT(*) AS count FROM prompt_decks').get(), classroomEvents: value.prepare('SELECT COUNT(*) AS count FROM classroom_events').get(), classroomChallenges: value.prepare('SELECT COUNT(*) AS count FROM classroom_challenges').get() });
     const before = counts();
-    const second = seedDemo(value, 'teacher-demo');
+     const second = seedFixture(value);
     expect(first.roster.year.id).toBe(DEMO_YEAR.id);
     expect(first.roster.group.id).toBe(DEMO_GROUP.id);
     expect(first.roster.students).toHaveLength(16);
@@ -72,16 +87,16 @@ describe('service-owned demo seed', () => {
     value.prepare('INSERT INTO groups VALUES (?, ?, ?, ?, ?)').run(DEMO_GROUP.id, 'teacher-demo', DEMO_YEAR.id, DEMO_GROUP.name, '2026-01-01');
     value.prepare('INSERT INTO students VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(DEMO_STUDENTS[0].id, DEMO_GROUP.id, DEMO_STUDENTS[0].realName, DEMO_STUDENTS[0].alias, DEMO_STUDENTS[0].avatar, DEMO_STUDENTS[0].specialty, null, null, '2026-01-01');
      value.prepare('INSERT INTO coin_ledger (id,student_id,academic_year_id,amount,source,created_at) VALUES (?,?,?,?,?,?)').run('legacy-coin', DEMO_STUDENTS[0].id, DEMO_YEAR.id, 1, 'SPECIAL_CHALLENGE', '2026-01-01');
-     expect(() => seedDemo(value, 'teacher-demo')).not.toThrow();
+     expect(() => seedFixture(value)).not.toThrow();
     expect(value.prepare('SELECT COUNT(*) AS count FROM academic_years').get()).toEqual({ count: 1 });
      expect(value.prepare('SELECT COUNT(*) AS count FROM coin_ledger').get()).toEqual({ count: 1 });
   });
 
   it('fails closed when fixed prepared content is changed after the first seed', () => {
     const value = db();
-    seedDemo(value, 'teacher-demo');
+     seedFixture(value);
     value.prepare('UPDATE minigame_presets SET prompt=? WHERE id=?').run('Changed prompt', DEMO_PRESET.id);
-    expect(() => seedDemo(value, 'teacher-demo')).toThrow(new RegExp(`Demo minigame preset collision: ${DEMO_PRESET.id}`));
+     expect(() => seedFixture(value)).toThrow(new RegExp(`Demo minigame preset collision: ${DEMO_PRESET.id}`));
     expect(value.prepare('SELECT COUNT(*) AS count FROM minigame_presets').get()).toEqual({ count: 1 });
     expect(value.prepare('SELECT COUNT(*) AS count FROM prompt_decks').get()).toEqual({ count: 1 });
   });
@@ -91,17 +106,29 @@ describe('service-owned demo seed', () => {
     value.prepare('INSERT INTO academic_years VALUES (?, ?, ?, ?, ?, ?, ?)').run('unrelated-year', 'teacher-demo', 'Unrelated', '2025-09-01', '2026-07-01', null, '2026-01-01');
     value.prepare('INSERT INTO groups VALUES (?, ?, ?, ?, ?)').run('unrelated-group', 'teacher-demo', 'unrelated-year', 'Unrelated group', '2026-01-01');
     value.prepare('INSERT INTO students VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run('unrelated-student', 'unrelated-group', 'Unrelated Student', 'Unrelated', 'default', 'Leader', null, null, '2026-01-01');
-    expect(() => seedDemo(value, 'teacher-demo')).not.toThrow();
+     expect(() => seedFixture(value)).not.toThrow();
     expect(value.prepare('SELECT real_name AS realName, alias FROM students WHERE id=?').get('unrelated-student')).toEqual({ realName: 'Unrelated Student', alias: 'Unrelated' });
   });
 
   it('rolls back the complete seed transaction when a later fixed write fails', () => {
     const value = db();
-     value.prepare(`CREATE TRIGGER fail_demo_event_insert BEFORE INSERT ON classroom_events WHEN NEW.id='${DEMO_EVENT.id}' BEGIN SELECT RAISE(ABORT, 'synthetic seed failure'); END`).run();
+    setupFixture(value);
+    const baseline = persistedState(value);
+    value.prepare(`CREATE TRIGGER fail_demo_event_insert BEFORE INSERT ON classroom_events WHEN NEW.id='${DEMO_EVENT.id}' BEGIN SELECT RAISE(ABORT, 'synthetic seed failure'); END`).run();
     expect(() => seedDemo(value, 'teacher-demo')).toThrow('synthetic seed failure');
-    expect(value.prepare('SELECT COUNT(*) AS count FROM academic_years').get()).toEqual({ count: 0 });
-    expect(value.prepare('SELECT COUNT(*) AS count FROM groups').get()).toEqual({ count: 0 });
-    expect(value.prepare('SELECT COUNT(*) AS count FROM students').get()).toEqual({ count: 0 });
+    expect(persistedState(value)).toEqual(baseline);
+    expect(value.prepare('SELECT COUNT(*) AS count FROM real_class_sessions').get()).toEqual({ count: 1 });
+    expect(value.prepare('SELECT COUNT(*) AS count FROM real_class_session_behaviour_roster').get()).toEqual({ count: 16 });
+    expect(value.prepare('SELECT COUNT(*) AS count FROM behaviour_student_state').get()).toEqual({ count: 0 });
+    expect(value.prepare('SELECT COUNT(*) AS count FROM behaviour_actions').get()).toEqual({ count: 0 });
     expect(value.prepare('SELECT COUNT(*) AS count FROM xp_evidence_events').get()).toEqual({ count: 0 });
+    expect(value.prepare('SELECT COUNT(*) AS count FROM xp_badge_unlocks').get()).toEqual({ count: 0 });
+    expect(value.prepare('SELECT COUNT(*) AS count FROM xp_level_unlocks').get()).toEqual({ count: 0 });
+    expect(value.prepare('SELECT COUNT(*) AS count FROM coin_ledger').get()).toEqual({ count: 0 });
+    expect(value.prepare('SELECT COUNT(*) AS count FROM coin_rewards').get()).toEqual({ count: baseline.find((table) => table.name === 'coin_rewards')?.rows.length ?? 0 });
+    expect(value.prepare('SELECT COUNT(*) AS count FROM minigame_presets').get()).toEqual({ count: 0 });
+    expect(value.prepare('SELECT COUNT(*) AS count FROM prompt_decks').get()).toEqual({ count: 0 });
+    expect(value.prepare('SELECT COUNT(*) AS count FROM classroom_events').get()).toEqual({ count: 0 });
+    expect(value.prepare('SELECT COUNT(*) AS count FROM classroom_challenges').get()).toEqual({ count: 0 });
   });
 });

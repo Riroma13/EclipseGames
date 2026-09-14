@@ -1,0 +1,8 @@
+export const rubricCategories = ['COMMUNICATION', 'PRECISION', 'CONSISTENCY', 'COLLABORATION'] as const;
+export type RubricLevel = 1 | 2 | 3 | 4;
+export type RubricState = 'OPEN' | 'CLOSED' | 'REOPENED';
+export function suggestedRubricLevel(baseXp: number): RubricLevel { if (baseXp <= 2) return 1; if (baseXp <= 5) return 2; if (baseXp <= 9) return 3; return 4; }
+export function calculateRubricCategory(baseXpValues: readonly number[], overrideLevel: RubricLevel | null = null) { const baseXp=baseXpValues.reduce((sum,value)=>sum+value,0); const qualifyingEventCount=baseXpValues.length; const suggestedLevel=suggestedRubricLevel(baseXp); return {baseXp,qualifyingEventCount,suggestedLevel,overrideLevel,finalLevel:overrideLevel??suggestedLevel,lowEvidence:qualifyingEventCount<4}; }
+export function rubricGradeMilli(levels: readonly RubricLevel[]): number { if (levels.length!==4||levels.some(level=>level<1||level>4)) throw new Error('Exactly four rubric levels from 1 to 4 are required.'); return levels.reduce((sum,level)=>sum+level,0)*625; }
+export function formatGrade(levelSumOrMilli: number): string { const milli=levelSumOrMilli<=16?levelSumOrMilli*625:levelSumOrMilli; if(!Number.isInteger(milli)||milli<2500||milli>10000) throw new Error('Grade is outside the rubric range.'); return (milli/1000).toFixed(3).replace(/0+$/,'').replace(/\.$/,''); }
+export function transitionRubric(state: RubricState, operation: 'CLOSE'|'REOPEN'): RubricState { if(operation==='CLOSE'&&(state==='OPEN'||state==='REOPENED')) return 'CLOSED'; if(operation==='REOPEN'&&state==='CLOSED') return 'REOPENED'; throw new Error(`Cannot ${operation.toLowerCase()} rubric in ${state} state.`); }

@@ -6,6 +6,7 @@ import * as xp from '../xp/service.js';
 import { createGemSourceOrchestrator } from './source-orchestrator.js';
 import { reconcileBeforeReadiness } from './startup-reconciliation.js';
 import { runImmediateTransaction } from '../services/transactions.js';
+import * as calendar from '../calendar/service.js';
 
 const ids = {
   teacher: '70000000-0000-4000-8000-000000000001',
@@ -21,11 +22,13 @@ function database() {
   db.pragma('foreign_keys=ON');
   migrateDatabase(db, migrations);
   db.prepare('INSERT INTO teacher_accounts VALUES (?,?,?,?)').run(ids.teacher, 'startup@test', 'hash', 'now');
-  db.prepare('INSERT INTO academic_years (id,owner_teacher_id,label,starts_on,ends_on,created_at) VALUES (?,?,?,?,?,?)').run(ids.year, ids.teacher, '2026', '2026', '2027', 'now');
+  db.prepare('INSERT INTO academic_years (id,owner_teacher_id,label,starts_on,ends_on,created_at) VALUES (?,?,?,?,?,?)').run(ids.year, ids.teacher, '2026', '2026-01-01', '2027-01-01', 'now');
   db.prepare('INSERT INTO groups VALUES (?,?,?,?,?)').run(ids.group, ids.teacher, ids.year, 'A', 'now');
   db.prepare('INSERT INTO students (id,group_id,real_name,alias,avatar,specialty,created_at) VALUES (?,?,?,?,?,?,?)').run(ids.student, ids.group, 'Student', 'S', 'default', 'Leader', 'now');
   db.prepare('INSERT INTO academic_calendars (id,academic_year_id,owner_teacher_id,timezone,created_at,updated_at) VALUES (?,?,?,?,?,?)').run('70000000-0000-4000-8000-000000000006', ids.year, ids.teacher, 'UTC', 'now', 'now');
-  db.prepare('INSERT INTO academic_terms (id,calendar_id,academic_year_id,owner_teacher_id,code,starts_on,ends_on) VALUES (?,?,?,?,?,?,?)').run(ids.term, '70000000-0000-4000-8000-000000000006', ids.year, ids.teacher, 'T1', '2026', '2027');
+  db.prepare('INSERT INTO academic_terms (id,calendar_id,academic_year_id,owner_teacher_id,code,starts_on,ends_on) VALUES (?,?,?,?,?,?,?)').run(ids.term, '70000000-0000-4000-8000-000000000006', ids.year, ids.teacher, 'T1', '2026-01-01', '2027-01-01');
+  db.prepare('INSERT INTO weekly_timetable_slots VALUES (?,?,?,?,?,?,?,?)').run('70000000-0000-4000-8000-000000000007', '70000000-0000-4000-8000-000000000006', ids.year, ids.teacher, ids.group, 1, '00:00', '23:59');
+  calendar.start(db, ids.teacher, ids.year, ids.group, key(9), { now: () => new Date('2026-01-05T12:00:00.000Z') });
   return db;
 }
 
