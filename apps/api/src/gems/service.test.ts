@@ -5,8 +5,8 @@ import { migrations } from '../db/migrations.js';
 import * as xp from '../xp/service.js';
 import { createGemSourceOrchestrator } from './source-orchestrator.js';
 import { resultReward, spend, correctResultReward } from './service.js';
-import * as calendar from '../calendar/service.js';
-import { loseLife, sessionStartPort } from '../behaviour/service.js';
+import { loseLife } from '../behaviour/service.js';
+import { startFixtureRealClassSession } from '../test-support/real-class-session.js';
 
 const ids = {
   teacher: '00000000-0000-4000-8000-000000000201',
@@ -26,7 +26,8 @@ function database() {
   db.prepare('INSERT INTO groups VALUES (?,?,?,?,?)').run(ids.group, ids.teacher, ids.year, 'A', 'now');
   db.prepare('INSERT INTO students (id,group_id,real_name,alias,avatar,specialty,created_at) VALUES (?,?,?,?,?,?,?)').run(ids.student, ids.group, 'Student', 'S', 'default', 'Leader', 'now');
   db.prepare('INSERT INTO assessment_contexts (id,group_id,name,created_at) VALUES (?,?,?,?)').run(ids.context, ids.group, 'Assessment', 'now');
-  return db;
+  const session = startFixtureRealClassSession(db, { teacher: ids.teacher, year: ids.year, group: ids.group, key: key(209) });
+  return { db, sessionId: session.id };
 }
 
 describe('XP gem source boundary', () => {
@@ -34,7 +35,7 @@ describe('XP gem source boundary', () => {
   afterEach(() => { for (const db of open.splice(0)) db.close(); });
 
   it('commits threshold receipts, replays them exactly, and reverses the same lineage', () => {
-    const db = database(); open.push(db);
+    const { db } = database(); open.push(db);
     const coordinator = createGemSourceOrchestrator();
     for (let index = 1; index <= 7; index += 1) {
       const result = xp.create(db, ids.teacher, ids.student, { category: 'COMMUNICATION', baseXp: 3 }, key(210 + index), undefined, coordinator);
@@ -68,7 +69,7 @@ describe('XP gem source boundary', () => {
   });
 
   it('rejects changed receipt lineage and rolls back a failed source transaction', () => {
-    const db = database(); open.push(db);
+    const { db } = database(); open.push(db);
     const real = createGemSourceOrchestrator();
     xp.create(db, ids.teacher, ids.student, { category: 'COMMUNICATION', baseXp: 3 }, key(220), undefined, real);
     xp.create(db, ids.teacher, ids.student, { category: 'COMMUNICATION', baseXp: 3 }, key(221), undefined, real);
@@ -90,7 +91,7 @@ describe('XP gem source boundary', () => {
   });
 
   it('persists an immutable denied XP receipt without movement and does not catch up on reversal', () => {
-    const db = database(); open.push(db);
+    const { db } = database(); open.push(db);
     const coordinator = createGemSourceOrchestrator();
     const denied = { specialtyBonusAllowed: () => false };
     for (let index = 1; index <= 4; index += 1) {
@@ -126,10 +127,10 @@ describe('result reward and redemption lineage', () => {
   afterEach(() => { for (const db of open.splice(0)) db.close(); });
 
   it('uses exact operation identities, replays, and refunds before correction', () => {
-    const db = database(); open.push(db);
-    const grant = resultReward(db, ids.teacher, ids.student, ids.context, '8.00', key(230));
+    const { db, sessionId } = database(); open.push(db);
+    const grant = resultReward(db, ids.teacher, ids.student, ids.context, '8.00', key(230), sessionId);
     expect(grant.status).toBe(201);
-    const redemption = spend(db, ids.teacher, ids.student, ids.context, 'emerald-assessment-advantage', key(231));
+    const redemption = spend(db, ids.teacher, ids.student, ids.context, 'emerald-assessment-advantage', key(231), sessionId);
     expect(redemption.status).toBe(201);
     const correction = correctResultReward(db, ids.teacher, grant.id, 'Score corrected', key(232));
     expect(correction.status).toBe(201);
@@ -149,27 +150,21 @@ describe('result reward and redemption lineage', () => {
   });
 
   it('rejects direct requests before persistence when the active behaviour policy restricts them', () => {
-    const db = database(); open.push(db);
-    calendar.replaceCalendar(db, ids.teacher, ids.year, {
-      timezone: 'UTC',
-      terms: [{ code: 'T1', startsOn: '2026-09-01', endsOn: '2026-12-20' }, { code: 'T2', startsOn: '2026-12-21', endsOn: '2027-03-31' }, { code: 'T3', startsOn: '2027-04-01', endsOn: '2027-07-01' }],
-      holidays: [], slots: [{ groupId: ids.group, weekday: 1, startsAt: '08:00', endsAt: '09:00' }],
-    });
-    const session = calendar.start(db, ids.teacher, ids.year, ids.group, key(233), { now: () => new Date('2026-09-07T08:30:00.000Z') }, sessionStartPort).session;
-    loseLife(db, ids.teacher, session.id, ids.student, key(234));
-    loseLife(db, ids.teacher, session.id, ids.student, key(238));
+    const { db, sessionId } = database(); open.push(db);
+    loseLife(db, ids.teacher, sessionId, ids.student, key(234));
+    loseLife(db, ids.teacher, sessionId, ids.student, key(238));
     const tables = ['gem_result_reward_operations', 'gem_result_rewards', 'gem_advantage_redemptions', 'gem_ledger', 'gem_spend_allocations', 'behaviour_requests'];
     const before = tables.map(table => db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count:number });
-    expect(() => resultReward(db, ids.teacher, ids.student, ids.context, '8.00', key(235), session.id)).toThrow(/restricted/i);
-    expect(() => spend(db, ids.teacher, ids.student, ids.context, 'emerald-assessment-advantage', key(236), session.id)).toThrow(/restricted/i);
+    expect(() => resultReward(db, ids.teacher, ids.student, ids.context, '8.00', key(235), sessionId)).toThrow(/restricted/i);
+    expect(() => spend(db, ids.teacher, ids.student, ids.context, 'emerald-assessment-advantage', key(236), sessionId)).toThrow(/restricted/i);
     expect(tables.map(table => db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count:number })).toEqual(before);
   });
 
   it('allows correction after behaviour changes and exact replay does not re-evaluate lives', () => {
-    const db = database(); open.push(db);
-    const grant = resultReward(db, ids.teacher, ids.student, ids.context, '8.00', key(236));
+    const { db, sessionId } = database(); open.push(db);
+    const grant = resultReward(db, ids.teacher, ids.student, ids.context, '8.00', key(236), sessionId);
     expect(grant.status).toBe(201);
-    const replay = resultReward(db, ids.teacher, ids.student, ids.context, '8.00', key(236));
+    const replay = resultReward(db, ids.teacher, ids.student, ids.context, '8.00', key(236), sessionId);
     expect(replay).toMatchObject({ status: 200, id: grant.id });
     expect(() => correctResultReward(db, ids.teacher, grant.id, 'Score corrected', key(237))).not.toThrow();
   });
