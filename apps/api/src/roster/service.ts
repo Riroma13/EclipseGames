@@ -3,7 +3,7 @@ import type Database from 'better-sqlite3';
 import { ApiError } from '../http/errors.js';
 import * as repository from './repository.js';
 import { assertAcademicYearLifecycleChange, assertArchiveAllowed } from '../calendar/service.js';
-import { getOwnedAcademicYearGroupContext as getOwnedAcademicYearGroupContextAdapter } from './calendar-context.js';
+import { getActiveOwnedRealClassSession as getActiveOwnedRealClassSessionAdapter, getOwnedAcademicYearGroupContext as getOwnedAcademicYearGroupContextAdapter } from './calendar-context.js';
 
 export const AVATARS = ['default', 'fox', 'owl', 'cat', 'wolf'] as const;
 export const SPECIALTIES = ['Leader', 'Diplomat', 'Strategist', 'Analyst', 'Disciplined', 'Perseverant', 'Helper', 'Ally'] as const;
@@ -17,6 +17,10 @@ export function getYearForPatch(db: Database.Database, teacherId: string, id: st
 /** Calendar's narrow adapter: calendar code receives verified roster identity without owning roster queries. */
 export function getOwnedAcademicYearGroupContext(db: Database.Database, teacherId: string, yearId: string, groupId: string) {
   return getOwnedAcademicYearGroupContextAdapter(db, teacherId, yearId, groupId);
+}
+/** Minimal cross-domain adapter for XP attribution; calendar remains the owner of session lookup. */
+export function getActiveOwnedRealClassSession(db: Database.Database, teacherId: string, yearId: string, groupId: string) {
+  return getActiveOwnedRealClassSessionAdapter(db, teacherId, yearId, groupId);
 }
 function ownedGroup(db: Database.Database, id: string, teacherId: string) { return repository.findGroup(db, id, teacherId) ?? notFound('Group not found.'); }
 function groupYear(db: Database.Database, group: repository.GroupRecord, teacherId: string) { const year = ownedYear(db, group.academicYearId, teacherId); return { group, year }; }

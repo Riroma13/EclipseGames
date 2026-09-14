@@ -6,6 +6,12 @@ import { isSelectedYearHistorical, requestedYearNeedsAuthoritativeLookup, reques
 afterEach(() => vi.restoreAllMocks());
 
 describe('workspace XP idempotency', () => {
+  it('uses the private rubric routes and supplied idempotency key', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ state:'OPEN' }), { status: 200 }));
+    await workspaceApi.saveRubric('student', 'term', 'year', { expectedRevision: 0, overrides: { COMMUNICATION: 4, PRECISION: null, CONSISTENCY: null, COLLABORATION: null }, comment: 'private' }, '00000000-0000-4000-8000-000000000020');
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/students/student/terms/term/observation-rubric?academicYearId=year');
+    expect((fetchMock.mock.calls[0][1] as RequestInit).headers).toMatchObject({ 'Idempotency-Key': '00000000-0000-4000-8000-000000000020' });
+  });
   it('reuses the supplied create key on timeout replay', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ event: { id: 'event', baseXp: 1, specialtyBonusXp: 0, effectiveXp: 1 }, summary: {} }), { status: 200, headers: { 'content-type': 'application/json' } }));
     await workspaceApi.registerXp('student', { category: 'PRECISION', baseXp: 1 }, undefined, '00000000-0000-4000-8000-000000000001');

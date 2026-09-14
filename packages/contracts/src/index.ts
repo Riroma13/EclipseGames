@@ -72,5 +72,8 @@ export type SessionStatusDto = { configured: boolean; canReplace: boolean; eligi
 export const rtValueSchema = z.union([z.literal(10), z.literal(5), z.literal(0), z.literal('ABSENT')]);
 export type RtValue = z.infer<typeof rtValueSchema>;
 export type RtTermSummaryDto = { studentId: string; termId: string; average: number | null; energy: 'CRITICAL'|'LOW'|'STABLE'|'HIGH'|'MAXIMUM' | null; streak: number };
+export type ObservationRubricLevel = 1|2|3|4;
+export type ObservationRubricCategoryDto = { category: XpCategory; baseXp:number; qualifyingEventCount:number; suggestedLevel:ObservationRubricLevel; overrideLevel:ObservationRubricLevel|null; finalLevel:ObservationRubricLevel; lowEvidence:boolean };
+export type ObservationRubricDto = { studentId:string; academicYearId:string; termId:string; state:'OPEN'|'CLOSED'|'REOPENED'; revision:number; archived:boolean; draftComment:string|null; categories:ObservationRubricCategoryDto[]; snapshot:null|{version:number;gradeMilli:number;gradeDecimal:string;comment:string|null;closedAt:string;closedByTeacherId:string;priorVersion:number|null}; stale:boolean; unattributedAnnualEventCount:number };
 
 export { z };

@@ -64,7 +64,9 @@ describe('projection privacy boundary', () => {
       coinBalance: 0,
       narrativeProgress: 0,
     });
-    expect(JSON.stringify(response.json())).not.toMatch(/realName|rtAverage|rubric|grade|comments|incidents|history|redCode|disciplinary/i);
+    const payload = JSON.stringify(response.json());
+    expect(payload).not.toMatch(/realName|rtAverage|rubric|grade|comments|incidents|history|redCode|disciplinary|"category"|"baseXp"|"qualifyingEventCount"|"suggestedLevel"|"overrideLevel"|"finalLevel"|"lowEvidence"|"gradeMilli"|"gradeDecimal"|"draftComment"|"lifecycle"|"snapshot"|"eventId"|"closedByTeacherId"|"reopenReason/i);
+    expect(payload).not.toMatch(/4\.375|8\.125|Private rubric comment|Private evidence value|Teacher reopen reason|00000000-0000-4000-8000-000000000777/i);
   });
 
   it('keeps Show Student behaviour-free and excludes private fields', async () => {
@@ -83,6 +85,9 @@ describe('projection privacy boundary', () => {
       narrativeProgress: 0,
     });
     expect(response.json()).not.toHaveProperty('behaviourState');
+    const payload = JSON.stringify(response.json());
+    expect(payload).not.toMatch(/rubric|grade|comments|"category"|"baseXp"|"qualifyingEventCount"|"suggestedLevel"|"overrideLevel"|"finalLevel"|"lowEvidence"|"gradeMilli"|"gradeDecimal"|"draftComment"|"lifecycle"|"snapshot"|"eventId"|"closedByTeacherId"|"reopenReason/i);
+    expect(payload).not.toMatch(/4\.375|8\.125|Private rubric comment|Private evidence value|Teacher reopen reason|00000000-0000-4000-8000-000000000777/i);
   });
 
   it('validates group and student identifiers without exposing records', async () => {

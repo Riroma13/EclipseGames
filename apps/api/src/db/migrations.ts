@@ -60,4 +60,8 @@ export const migrations: Migration[] = [
     id: '0014_behaviour_lives',
     sql: readFileSync(fileURLToPath(new URL('../../drizzle/0014_behaviour_lives.sql', import.meta.url)), 'utf8'),
   },
+  {
+    id: '0015_quarterly_observation_rubric',
+    sql: readFileSync(fileURLToPath(new URL('../../drizzle/0015_quarterly_observation_rubric.sql', import.meta.url)), 'utf8'),
+  },
 ];
