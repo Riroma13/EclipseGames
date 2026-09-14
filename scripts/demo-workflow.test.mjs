@@ -18,21 +18,27 @@ import {
 } from './demo-workflow.mjs';
 
 test('uses canonical defaults and ignores generic inherited values', () => {
-  const environment = effectiveEnvironment({ API_PORT: '4000', DATABASE_URL: '/tmp/demo.sqlite', NODE_ENV: 'production' });
+  const environment = effectiveEnvironment({ API_PORT: '4000', DATABASE_URL: '/tmp/demo.sqlite', NODE_ENV: 'production', GEM_CURSOR_KEYS: 'generic:ignored' });
   assert.equal(environment.NODE_ENV, DEFAULTS.NODE_ENV);
   assert.equal(environment.API_PORT, DEFAULTS.API_PORT);
   assert.equal(environment.DATABASE_URL, CANONICAL_DATABASE);
   assert.equal(environment.API_ORIGIN, DEFAULTS.API_ORIGIN);
+  assert.equal(environment.GEM_CURSOR_KEYS, DEFAULTS.GEM_CURSOR_KEYS);
 });
 
 test('accepts validated namespaced overrides and rejects unsafe values', () => {
-  const environment = effectiveEnvironment({ ECLIPSE_DEMO_API_PORT: '4000', ECLIPSE_DEMO_DATABASE_URL: '/tmp/demo.sqlite' });
+  const override = `demo:${Buffer.alloc(32, 1).toString('base64url')}`;
+  const environment = effectiveEnvironment({ ECLIPSE_DEMO_API_PORT: '4000', ECLIPSE_DEMO_DATABASE_URL: '/tmp/demo.sqlite', ECLIPSE_DEMO_GEM_CURSOR_KEYS: override });
   assert.equal(environment.API_PORT, '4000');
   assert.equal(environment.DATABASE_URL, '/tmp/demo.sqlite');
+  assert.equal(environment.GEM_CURSOR_KEYS, override);
   assert.throws(() => effectiveEnvironment({ ECLIPSE_DEMO_NODE_ENV: 'production' }), /requires NODE_ENV/);
   assert.throws(() => effectiveEnvironment({ ECLIPSE_DEMO_API_HOST: '0.0.0.0' }), /loopback/);
   assert.throws(() => effectiveEnvironment({ ECLIPSE_DEMO_API_PORT: '99999' }), /valid port/);
   assert.throws(() => effectiveEnvironment({ ECLIPSE_DEMO_APP_ORIGIN: 'https://evil.example' }), /loopback HTTP/);
+  assert.throws(() => effectiveEnvironment({ ECLIPSE_DEMO_GEM_CURSOR_KEYS: 'demo:not-a-key' }), /GEM_CURSOR_KEYS is invalid/);
+  assert.throws(() => effectiveEnvironment({ ECLIPSE_DEMO_GEM_CURSOR_KEYS: `demo:${Buffer.alloc(32, 1).toString('base64url')}\n` }), /GEM_CURSOR_KEYS is invalid/);
+  assert.throws(() => effectiveEnvironment({ ECLIPSE_DEMO_GEM_CURSOR_KEYS: `demo:${Buffer.alloc(32, 1).toString('base64url')},demo:${Buffer.alloc(32, 2).toString('base64url')}` }), /GEM_CURSOR_KEYS is invalid/);
 });
 
 test('refuses production before startup side effects', async () => {

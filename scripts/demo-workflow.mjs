@@ -9,11 +9,13 @@ export const CANONICAL_DATABASE = '/home/ubuntu/.local/share/eclipsegames-demo/r
 export const DEFAULTS = Object.freeze({
   NODE_ENV: 'development', DATABASE_URL: CANONICAL_DATABASE, API_HOST: '127.0.0.1', API_PORT: '3199',
   APP_ORIGIN: 'http://localhost:5173', API_ORIGIN: 'http://127.0.0.1:3199',
+  GEM_CURSOR_KEYS: `active:${Buffer.alloc(32, 0).toString('base64url')}`,
   BOOTSTRAP_TEACHER_EMAIL: 'teacher@example.test', BOOTSTRAP_TEACHER_PASSWORD: 'change-me-in-development',
 });
 const OVERRIDES = Object.freeze({
   NODE_ENV: 'ECLIPSE_DEMO_NODE_ENV', DATABASE_URL: 'ECLIPSE_DEMO_DATABASE_URL', API_HOST: 'ECLIPSE_DEMO_API_HOST',
   API_PORT: 'ECLIPSE_DEMO_API_PORT', APP_ORIGIN: 'ECLIPSE_DEMO_APP_ORIGIN', API_ORIGIN: 'ECLIPSE_DEMO_API_ORIGIN',
+  GEM_CURSOR_KEYS: 'ECLIPSE_DEMO_GEM_CURSOR_KEYS',
   BOOTSTRAP_TEACHER_EMAIL: 'ECLIPSE_DEMO_BOOTSTRAP_TEACHER_EMAIL',
   BOOTSTRAP_TEACHER_PASSWORD: 'ECLIPSE_DEMO_BOOTSTRAP_TEACHER_PASSWORD',
 });
@@ -30,6 +32,16 @@ function validate(key, value) {
   if (key === 'DATABASE_URL' && (!value.endsWith('.sqlite') || value.includes('\0') || value.startsWith('file:'))) throw new Error('DATABASE_URL must be a local SQLite path.');
   if (key === 'BOOTSTRAP_TEACHER_EMAIL' && (!value.includes('@') || /[\r\n]/.test(value))) throw new Error('BOOTSTRAP_TEACHER_EMAIL is invalid.');
   if (key === 'BOOTSTRAP_TEACHER_PASSWORD' && (!value || /[\r\n]/.test(value))) throw new Error('BOOTSTRAP_TEACHER_PASSWORD is invalid.');
+  if (key === 'GEM_CURSOR_KEYS') {
+    const kids = new Set(); const secrets = new Set();
+    if (!value.split(',').every((entry) => {
+      const [kid, secret, ...extra] = entry.split(':');
+      if (extra.length || kids.has(kid) || secrets.has(secret) || !/^[A-Za-z0-9_-]{1,32}$/.test(kid) || !/^[A-Za-z0-9_-]+$/.test(secret)) return false;
+      const bytes = Buffer.from(secret, 'base64url');
+      if (bytes.length !== 32 || bytes.toString('base64url') !== secret) return false;
+      kids.add(kid); secrets.add(secret); return true;
+    })) throw new Error('GEM_CURSOR_KEYS is invalid.');
+  }
   return value;
 }
 
