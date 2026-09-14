@@ -11,6 +11,7 @@ import { YearContextControl } from './YearContextControl';
 import { CalendarControls } from './CalendarControls';
 import { RtGrid } from './RtGrid';
 import type { Session } from './workspace-api';
+import { BehaviourPanel } from './BehaviourPanel';
 
 export function requestedYearRequiresArchivedLookup(requestedYearId: string | null, activeYears: AcademicYear[]) {
   return Boolean(requestedYearId && !activeYears.some(year => year.id === requestedYearId));
@@ -323,6 +324,7 @@ export function WorkspaceApp() {
       <section className="roster-section"><div className="section-heading"><div><p className="eyebrow">ACADEMY ROSTER</p><h2 className="section-title">Roster <span>{visibleStudents.length}</span></h2></div><span className="section-note">Select a character to open their sheet</span></div><StudentRoster students={visibleStudents} summaries={summaries} selectedId={state.selectedStudentId} query={state.search} onSelect={id => { originRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; dispatch({ type: 'select', studentId: id }); }} /></section>
       <ActivitySummary activity={activity} onRetry={() => { if (selected) workspaceApi.xpEvidence(selected.id, yearId!, 3).then(result => setActivity(activityState(result))).catch(() => setActivity(activityState(null))); }} />
        <StudentPanel student={selected} context={context} historical={currentYearIsHistorical} feedback={state.feedback} undo={state.undo} onClose={() => dispatch({ type: 'select', studentId: '' })} originRef={originRef} onUndoResult={message => dispatch({ type: 'undo-result', message })} summary={selected ? summaries[selected.id] ?? null : null} onSummary={setSummary} onFeedback={message => dispatch({ type: 'action-result', message, undo: null })} onUndo={registerUndo} />
+       {selected && context && <BehaviourPanel student={selected} context={context} session={activeSession} readOnly={currentYearIsHistorical || Boolean(selected.archivedAt)} onFeedback={message => dispatch({ type: 'action-result', message, undo: null })} />}
     </div>}
   </WorkspaceShell>;
 }

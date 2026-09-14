@@ -42,6 +42,9 @@ export function migrateDatabase(
           stage(testOptions, 'postflight');
           assertGemPostflight(db);
           stage(testOptions, 'migration-marker-before-commit');
+        } else if (migration.id === '0014_behaviour_lives') {
+          assertBehaviourPreflight(db, applied);
+          db.exec(migration.sql);
         } else {
           db.exec(migration.sql);
         }
@@ -54,6 +57,25 @@ export function migrateDatabase(
     }
   }
   return { applied: appliedNow };
+}
+
+function assertBehaviourPreflight(db: Database.Database, applied: Set<string>) {
+  if (!applied.has('0013_gems') || [...applied].some(id => Number(id.slice(0, 4)) > 14)) {
+    throw new Error('0014_behaviour_lives requires the 0013 migration baseline.');
+  }
+  if (db.prepare("SELECT 1 FROM schema_migrations WHERE id='0014_behaviour_lives'").get()) {
+    throw new Error('0014_behaviour_lives marker already exists.');
+  }
+  if (db.prepare("SELECT 1 FROM sqlite_master WHERE name IN ('behaviour_student_state','behaviour_actions','behaviour_incidents','behaviour_proposals','behaviour_requests','real_class_session_behaviour_roster')").get()) {
+    throw new Error('Behaviour schema already exists without migration marker.');
+  }
+  if (db.prepare("SELECT 1 FROM real_class_sessions WHERE ended_at IS NULL").get()) {
+    throw new Error('0014_behaviour_lives cannot migrate while a class session is active.');
+  }
+  const columns = db.prepare('PRAGMA table_info(real_class_sessions)').all() as { name: string }[];
+  if (columns.some(column => column.name === 'behaviour_snapshot_version')) {
+    throw new Error('0014_behaviour_lives detected schema drift.');
+  }
 }
 
 function stage(options: MigrationTestOptions, name: MigrationStage) { options.onStage?.(name); }

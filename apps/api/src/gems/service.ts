@@ -3,6 +3,7 @@ import type Database from 'better-sqlite3';
 import { ApiError } from '../http/errors.js';
 import { runImmediateTransaction, assertGemSourceTransaction, type GemSourceTx } from '../services/transactions.js';
 import { balances } from './repository.js';
+import { canReceiveGem, canSpendGem } from '../behaviour/domain.js';
 
 const uuidV4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const now = () => new Date().toISOString();
@@ -15,6 +16,18 @@ function ownerContext(db: Database.Database, owner: string, studentId: string, c
     WHERE s.id=? AND c.id=? AND g.owner_teacher_id=? AND c.archived_at IS NULL`).get(studentId, contextId, owner) as any;
   if (!row) fail('Student or assessment context not found.', 404);
   return row as { studentId:string; groupId:string; academicYearId:string; contextId:string };
+}
+function assertDirectRequestAllowed(db: Database.Database, owner: string, studentId: string, context: { academicYearId:string; groupId:string }, sessionId: string|null, operation: 'RECEIVE'|'SPEND') {
+  const active = sessionId === null ? undefined : db.prepare('SELECT id FROM real_class_sessions WHERE id=? AND owner_teacher_id=? AND academic_year_id=? AND group_id=? AND ended_at IS NULL').get(sessionId, owner, context.academicYearId, context.groupId) as { id:string }|undefined;
+  if (sessionId !== null) {
+    if (!active || !db.prepare('SELECT 1 FROM real_class_session_behaviour_roster WHERE session_id=? AND student_id=?').get(sessionId, studentId)) fail('Active session does not match the Gem request.', 409);
+  } else if (db.prepare('SELECT 1 FROM real_class_sessions WHERE owner_teacher_id=? AND academic_year_id=? AND group_id=? AND ended_at IS NULL').get(owner, context.academicYearId, context.groupId)) {
+    fail('The active session ID is required for this Gem request.', 409);
+  }
+  if (sessionId === null) return;
+  const state = db.prepare('SELECT current_lives AS currentLives FROM behaviour_student_state WHERE student_id=? AND owner_teacher_id=? AND academic_year_id=? AND group_id=?').get(studentId, owner, context.academicYearId, context.groupId) as { currentLives:number }|undefined;
+  const allowed = operation === 'RECEIVE' ? canReceiveGem(state?.currentLives ?? 4) : canSpendGem(state?.currentLives ?? 4);
+  if (!allowed) throw new ApiError('BEHAVIOUR_RESTRICTED', 409, 'Gem operation is restricted by the current behaviour policy.');
 }
 function movement(db: Database.Database, input: { id?:string; studentId:string; academicYearId:string; currency:string; amount:1|-1; kind:string; sourceKind:string; sourceId:string; family:string; unit:number; correctionOf?:string|null; owner:string; requestKey?:string; requestFingerprint?:string }) {
   const pairs: Record<string, { amount: 1|-1; source: string[]; predecessor: string[] }> = {
@@ -55,13 +68,14 @@ function tier(score: string): { tier:'NONE'|'EMERALD_1'|'EMERALD_2'|'RUBY_1'|'DI
   const value = Number(score); if (!Number.isFinite(value) || value < 0 || value > 10) fail('Score is invalid.');
   if (value < 7) return { tier:'NONE',currency:'EMERALD',units:0 }; if (value < 8) return { tier:'EMERALD_1',currency:'EMERALD',units:1 }; if (value < 9) return { tier:'EMERALD_2',currency:'EMERALD',units:2 }; if (value < 10) return { tier:'RUBY_1',currency:'RUBY',units:1 }; return { tier:'DIAMOND_1',currency:'DIAMOND',units:1 };
 }
-export function resultReward(db: Database.Database, owner: string, studentId: string, contextId: string, score: string, requestKey: string) {
+export function resultReward(db: Database.Database, owner: string, studentId: string, contextId: string, score: string, requestKey: string, sessionId: string|null = null) {
   key(requestKey); tier(score);
   return runImmediateTransaction(db, `result:${owner}:${requestKey}`, tx => {
     const context = ownerContext(tx.db, owner, studentId, contextId); const selected = tier(score);
-    const fp = fingerprint({operation:'RESULT_GRANT',ownerTeacherId:owner,studentId,academicYearId:context.academicYearId,assessmentContextId:contextId,tier:selected.tier,currency:selected.currency,units:selected.units});
+    const fp = fingerprint({operation:'RESULT_GRANT',ownerTeacherId:owner,studentId,academicYearId:context.academicYearId,assessmentContextId:contextId,sessionId,tier:selected.tier,currency:selected.currency,units:selected.units});
     const prior = tx.db.prepare('SELECT * FROM gem_result_reward_operations WHERE owner_teacher_id=? AND request_key=?').get(owner, requestKey) as any;
     if (prior) { if (prior.request_fingerprint !== fp) fail('Idempotency key conflict.',409); const ids = JSON.parse(prior.movement_ids); if (!Array.isArray(ids)) fail('Result reward linkage is invalid.',409); return {status:200,replay:true,id:prior.reward_id,tier:prior.resulting_tier,state:'ACTIVE'}; }
+    assertDirectRequestAllowed(tx.db, owner, studentId, context, sessionId, 'RECEIVE');
     const existing = tx.db.prepare('SELECT * FROM gem_result_rewards WHERE student_id=? AND assessment_context_id=? AND academic_year_id=?').get(studentId,contextId,context.academicYearId) as any;
     if (existing) { if (existing.owner_teacher_id !== owner || existing.tier !== selected.tier || existing.state !== 'ACTIVE') fail('Result reward conflicts with existing state.',409); const operation = tx.db.prepare("SELECT * FROM gem_result_reward_operations WHERE reward_id=? AND operation='GRANT'").get(existing.id) as any; if (!operation || operation.request_fingerprint !== fp) fail('Result reward fingerprint conflicts.',409); return {status:200,replay:true,id:existing.id,tier:existing.tier,state:existing.state}; }
     const rewardId=randomUUID(); const operationId=randomUUID(); const ids:string[]=[]; const sourceId=`result:operation:${operationId}`; const family=`result:reward:${rewardId}`;
@@ -70,7 +84,8 @@ export function resultReward(db: Database.Database, owner: string, studentId: st
     tx.db.prepare('INSERT INTO gem_result_reward_operations (operation_id,reward_id,owner_teacher_id,operation,request_key,request_fingerprint,prior_tier,resulting_tier,movement_ids,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)').run(operationId,rewardId,owner,'GRANT',requestKey,fp,'NONE',selected.tier,JSON.stringify(ids),now()); return {status:201,replay:false,id:rewardId,tier:selected.tier,state:'ACTIVE'};
   });
 }
-export function spend(db: Database.Database, owner: string, studentId: string, contextId: string, rewardId: string, requestKey: string) {
+export function spend(db: Database.Database, owner: string, studentId: string, contextId: string, rewardId: string, requestKey: string, sessionId: string|null = null) {
+  assertDirectRequestAllowed(db, owner, studentId, ownerContext(db, owner, studentId, contextId), sessionId, 'SPEND');
   key(requestKey); return runImmediateTransaction(db, `spend:${owner}:${requestKey}`, tx => { const context=ownerContext(tx.db,owner,studentId,contextId); const prior=tx.db.prepare('SELECT * FROM gem_advantage_redemptions WHERE owner_teacher_id=? AND request_key=?').get(owner,requestKey) as any; if(prior){if(prior.student_id!==studentId||prior.assessment_context_id!==contextId)fail('Idempotency key conflict.',409);return {status:200,replay:true,id:prior.id,currency:prior.currency,cost:prior.cost,state:prior.state};} const reward=tx.db.prepare('SELECT id,currency,cost FROM gem_reward_catalogue WHERE id=?').get(rewardId) as any; if(!reward) fail('Reward not found.',404); const funds=activeFunding(tx.db,studentId,context.academicYearId,reward.currency,reward.cost); if(funds.length!==reward.cost) fail('Insufficient gem balance.',409); const fundingMovementIds=funds.map(f=>f.id); const fp=fingerprint({operation:'SPEND',ownerTeacherId:owner,studentId,academicYearId:context.academicYearId,assessmentContextId:contextId,catalogueRewardId:rewardId,currency:reward.currency,cost:reward.cost,fundingMovementIds}); const occupied=tx.db.prepare('SELECT * FROM gem_advantage_redemptions WHERE student_id=? AND assessment_context_id=? AND academic_year_id=?').get(studentId,contextId,context.academicYearId) as any; if(occupied){if(occupied.request_fingerprint!==fp)fail('Advantage already used with another semantic request.',409);return {status:200,replay:true,id:occupied.id,currency:occupied.currency,cost:occupied.cost,state:occupied.state};} const id=randomUUID(); tx.db.prepare('INSERT INTO gem_advantage_redemptions (id,student_id,assessment_context_id,academic_year_id,currency,cost,request_key,request_fingerprint,state,owner_teacher_id,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(id,studentId,contextId,context.academicYearId,reward.currency,reward.cost,requestKey,fp,'ACTIVE',owner,now()); for(let index=0;index<funds.length;index++){const spendId=movement(tx.db,{studentId,academicYearId:context.academicYearId,currency:reward.currency,amount:-1,kind:'SPEND',sourceKind:'REDEMPTION',sourceId:`redemption:spend:${id}`,family:`redemption:${id}`,unit:index+1,owner,requestKey,requestFingerprint:fp}); tx.db.prepare('INSERT INTO gem_spend_allocations (id,redemption_id,funding_movement_id,spend_movement_id,created_at) VALUES (?,?,?,?,?)').run(randomUUID(),id,funds[index].id,spendId,now());} return {status:201,replay:false,id,currency:reward.currency,cost:reward.cost,state:'ACTIVE'}; });
 }
   export function reverseSpend(db: Database.Database, owner: string, redemptionId: string, reason: string, requestKey: string) { key(requestKey); if(!reason.trim()||reason.length>500) fail('A reversal reason is required.'); return runImmediateTransaction(db, `reverse:${owner}:${requestKey}`, tx=>{const row=tx.db.prepare('SELECT * FROM gem_advantage_redemptions WHERE id=? AND owner_teacher_id=?').get(redemptionId,owner) as any;if(!row)fail('Redemption not found.',404); const all=tx.db.prepare('SELECT * FROM gem_spend_allocations WHERE redemption_id=? ORDER BY spend_movement_id').all(redemptionId) as any[]; const links=all.map(a=>({fundingMovementId:a.funding_movement_id,spendMovementId:a.spend_movement_id,unitIndex:(tx.db.prepare('SELECT unit_index AS unitIndex FROM gem_ledger WHERE id=?').get(a.spend_movement_id) as any)?.unitIndex})); const fp=fingerprint({operation:'SPEND_REVERSAL',redemptionId,ownerTeacherId:owner,studentId:row.student_id,academicYearId:row.academic_year_id,assessmentContextId:row.assessment_context_id,currency:row.currency,cost:row.cost,trigger:'MANUAL',reason,allocations:links}); const prior=tx.db.prepare('SELECT * FROM gem_advantage_redemptions WHERE owner_teacher_id=? AND reversal_request_key=?').get(owner,requestKey) as any; if(prior){if(prior.id!==redemptionId||prior.reversal_fingerprint!==fp)fail('Reversal request conflicts.',409);return {status:200,replay:true,redemptionId,state:'REVERSED'};} if(row.state==='REVERSED')fail('Redemption is already reversed.',409); const allocations=all.filter(a=>a.released_at===null);if(allocations.length!==row.cost)fail('Redemption allocation invariant failed.',409); const op=randomUUID(); for(const allocation of allocations){const unit=(tx.db.prepare('SELECT unit_index AS unitIndex FROM gem_ledger WHERE id=?').get(allocation.spend_movement_id) as any).unitIndex;const reversal=movement(tx.db,{studentId:row.student_id,academicYearId:row.academic_year_id,currency:row.currency,amount:1,kind:'SPEND_REVERSAL',sourceKind:'REDEMPTION',sourceId:`redemption:reversal:${op}`,family:`redemption:${redemptionId}`,unit,correctionOf:allocation.spend_movement_id,owner});tx.db.prepare("UPDATE gem_spend_allocations SET spend_reversal_movement_id=?,released_at=?,release_reason='ADVANTAGE_REVERSED' WHERE id=?").run(reversal,now(),allocation.id);}tx.db.prepare("UPDATE gem_advantage_redemptions SET state='REVERSED',reversal_operation_id=?,reversal_request_key=?,reversal_fingerprint=?,reversal_trigger='MANUAL',reversal_reason=?,reversed_at=? WHERE id=?").run(op,requestKey,fp,reason,now(),redemptionId);return {status:201,replay:false,redemptionId,state:'REVERSED'};}); }
@@ -121,15 +136,27 @@ function assertXpSource(db: Database.Database, transition: any) {
   }
 }
 
-function xpReceiptFingerprint(input: { transitionId:string; sequence:number; unlockId:string; kind:string; sourceEventId:string|null; sourceReversalId:string|null; ownerTeacherId:string; studentId:string; academicYearId:string; level:number; ledgerSourceId:string; sourceFamilyId:string; unitIndex:number; amount:1|-1; movementKind:string; predecessorMovementId:string|null }) {
+function xpReceiptFingerprint(input: { transitionId:string; sequence:number; unlockId:string; kind:string; sourceEventId:string|null; sourceReversalId:string|null; ownerTeacherId:string; studentId:string; academicYearId:string; level:number; ledgerSourceId:string; sourceFamilyId:string; unitIndex:number; amount:1|-1; movementKind:string; predecessorMovementId:string|null; allowed:boolean; outcome:'APPLIED'|'DENIED' }) {
   return fingerprint({stream:xpStream,...input});
 }
 
-function assertXpReceipt(db: Database.Database, transition: any, receipt: any, movementRow: any) {
-  if (!receipt || !movementRow || receipt.movement_id !== movementRow.id) fail('XP transition receipt linkage is invalid.', 409);
+function xpEligibility(db: Database.Database, transition: any) {
+  const sourceId = transition.sourceEventId ?? transition.sourceReversalId;
+  const event = transition.sourceEventId
+    ? db.prepare('SELECT gem_receipt_allowed_at_award AS allowed FROM xp_evidence_events WHERE id=?').get(sourceId) as any
+    : db.prepare('SELECT e.gem_receipt_allowed_at_award AS allowed FROM xp_evidence_reversals r JOIN xp_evidence_events e ON e.id=r.target_event_id WHERE r.id=?').get(sourceId) as any;
+  if (!event || (event.allowed !== 0 && event.allowed !== 1)) fail('XP eligibility snapshot is invalid.', 409);
+  return event.allowed === 1;
+}
+
+function assertXpReceipt(db: Database.Database, transition: any, receipt: any, movementRow: any, allowed: boolean) {
+  const denied = !allowed;
+  if (!receipt || receipt.outcome !== (denied ? 'DENIED' : 'APPLIED') || (denied ? receipt.movement_id !== null : (!movementRow || receipt.movement_id !== movementRow.id))) fail('XP transition receipt linkage is invalid.', 409);
   const ledgerSourceId = `xp:transition:${transition.id}`;
-  const expected = xpReceiptFingerprint({transitionId:transition.id,sequence:transition.sequence,unlockId:transition.unlockId,kind:transition.kind,sourceEventId:transition.sourceEventId ?? null,sourceReversalId:transition.sourceReversalId ?? null,ownerTeacherId:transition.ownerTeacherId,studentId:transition.studentId,academicYearId:transition.academicYearId,level:transition.level,ledgerSourceId,sourceFamilyId:`xp:unlock:${transition.unlockId}`,unitIndex:1,amount:transition.kind === 'GRANT' || transition.kind === 'REINSTATE' ? 1 : -1,movementKind:transition.kind,predecessorMovementId:movementRow.correction_of_id ?? null});
-  if (receipt.sequence !== transition.sequence || receipt.unlock_id !== transition.unlockId || receipt.kind !== transition.kind || receipt.source_event_id !== (transition.sourceEventId ?? null) || receipt.source_reversal_id !== (transition.sourceReversalId ?? null) || receipt.fingerprint !== expected || movementRow.source_kind !== 'XP_TRANSITION' || movementRow.source_id !== ledgerSourceId || movementRow.source_family_id !== `xp:unlock:${transition.unlockId}` || movementRow.unit_index !== 1 || movementRow.amount !== (transition.kind === 'GRANT' || transition.kind === 'REINSTATE' ? 1 : -1) || movementRow.movement_kind !== transition.kind || movementRow.student_id !== transition.studentId || movementRow.academic_year_id !== transition.academicYearId || movementRow.owner_teacher_id !== transition.ownerTeacherId) fail('XP transition receipt does not match authoritative lineage.', 409);
+  if (denied) { if (movementRow) fail('Denied XP transition has a ledger movement.', 409); }
+  const expected = xpReceiptFingerprint({transitionId:transition.id,sequence:transition.sequence,unlockId:transition.unlockId,kind:transition.kind,sourceEventId:transition.sourceEventId ?? null,sourceReversalId:transition.sourceReversalId ?? null,ownerTeacherId:transition.ownerTeacherId,studentId:transition.studentId,academicYearId:transition.academicYearId,level:transition.level,ledgerSourceId,sourceFamilyId:`xp:unlock:${transition.unlockId}`,unitIndex:1,amount:transition.kind === 'GRANT' || transition.kind === 'REINSTATE' ? 1 : -1,movementKind:transition.kind,predecessorMovementId:movementRow?.correction_of_id ?? null,allowed,outcome:denied ? 'DENIED' : 'APPLIED'});
+  if (receipt.sequence !== transition.sequence || receipt.unlock_id !== transition.unlockId || receipt.kind !== transition.kind || receipt.source_event_id !== (transition.sourceEventId ?? null) || receipt.source_reversal_id !== (transition.sourceReversalId ?? null) || receipt.fingerprint !== expected) fail('XP transition receipt does not match authoritative lineage.', 409);
+  if (!denied && (movementRow.source_kind !== 'XP_TRANSITION' || movementRow.source_id !== ledgerSourceId || movementRow.source_family_id !== `xp:unlock:${transition.unlockId}` || movementRow.unit_index !== 1 || movementRow.amount !== (transition.kind === 'GRANT' || transition.kind === 'REINSTATE' ? 1 : -1) || movementRow.movement_kind !== transition.kind || movementRow.student_id !== transition.studentId || movementRow.academic_year_id !== transition.academicYearId || movementRow.owner_teacher_id !== transition.ownerTeacherId)) fail('XP transition receipt does not match authoritative lineage.', 409);
 }
 
 function currentSource(db: Database.Database, family: string, sourceKind = 'XP_TRANSITION') {
@@ -160,10 +187,16 @@ function assertRtMovement(db: Database.Database, id: string | null, expected: { 
   if (!row || row.source_kind !== 'RT_REVISION' || row.source_id !== expected.sourceId || row.source_family_id !== expected.family || row.unit_index !== 1 || row.movement_kind !== expected.kind || row.amount !== amount || row.correction_of_id !== expected.predecessor || row.student_id !== expected.studentId || row.academic_year_id !== expected.year || row.currency !== 'EMERALD' || row.owner_teacher_id !== expected.owner) fail('RT revision movement linkage is invalid.', 409);
 }
 
+type RtRevisionOutcome = 'APPLIED' | 'NO_MOVEMENT' | 'DENIED';
+
 function assertXpCursor(db: Database.Database, lastSequence: number) {
   const receipts = db.prepare('SELECT COUNT(*) AS count, COALESCE(MAX(sequence),0) AS maxSequence FROM gem_xp_transition_receipts').get() as {count:number;maxSequence:number};
   const transitions = db.prepare('SELECT COUNT(*) AS count FROM xp_level_grant_transitions WHERE sequence BETWEEN 1 AND ?').get(lastSequence) as {count:number};
-  if (receipts.maxSequence !== lastSequence || receipts.count !== lastSequence || transitions.count !== lastSequence || db.prepare('SELECT 1 FROM gem_xp_transition_receipts WHERE sequence > ? LIMIT 1').get(lastSequence)) fail('XP reconciliation cursor is inconsistent.', 409);
+  const receiptSequences = db.prepare('SELECT sequence FROM gem_xp_transition_receipts ORDER BY sequence').all() as Array<{ sequence: number }>;
+  const transitionSequences = db.prepare('SELECT sequence FROM xp_level_grant_transitions WHERE sequence BETWEEN 1 AND ? ORDER BY sequence').all(lastSequence) as Array<{ sequence: number }>;
+  if (receipts.maxSequence !== lastSequence || receipts.count !== lastSequence || transitions.count !== lastSequence ||
+      receiptSequences.some((row, index) => row.sequence !== index + 1) || transitionSequences.some((row, index) => row.sequence !== index + 1) ||
+      db.prepare('SELECT 1 FROM gem_xp_transition_receipts WHERE sequence > ? LIMIT 1').get(lastSequence)) fail('XP reconciliation cursor is inconsistent.', 409);
 }
 
 export function applyXp(tx: GemSourceTx, transitionIds: readonly string[]) {
@@ -182,23 +215,29 @@ export function applyXp(tx: GemSourceTx, transitionIds: readonly string[]) {
     const existingReceipt = db.prepare('SELECT * FROM gem_xp_transition_receipts WHERE transition_id=?').get(transition.id) as any;
     const ledgerSourceId = `xp:transition:${transition.id}`;
     const existingMovement = db.prepare(`SELECT * FROM gem_ledger WHERE source_kind='XP_TRANSITION' AND source_id=? AND unit_index=1`).get(ledgerSourceId) as any;
+    const eventAllowed = xpEligibility(db, transition);
+    const unlock = db.prepare('SELECT gem_receipt_allowed AS allowed, first_source_event_id AS sourceEventId FROM xp_level_unlocks WHERE id=?').get(transition.unlockId) as { allowed:number; sourceEventId:string }|undefined;
+     const unlockSnapshot = unlock ?? fail('XP unlock eligibility snapshot is invalid.', 409);
+     if (unlockSnapshot.allowed !== 0 && unlockSnapshot.allowed !== 1) fail('XP unlock eligibility snapshot is invalid.', 409);
+    if (unlockSnapshot.sourceEventId === transition.sourceEventId && transition.kind === 'GRANT' && unlockSnapshot.allowed !== (eventAllowed ? 1 : 0)) db.prepare('UPDATE xp_level_unlocks SET gem_receipt_allowed=? WHERE id=? AND first_source_event_id=?').run(eventAllowed ? 1 : 0, transition.unlockId, transition.sourceEventId);
+    const allowed = unlockSnapshot.sourceEventId === transition.sourceEventId && transition.kind === 'GRANT' ? eventAllowed : unlockSnapshot.allowed === 1;
     if (transition.sequence <= last) {
-      if (!existingReceipt || !existingMovement) fail('XP transition receipt is missing.', 409);
-      assertXpReceipt(db, transition, existingReceipt, existingMovement);
+      if (!existingReceipt || (allowed && !existingMovement) || (!allowed && existingMovement)) fail('XP transition receipt is missing.', 409);
+      assertXpReceipt(db, transition, existingReceipt, existingMovement, allowed);
       const bySequence = db.prepare('SELECT transition_id FROM gem_xp_transition_receipts WHERE sequence=?').get(transition.sequence) as any;
       if (!bySequence || bySequence.transition_id !== transition.id) fail('XP transition sequence is inconsistent.', 409);
       continue;
     }
     if (transition.sequence !== last + 1 || existingReceipt || existingMovement) fail('XP transition sequence is not contiguous.', 409);
-    const predecessor = currentSource(db, family);
-    if (transition.kind === 'GRANT' && predecessor) fail('XP grant already has a source lineage.', 409);
-    if (transition.kind === 'REINSTATE' && (!predecessor || predecessor.movement_kind !== 'REVOKE')) fail('XP reinstatement predecessor is invalid.', 409);
-    if (transition.kind === 'REVOKE' && (!predecessor || !['GRANT','REINSTATE'].includes(predecessor.movement_kind))) fail('XP revocation predecessor is invalid.', 409);
-    if (transition.kind === 'REVOKE') refundSourceAllocations(tx, predecessor.id, transition.ownerTeacherId, `xp-transition:${transition.id}`);
+    const predecessor = allowed ? currentSource(db, family) : null;
+    if (allowed && transition.kind === 'GRANT' && predecessor) fail('XP grant already has a source lineage.', 409);
+    if (allowed && transition.kind === 'REINSTATE' && (!predecessor || predecessor.movement_kind !== 'REVOKE')) fail('XP reinstatement predecessor is invalid.', 409);
+    if (allowed && transition.kind === 'REVOKE' && (!predecessor || !['GRANT','REINSTATE'].includes(predecessor.movement_kind))) fail('XP revocation predecessor is invalid.', 409);
+    if (allowed && transition.kind === 'REVOKE') refundSourceAllocations(tx, predecessor.id, transition.ownerTeacherId, `xp-transition:${transition.id}`);
     const amount = transition.kind === 'GRANT' || transition.kind === 'REINSTATE' ? 1 : -1;
-    const movementId = movement(db, { studentId:transition.studentId, academicYearId:transition.academicYearId, currency:'EMERALD', amount, kind:transition.kind, sourceKind:'XP_TRANSITION', sourceId:ledgerSourceId, family, unit:1, correctionOf:predecessor?.id ?? null, owner:transition.ownerTeacherId });
-    const receiptFp = xpReceiptFingerprint({transitionId:transition.id,sequence:transition.sequence,unlockId:transition.unlockId,kind:transition.kind,sourceEventId:transition.sourceEventId ?? null,sourceReversalId:transition.sourceReversalId ?? null,ownerTeacherId:transition.ownerTeacherId,studentId:transition.studentId,academicYearId:transition.academicYearId,level:transition.level,ledgerSourceId,sourceFamilyId:family,unitIndex:1,amount,movementKind:transition.kind,predecessorMovementId:predecessor?.id ?? null});
-    db.prepare('INSERT INTO gem_xp_transition_receipts (transition_id,sequence,unlock_id,kind,source_event_id,source_reversal_id,movement_id,fingerprint,created_at) VALUES (?,?,?,?,?,?,?,?,?)').run(transition.id,transition.sequence,transition.unlockId,transition.kind,transition.sourceEventId ?? null,transition.sourceReversalId ?? null,movementId,receiptFp,now());
+    const movementId = allowed ? movement(db, { studentId:transition.studentId, academicYearId:transition.academicYearId, currency:'EMERALD', amount, kind:transition.kind, sourceKind:'XP_TRANSITION', sourceId:ledgerSourceId, family, unit:1, correctionOf:predecessor?.id ?? null, owner:transition.ownerTeacherId }) : null;
+     const receiptFp = xpReceiptFingerprint({transitionId:transition.id,sequence:transition.sequence,unlockId:transition.unlockId,kind:transition.kind,sourceEventId:transition.sourceEventId ?? null,sourceReversalId:transition.sourceReversalId ?? null,ownerTeacherId:transition.ownerTeacherId,studentId:transition.studentId,academicYearId:transition.academicYearId,level:transition.level,ledgerSourceId,sourceFamilyId:family,unitIndex:1,amount,movementKind:transition.kind,predecessorMovementId:predecessor?.id ?? null,allowed,outcome:allowed ? 'APPLIED' : 'DENIED'});
+    db.prepare('INSERT INTO gem_xp_transition_receipts (transition_id,sequence,unlock_id,kind,source_event_id,source_reversal_id,outcome,movement_id,fingerprint,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)').run(transition.id,transition.sequence,transition.unlockId,transition.kind,transition.sourceEventId ?? null,transition.sourceReversalId ?? null,allowed ? 'APPLIED' : 'DENIED',movementId,receiptFp,now());
     last = transition.sequence;
     db.prepare('UPDATE gem_reconciliation_cursors SET last_sequence=?,updated_at=? WHERE stream=?').run(last,now(),xpStream);
   }
@@ -226,6 +265,12 @@ export function applyRtStates(tx: GemSourceTx, entitlements: readonly any[], own
     const operationId = `rt-revision:${entitlement.id}:${entitlement.revision}`;
     const existing = tx.db.prepare('SELECT * FROM gem_reconciliation_revisions WHERE receipt_operation_id=?').get(operationId) as any;
     const state = entitlement.active ? 'ACTIVE' : 'INACTIVE';
+    // Eligibility is an immutable source fact.  In particular, do not re-read
+    // behaviour state here: an RT correction must retain the award-time gate.
+    const eligibility = tx.db.prepare('SELECT gem_receipt_allowed AS allowed FROM rt_streak_emerald_entitlements WHERE id=?').get(entitlement.id) as { allowed: number } | undefined;
+     const eligibilitySnapshot = eligibility ?? fail('RT eligibility snapshot is invalid.', 409);
+     if (eligibilitySnapshot.allowed !== 0 && eligibilitySnapshot.allowed !== 1) fail('RT eligibility snapshot is invalid.', 409);
+    const allowed = eligibilitySnapshot.allowed === 1;
     const prior = entitlement.revision > 1 ? tx.db.prepare('SELECT * FROM gem_reconciliation_revisions WHERE entitlement_id=? AND revision=?').get(entitlement.id, entitlement.revision - 1) as any : undefined;
     const beforeConsumption = prior && entitlement.consumer_id !== null ? rtConsumption(entitlement) : null;
     const afterConsumption = rtConsumption(entitlement);
@@ -236,15 +281,25 @@ export function applyRtStates(tx: GemSourceTx, entitlements: readonly any[], own
     if (existing) {
       if (existing.entitlement_id !== entitlement.id || existing.revision !== entitlement.revision || existing.state !== state || !validUtc(existing.created_at) || existing.transaction_correlation_id === '') fail('RT revision receipt conflicts with entitlement state.', 409);
       if (entitlement.consumer_id !== null && !validUtc(entitlement.consumed_at)) fail('RT consumption linkage is invalid.', 409);
-      assertRtMovement(tx.db, existing.movement_id, existing.movement_id ? { kind: state === 'ACTIVE' ? (prior?.state === 'INACTIVE' ? 'REINSTATE' : 'GRANT') : 'REVOKE', predecessor: existing.movement_id ? (state === 'ACTIVE' && prior?.state === 'INACTIVE' ? prior.movement_id : state === 'INACTIVE' ? prior?.movement_id ?? null : null) : null, sourceId: operationId, family, studentId, year, owner } : null);
-      const expected = fingerprint({ receiptOperationId: operationId, entitlementId: entitlement.id, sourceKey: entitlement.source_key, sourceEntryId: entitlement.source_entry_id, ownerTeacherId: owner, studentId, academicYearId: year, termId, revision: entitlement.revision, state, consumptionBefore: beforeConsumption, movementKind: existing.movement_id ? (state === 'ACTIVE' ? (prior?.state === 'INACTIVE' ? 'REINSTATE' : 'GRANT') : 'REVOKE') : null, ledgerSourceId: operationId, sourceFamilyId: family, unitIndex: 1, predecessorMovementId: existing.movement_id ? (prior?.movement_id ?? null) : null, consumptionAfter: afterConsumption });
-      if (existing.revision_fingerprint !== expected) fail('RT revision receipt fingerprint conflicts with authoritative state.', 409);
+      // M3 revisions predate the outcome column and may contain an APPLIED
+      // receipt with no movement for an entitlement that was never consumed.
+      // Keep those receipts replayable while all new no-movement revisions use
+      // the explicit NO_MOVEMENT outcome.
+      const legacyNoMovement = allowed && existing.outcome === 'APPLIED' && existing.movement_id === null;
+      const expectedOutcome: RtRevisionOutcome = !allowed ? 'DENIED' : legacyNoMovement ? 'APPLIED' : existing.movement_id === null ? 'NO_MOVEMENT' : 'APPLIED';
+      if (existing.outcome !== expectedOutcome || existing.movement_id !== null && !allowed) fail('RT revision receipt outcome conflicts with immutable eligibility.', 409);
+      const expectedKind = existing.movement_id ? (state === 'ACTIVE' ? (prior?.state === 'INACTIVE' ? 'REINSTATE' : 'GRANT') : 'REVOKE') : null;
+      assertRtMovement(tx.db, existing.movement_id, existing.movement_id ? { kind: expectedKind!, predecessor: state === 'ACTIVE' && prior?.state === 'INACTIVE' ? prior.movement_id : state === 'INACTIVE' ? prior?.movement_id ?? null : null, sourceId: operationId, family, studentId, year, owner } : null);
+      const fingerprintInput = { receiptOperationId: operationId, entitlementId: entitlement.id, sourceKey: entitlement.source_key, sourceEntryId: entitlement.source_entry_id, ownerTeacherId: owner, studentId, academicYearId: year, termId, revision: entitlement.revision, state, consumptionBefore: beforeConsumption, movementKind: expectedKind, ledgerSourceId: operationId, sourceFamilyId: family, unitIndex: 1, predecessorMovementId: existing.movement_id ? (prior?.movement_id ?? null) : null, consumptionAfter: afterConsumption };
+      const expected = fingerprint({ receiptOperationId: operationId, entitlementId: entitlement.id, sourceKey: entitlement.source_key, sourceEntryId: entitlement.source_entry_id, ownerTeacherId: owner, studentId, academicYearId: year, termId, revision: entitlement.revision, state, outcome: expectedOutcome, consumptionBefore: beforeConsumption, movementKind: expectedKind, ledgerSourceId: operationId, sourceFamilyId: family, unitIndex: 1, predecessorMovementId: existing.movement_id ? (prior?.movement_id ?? null) : null, consumptionAfter: afterConsumption });
+      const legacyExpected = fingerprint(fingerprintInput);
+      if (existing.revision_fingerprint !== expected && (!legacyNoMovement || existing.revision_fingerprint !== legacyExpected)) fail('RT revision receipt fingerprint conflicts with authoritative state.', 409);
       continue;
     }
     if (!prior && entitlement.consumer_id !== null) fail('RT pre-baseline consumption linkage is invalid.', 409);
     if (entitlement.revision > 1 && (!prior || prior.state === (entitlement.active ? 'ACTIVE' : 'INACTIVE')) && !(baseline && !prior && entitlement.consumer_id === null)) fail('RT revision continuity or CAS is invalid.', 409);
     let movementId: string | null = null; let movementKind: string | null = null; let predecessorMovementId: string | null = null; let consumptionBefore: RtConsumption = null; let consumptionAfter: RtConsumption = rtConsumption(entitlement);
-    if (entitlement.active) {
+    if (allowed && entitlement.active) {
       if (entitlement.consumer_id === null) {
         movementId = randomUUID();
         const cas = tx.db.prepare('UPDATE rt_streak_emerald_entitlements SET consumer_id=?,grant_id=?,consumed_revision=?,consumed_at=? WHERE id=? AND active=1 AND consumer_id IS NULL AND revision=?').run(operationId, movementId, entitlement.revision, now(), entitlement.id, entitlement.revision);
@@ -258,15 +313,16 @@ export function applyRtStates(tx: GemSourceTx, entitlements: readonly any[], own
         predecessorMovementId = prior.movement_id; movementKind = 'REINSTATE';
         movementId = movement(tx.db, { studentId, academicYearId: year, currency: 'EMERALD', amount: 1, kind: 'REINSTATE', sourceKind: 'RT_REVISION', sourceId: operationId, family: `rt:entitlement:${entitlement.id}`, unit: 1, correctionOf: predecessorMovementId, owner });
       }
-    } else if (entitlement.consumer_id !== null) {
+    } else if (allowed && entitlement.consumer_id !== null) {
       if (!prior?.movement_id || prior.state !== 'ACTIVE') fail('RT revocation predecessor is invalid.', 409);
       const tip = currentSource(tx.db, family, 'RT_REVISION'); if (!tip || tip.id !== prior.movement_id || !['GRANT','REINSTATE'].includes(tip.movement_kind)) fail('RT revocation predecessor is invalid.', 409);
       consumptionBefore = { consumerId: entitlement.consumer_id, grantId: entitlement.grant_id, consumedRevision: entitlement.consumed_revision };
       refundSourceAllocations(tx, prior.movement_id, owner, operationId); predecessorMovementId = prior.movement_id; movementKind = 'REVOKE';
       movementId = movement(tx.db, { studentId, academicYearId: year, currency: 'EMERALD', amount: -1, kind: 'REVOKE', sourceKind: 'RT_REVISION', sourceId: operationId, family: `rt:entitlement:${entitlement.id}`, unit: 1, correctionOf: predecessorMovementId, owner });
     }
-    const revisionFingerprint = fingerprint({ receiptOperationId: operationId, entitlementId: entitlement.id, sourceKey: entitlement.source_key, sourceEntryId: entitlement.source_entry_id, ownerTeacherId: owner, studentId, academicYearId: year, termId, revision: entitlement.revision, state, consumptionBefore, movementKind, ledgerSourceId: operationId, sourceFamilyId: family, unitIndex: 1, predecessorMovementId, consumptionAfter });
-    tx.db.prepare('INSERT INTO gem_reconciliation_revisions (receipt_operation_id,entitlement_id,revision,state,transaction_correlation_id,movement_id,revision_fingerprint,created_at) VALUES (?,?,?,?,?,?,?,?)').run(operationId, entitlement.id, entitlement.revision, state, tx.correlationId, movementId, revisionFingerprint, now());
+    const outcome: RtRevisionOutcome = !allowed ? 'DENIED' : movementId === null ? 'NO_MOVEMENT' : 'APPLIED';
+    const revisionFingerprint = fingerprint({ receiptOperationId: operationId, entitlementId: entitlement.id, sourceKey: entitlement.source_key, sourceEntryId: entitlement.source_entry_id, ownerTeacherId: owner, studentId, academicYearId: year, termId, revision: entitlement.revision, state, outcome, consumptionBefore, movementKind, ledgerSourceId: operationId, sourceFamilyId: family, unitIndex: 1, predecessorMovementId, consumptionAfter });
+    tx.db.prepare('INSERT INTO gem_reconciliation_revisions (receipt_operation_id,entitlement_id,revision,state,transaction_correlation_id,movement_id,revision_fingerprint,outcome,created_at) VALUES (?,?,?,?,?,?,?,?,?)').run(operationId, entitlement.id, entitlement.revision, state, tx.correlationId, movementId, revisionFingerprint, outcome, now());
   }
 }
 
@@ -275,4 +331,46 @@ export function applyRt(tx: GemSourceTx, studentId: string, termId: string) {
   const ownerRow = tx.db.prepare('SELECT g.owner_teacher_id AS owner, g.academic_year_id AS year FROM students s JOIN groups g ON g.id=s.group_id WHERE s.id=?').get(studentId) as { owner?: unknown; year?: unknown } | undefined;
   if (typeof ownerRow?.owner !== 'string' || typeof ownerRow.year !== 'string') fail('RT entitlement owner not found.', 409);
   return applyRtStates(tx, entitlements, String(ownerRow!.owner), String(ownerRow!.year));
+}
+
+/**
+ * Startup must validate the complete persisted RT chain, not only the latest
+ * entitlement revision.  Historical revisions have no source snapshot from
+ * which to recreate them, so their receipt and ledger identities are checked
+ * against the immutable entitlement identity before the current revision is
+ * replayed by applyRtStates.
+ */
+export function assertRtReconciliationContinuity(db: Database.Database, entitlementId: string) {
+  const entitlement = db.prepare(`SELECT e.id,e.revision,e.gem_receipt_allowed AS allowed,
+      e.student_id AS studentId,e.term_id AS termId,g.owner_teacher_id AS owner,g.academic_year_id AS year
+    FROM rt_streak_emerald_entitlements e JOIN students s ON s.id=e.student_id
+    JOIN groups g ON g.id=s.group_id WHERE e.id=?`).get(entitlementId) as any;
+  if (!entitlement || !Number.isSafeInteger(entitlement.revision) || entitlement.revision < 1 || ![0, 1].includes(entitlement.allowed)) fail('RT entitlement lineage is invalid.', 409);
+  const revisions = db.prepare('SELECT * FROM gem_reconciliation_revisions WHERE entitlement_id=? ORDER BY revision').all(entitlementId) as any[];
+  if (revisions.length !== entitlement.revision) fail('RT revision chain is incomplete.', 409);
+  for (let index = 0; index < revisions.length; index += 1) {
+    const revision = revisions[index];
+    if (revision.revision !== index + 1 || revision.receipt_operation_id !== `rt-revision:${entitlementId}:${revision.revision}` ||
+        revision.entitlement_id !== entitlementId || !['ACTIVE', 'INACTIVE'].includes(revision.state) ||
+        !['APPLIED', 'NO_MOVEMENT', 'DENIED'].includes(revision.outcome) || !validUtc(revision.created_at) ||
+        typeof revision.revision_fingerprint !== 'string' || revision.revision_fingerprint.length === 0) {
+      fail('RT revision lineage is contradictory.', 409);
+    }
+    if (entitlement.allowed === 0 && (revision.outcome !== 'DENIED' || revision.movement_id !== null) ||
+        entitlement.allowed === 1 && revision.outcome === 'DENIED') fail('RT revision outcome conflicts with immutable eligibility.', 409);
+    if (revision.outcome === 'NO_MOVEMENT' && revision.movement_id !== null) fail('RT no-movement revision has a ledger movement.', 409);
+    if (revision.movement_id !== null) {
+      const movementRow = db.prepare('SELECT * FROM gem_ledger WHERE id=?').get(revision.movement_id) as any;
+      const expectedKind = revision.state === 'ACTIVE' ? (index === 0 || revisions[index - 1].state === 'ACTIVE' ? 'GRANT' : 'REINSTATE') : 'REVOKE';
+      const expectedPredecessor = expectedKind === 'GRANT' ? null : revisions[index - 1]?.movement_id ?? null;
+      if (!movementRow || movementRow.source_kind !== 'RT_REVISION' || movementRow.source_id !== revision.receipt_operation_id ||
+          movementRow.source_family_id !== `rt:entitlement:${entitlementId}` || movementRow.unit_index !== 1 ||
+          movementRow.movement_kind !== expectedKind || movementRow.student_id !== entitlement.studentId ||
+          movementRow.academic_year_id !== entitlement.year || movementRow.currency !== 'EMERALD' ||
+          movementRow.amount !== (expectedKind === 'REVOKE' ? -1 : 1) || movementRow.correction_of_id !== expectedPredecessor ||
+          movementRow.owner_teacher_id !== entitlement.owner) {
+        fail('RT revision movement lineage is invalid.', 409);
+      }
+    }
+  }
 }

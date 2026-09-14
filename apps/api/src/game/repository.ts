@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type Database from 'better-sqlite3';
+import { effectiveActionDelta } from '../behaviour/domain.js';
 
 export type EventStatus = 'DRAFT' | 'ACTIVE' | 'COMPLETED';
 export type ChallengeStatus = 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'COMPLETED';
@@ -141,6 +142,27 @@ export function advancePromptAtomically(db: Database.Database, minigameId: strin
 export function listStudents(db: Database.Database, groupId: string, includeRealName = true) {
   const fields = includeRealName ? 'id, real_name AS realName, alias, avatar, specialty' : 'id, alias, avatar, specialty';
   return db.prepare(`SELECT ${fields} FROM students WHERE group_id = ? AND archived_at IS NULL ORDER BY alias COLLATE NOCASE, id`).all(groupId) as StudentRecord[];
+}
+
+/** Returns the participant snapshot for special activities. */
+export function listEligibleSpecialActivityStudentIds(db: Database.Database, ownerTeacherId: string, groupId: string) {
+  const activeSession = db.prepare(`SELECT id
+    FROM real_class_sessions
+    WHERE owner_teacher_id = ? AND group_id = ? AND ended_at IS NULL
+    ORDER BY created_at DESC, id DESC LIMIT 1`).get(ownerTeacherId, groupId) as { id: string } | undefined;
+  if (!activeSession) return listStudents(db, groupId).map(student => student.id);
+
+  const roster = db.prepare(`SELECT r.student_id AS studentId, r.lives_at_start AS livesAtStart
+    FROM real_class_session_behaviour_roster r
+    JOIN students s ON s.id = r.student_id
+    WHERE r.session_id = ? AND s.group_id = ? AND s.archived_at IS NULL
+    ORDER BY s.alias COLLATE NOCASE, s.id`).all(activeSession.id, groupId) as { studentId: string; livesAtStart: number }[];
+  return roster.filter(row => {
+    const actions = db.prepare(`SELECT kind, delta FROM behaviour_actions
+      WHERE session_id = ? AND student_id = ? ORDER BY created_at, id`).all(activeSession.id, row.studentId) as { kind: 'LOSS' | 'RESTORE' | 'CORRECTION'; delta: number }[];
+    const lives = actions.reduce((value, action) => value + effectiveActionDelta(action.kind, action.delta), row.livesAtStart);
+    return lives >= 2;
+  }).map(row => row.studentId);
 }
 
 export function listSafeStudents(db: Database.Database, groupId: string) {

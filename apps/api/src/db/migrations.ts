@@ -56,4 +56,8 @@ export const migrations: Migration[] = [
     id: '0013_gems',
     sql: readFileSync(fileURLToPath(new URL('../../drizzle/0013_gems.sql', import.meta.url)), 'utf8'),
   },
+  {
+    id: '0014_behaviour_lives',
+    sql: readFileSync(fileURLToPath(new URL('../../drizzle/0014_behaviour_lives.sql', import.meta.url)), 'utf8'),
+  },
 ];

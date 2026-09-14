@@ -104,4 +104,38 @@ describe('RT persistence', () => {
     runImmediateTransaction(db, 'rt-test-3', tx => coordinator.applyRtScope(tx, ids.student, first.termId));
     expect(db.prepare("SELECT movement_kind AS kind FROM gem_ledger WHERE source_family_id=? ORDER BY rowid").all(`rt:entitlement:${entitlementId}`)).toEqual([{ kind: 'GRANT' }, { kind: 'REVOKE' }, { kind: 'REINSTATE' }]);
   });
+
+  it('snapshots denied RT eligibility and never catches up movement on replay or correction', () => {
+    const session = calendar.start(db, ids.teacher, ids.year, ids.group, '11111111-1111-4111-8111-111111111161', clock).session;
+    const coordinator = createGemSourceOrchestrator();
+    const first = upsertEntries(db, ids.teacher, session.id, [{ studentId: ids.student, value: 10 }], '11111111-1111-4111-8111-111111111162', coordinator);
+    const entitlementId = '55555555-5555-4555-8555-555555555558';
+    db.prepare('INSERT INTO rt_streak_emerald_entitlements (id,source_key,source_entry_id,student_id,term_id,active,revision,gem_receipt_allowed) VALUES (?,?,?,?,?,?,?,?)').run(entitlementId, `RT_STREAK:${first.entries[0].id}`, first.entries[0].id, ids.student, first.termId, 1, 1, 0);
+
+    runImmediateTransaction(db, 'rt-denied-1', tx => coordinator.applyRtScope(tx, ids.student, first.termId));
+    expect(db.prepare('SELECT revision,outcome,movement_id FROM gem_reconciliation_revisions WHERE entitlement_id=?').all(entitlementId)).toEqual([{ revision: 1, outcome: 'DENIED', movement_id: null }]);
+    expect(db.prepare('SELECT consumer_id,grant_id FROM rt_streak_emerald_entitlements WHERE id=?').get(entitlementId)).toEqual({ consumer_id: null, grant_id: null });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM gem_ledger WHERE source_family_id=?').get(`rt:entitlement:${entitlementId}`)).toEqual({ count: 0 });
+
+    runImmediateTransaction(db, 'rt-denied-replay', tx => coordinator.applyRtScope(tx, ids.student, first.termId));
+    db.prepare('UPDATE rt_streak_emerald_entitlements SET active=0,revision=2 WHERE id=?').run(entitlementId);
+    runImmediateTransaction(db, 'rt-denied-2', tx => coordinator.applyRtScope(tx, ids.student, first.termId));
+    expect(db.prepare('SELECT revision,outcome,movement_id FROM gem_reconciliation_revisions WHERE entitlement_id=? ORDER BY revision').all(entitlementId)).toEqual([
+      { revision: 1, outcome: 'DENIED', movement_id: null },
+      { revision: 2, outcome: 'DENIED', movement_id: null },
+    ]);
+    expect(db.prepare('SELECT COUNT(*) AS count FROM gem_ledger WHERE source_family_id=?').get(`rt:entitlement:${entitlementId}`)).toEqual({ count: 0 });
+  });
+
+  it('records NO_MOVEMENT for an allowed entitlement that is corrected before consumption', () => {
+    const session = calendar.start(db, ids.teacher, ids.year, ids.group, '11111111-1111-4111-8111-111111111171', clock).session;
+    const coordinator = createGemSourceOrchestrator();
+    const first = upsertEntries(db, ids.teacher, session.id, [{ studentId: ids.student, value: 10 }], '11111111-1111-4111-8111-111111111172', coordinator);
+    const entitlementId = '55555555-5555-4555-8555-555555555559';
+    db.prepare('INSERT INTO rt_streak_emerald_entitlements (id,source_key,source_entry_id,student_id,term_id,active,revision,gem_receipt_allowed) VALUES (?,?,?,?,?,?,?,?)').run(entitlementId, `RT_STREAK:${first.entries[0].id}`, first.entries[0].id, ids.student, first.termId, 0, 1, 1);
+
+    runImmediateTransaction(db, 'rt-no-movement', tx => coordinator.applyRtScope(tx, ids.student, first.termId));
+    expect(db.prepare('SELECT outcome,movement_id FROM gem_reconciliation_revisions WHERE entitlement_id=?').get(entitlementId)).toEqual({ outcome: 'NO_MOVEMENT', movement_id: null });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM gem_ledger WHERE source_family_id=?').get(`rt:entitlement:${entitlementId}`)).toEqual({ count: 0 });
+  });
 });

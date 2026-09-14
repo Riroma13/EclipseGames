@@ -44,7 +44,6 @@ export function registerProjectionRoutes(app: FastifyInstance, database: Databas
     const records = teacherRecords(database, teacherId, groupId);
     const record = findStudent(database, groupId, studentId);
     if (!record || !records.some((candidate) => candidate.id === record.id)) throw new ApiError('NOT_FOUND', 404, 'Student not found.');
-    const query = request.query as { showStudent?: string };
-    return toProjectionStudentDto(record, query.showStudent === 'true');
+    return toProjectionStudentDto(record);
   });
 }

@@ -2,6 +2,9 @@ export type AcademicYear = { id: string; label: string; startsOn: string; endsOn
 export type Group = { id: string; academicYearId: string; name: string };
 export type Calendar = { configured: false; canReplace: boolean } | { configured: true; canReplace: boolean; academicYearId: string; timezone: string; terms: Array<{ id: string; code: 'T1'|'T2'|'T3'; startsOn: string; endsOn: string }>; holidays: Array<{ id: string; startsOn: string; endsOn: string }>; slots: Array<{ id: string; groupId: string; weekday: number; startsAt: string; endsAt: string }> };
 export type Session = { id: string; academicYearId: string; groupId: string; localDate: string; timezone: string; slotStartsAt: string; slotEndsAt: string; startedAt: string; endedAt: string | null; createdAt: string };
+export type BehaviourState = 'NORMAL'|'VIGILANCE'|'ALERT'|'RED_CODE';
+export type BehaviourStudentState = { sessionId:string; studentId:string; lives:number; state:BehaviourState; restrictions:{bonusAllowed:boolean;receiveGemAllowed:boolean;spendGemAllowed:boolean;specialActivityAllowed:boolean}; lastActionId:string|null; incidentStatus:'ACTIVE'|'CORRECTED'|null; proposal:{id:string;status:'OPEN'|'DISMISSED'|'WITHDRAWN'}|null };
+export type BehaviourRosterState = { sessionId:string; students:BehaviourStudentState[] };
 export type ClassOccurrence = { localDate:string; weekdayLabel:string; startsAt:string; endsAt:string };
 export type SessionStatus = { configured:boolean; canReplace:boolean; eligible:boolean; reason:'ACTIVE_SESSION'|'ARCHIVED_YEAR'|'UNCONFIGURED'|'OUTSIDE_TERM'|'HOLIDAY'|'NO_CLASS_DAY'|'OUTSIDE_TIMETABLE'|'USED_SLOT_DATE'|'ELIGIBLE'; startTiming:'EARLY'|'SCHEDULED'|null; message:string; currentClass:ClassOccurrence|null; nextClass:ClassOccurrence|null; activeForSelectedGroup:boolean; active:Session|null };
 export type RtValue = 10 | 5 | 0 | 'ABSENT';
@@ -77,6 +80,11 @@ export const workspaceApi = {
   rtEntries: (sessionId:string, signal?:AbortSignal) => get<RtRoster>(`/api/v1/real-class-sessions/${sessionId}/rt-entries`, signal),
   saveRt: (sessionId:string, entries:Array<{studentId:string;value:RtValue}>, key?:string, signal?:AbortSignal) => post<RtRoster>(`/api/v1/real-class-sessions/${sessionId}/rt-entries`, { entries }, key ?? newKey(), signal),
   rtSummaries: (groupId:string, yearId:string, termId:string, signal?:AbortSignal) => get<{ summaries:RtSummary[] }>(`/api/v1/groups/${groupId}/rt-summaries?academicYearId=${yearId}&termId=${termId}`, signal),
+  behaviour: (sessionId:string, signal?:AbortSignal) => get<BehaviourRosterState>(`/api/v1/real-class-sessions/${sessionId}/behaviour`, signal),
+  loseLife: (sessionId:string, studentId:string, key?:string, signal?:AbortSignal) => post<BehaviourStudentState>(`/api/v1/real-class-sessions/${sessionId}/students/${studentId}/loss`, {}, key ?? newKey(), signal),
+  restoreLife: (sessionId:string, studentId:string, key?:string, signal?:AbortSignal) => post<BehaviourStudentState>(`/api/v1/real-class-sessions/${sessionId}/students/${studentId}/restore`, {}, key ?? newKey(), signal),
+  correctBehaviourAction: (actionId:string, key?:string, signal?:AbortSignal) => post<BehaviourStudentState>(`/api/v1/behaviour/actions/${actionId}/correction`, {}, key ?? newKey(), signal),
+  dismissBehaviourProposal: (proposalId:string, key?:string, signal?:AbortSignal) => post<{id:string;sessionId:string;studentId:string;status:'DISMISSED'}>(`/api/v1/behaviour/proposals/${proposalId}/dismiss`, {}, key ?? newKey(), signal),
 };
 
 async function fetchJson<T>(url:string, method:string, body:unknown, signal?:AbortSignal):Promise<T> { const response=await fetch(url,{method,credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify(body),signal}); if(!response.ok){let value:{message?:string}={};try{value=await response.json();}catch{} const error=new Error(value.message??'Could not save calendar configuration.') as ApiFailure;error.status=response.status;throw error;} return response.json() as Promise<T>; }

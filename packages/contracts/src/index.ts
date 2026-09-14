@@ -10,6 +10,7 @@ export const apiErrorCodes = [
   'FORBIDDEN',
   'NOT_FOUND',
   'CONFLICT',
+  'BEHAVIOUR_RESTRICTED',
 ] as const;
 
 export type ApiErrorCode = (typeof apiErrorCodes)[number];

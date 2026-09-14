@@ -21,7 +21,7 @@ describe('SQLite migrations', () => {
       expect(migrateDatabase(db, migrations)).toEqual({ applied: [...migrations.map(migration => migration.id)] });
     expect(migrateDatabase(db, migrations)).toEqual({ applied: [] });
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'app_metadata'").get()).toBeTruthy();
-     expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 13 });
+     expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 14 });
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'projection_students'").get()).toBeTruthy();
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'classroom_events'").get()).toBeTruthy();
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'classroom_challenges'").get()).toBeTruthy();
@@ -42,6 +42,7 @@ describe('SQLite migrations', () => {
        { id: '0011_academic_calendar_real_sessions' },
         { id: '0012_rt_absent_term_energy' },
         { id: '0013_gems' },
+        { id: '0014_behaviour_lives' },
     ]);
     const table = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='xp_level_grant_transitions'").get() as {sql:string};
     expect(table.sql).toContain('UNIQUE (sequence)');
@@ -67,7 +68,7 @@ describe('SQLite migrations', () => {
     expect(db.prepare('SELECT id,kind,team_count AS teamCount,team_assignments AS teamAssignments,prompt_deck_prompts AS promptDeckPrompts FROM minigame_sessions WHERE id=?').get(ids.minigame)).toEqual({ id: ids.minigame, kind: 'RANDOM_DRAW', teamCount: 0, teamAssignments: '{}', promptDeckPrompts: '[]' });
     db.prepare(`INSERT INTO minigame_sessions (id,owner_teacher_id,group_id,kind,title,prompt,duration_seconds,status,remaining_seconds,draw_index,created_at,updated_at,team_count,team_assignments,prompt_deck_prompts)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(ids.promptDeck, ids.teacher, ids.group, 'PROMPT_DECK', 'Legacy deck', 'Legacy prompt', 0, 'READY', 0, 0, at, at, 0, '{}', JSON.stringify(['Legacy prompt', 'Next prompt']));
-     expect(migrateDatabase(db, migrations)).toEqual({ applied: ['0010_prompt_reveal', '0011_academic_calendar_real_sessions', '0012_rt_absent_term_energy', '0013_gems'] });
+     expect(migrateDatabase(db, migrations)).toEqual({ applied: ['0010_prompt_reveal', '0011_academic_calendar_real_sessions', '0012_rt_absent_term_energy', '0013_gems', '0014_behaviour_lives'] });
     expect(db.prepare('SELECT id,kind,prompt,prompt_revealed AS promptRevealed FROM minigame_sessions WHERE id=?').get(ids.promptDeck)).toEqual({ id: ids.promptDeck, kind: 'PROMPT_DECK', prompt: 'Legacy prompt', promptRevealed: 1 });
     db.prepare(`INSERT INTO classroom_challenges (id,owner_teacher_id,group_id,title,description,target,status,show_on_projection,created_at,updated_at)
       VALUES (?,?,?,?,?,?,?,?,?,?)`).run('00000000-0000-4000-8000-000000000208', ids.teacher, ids.group, 'Paused challenge', '', 2, 'PAUSED', 1, at, at);
@@ -76,6 +77,8 @@ describe('SQLite migrations', () => {
     expect(db.prepare("SELECT status FROM classroom_challenges WHERE status='PAUSED'").get()).toEqual({ status: 'PAUSED' });
      expect(db.prepare("SELECT kind FROM minigame_sessions WHERE kind='TEAM_DRAW'").get()).toEqual({ kind: 'TEAM_DRAW' });
      expect(db.prepare('SELECT id,currency,cost FROM gem_reward_catalogue ORDER BY id').all()).toHaveLength(3);
+     expect(db.prepare('SELECT COUNT(*) AS count FROM behaviour_student_state').get()).toEqual({ count: 0 });
+     expect(db.prepare('SELECT behaviour_snapshot_version FROM real_class_sessions WHERE id=?').get('missing')).toBeUndefined();
   });
 
   it('fails closed when a migration fails', () => {

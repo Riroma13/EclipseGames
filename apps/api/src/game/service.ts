@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import { ApiError } from '../http/errors.js';
+import { runImmediateTransaction } from '../services/transactions.js';
 import * as xp from '../xp/service.js';
 import * as repository from './repository.js';
 
@@ -213,7 +214,13 @@ export function displayChallenge(db: Database.Database, teacherId: string, chall
   return challengeDto(repository.findChallenge(db, teacherId, challenge.id)!);
 }
 
-function activeStudentIds(db: Database.Database, groupId: string) { return repository.listStudents(db, groupId).map(student => student.id); }
+function activeStudentIds(db: Database.Database, ownerTeacherId: string, groupId: string) {
+  return repository.listEligibleSpecialActivityStudentIds(db, ownerTeacherId, groupId);
+}
+function requireEligibleStudents(students: string[]) {
+  if (!students.length) throw new ApiError('BEHAVIOUR_RESTRICTED', 409, 'No eligible students remain for this activity.');
+  return students;
+}
 function shuffle(values: string[]) { for (let index = values.length - 1; index > 0; index -= 1) { const target = Math.floor(Math.random() * (index + 1)); [values[index], values[target]] = [values[target], values[index]]; } return values; }
 function drawOrder(value: string) { try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []; } catch { return []; } }
 function teamAssignments(value: string) {
@@ -390,14 +397,13 @@ export function archivePromptDeck(db: Database.Database, teacherId: string, deck
 
 export function launchRandomDraw(db: Database.Database, teacherId: string, groupId: string, title: string | undefined) {
   const group = writable(repository.groupContext(db, teacherId, groupId) ?? notFound('Group not found.'));
-  const students = activeStudentIds(db, group.id);
-  if (!students.length) validation('Add at least one student before launching a draw.');
-  return db.transaction(() => {
+  return runImmediateTransaction(db, 'game:launch-random-draw', () => {
+    const students = requireEligibleStudents(activeStudentIds(db, teacherId, group.id));
     closeActiveMinigame(db, teacherId, group.id);
     const createdAt = now();
      const value = repository.insertMinigame(db, { id: randomUUID(), ownerTeacherId: teacherId, groupId: group.id, kind: 'RANDOM_DRAW', title: cleanTitle(title || 'Random Student Draw'), prompt: 'Choose the next voice in the room.', durationSeconds: 0, status: 'READY', remainingSeconds: 0, startedAt: null, pausedAt: null, selectedStudentId: null, drawOrder: JSON.stringify(shuffle(students)), drawIndex: 0, createdAt, updatedAt: createdAt, teamCount: 0, teamAssignments: '{}', promptDeckPrompts: '[]', promptRevealed: 1 });
     return minigameDto(db, value, true);
-  })();
+  });
 }
 
 export function launchFrenchSprint(db: Database.Database, teacherId: string, groupId: string, input: { title: string; prompt: string; durationSeconds: number }) {
@@ -405,12 +411,12 @@ export function launchFrenchSprint(db: Database.Database, teacherId: string, gro
   if (!Number.isInteger(input.durationSeconds) || input.durationSeconds < 10 || input.durationSeconds > 600) validation('Sprint duration must be between 10 and 600 seconds.');
   const prompt = input.prompt.trim();
   if (!prompt) validation('A sprint prompt is required.');
-  return db.transaction(() => {
+  return runImmediateTransaction(db, 'game:launch-team-draw', () => {
     closeActiveMinigame(db, teacherId, group.id);
     const createdAt = now();
      const value = repository.insertMinigame(db, { id: randomUUID(), ownerTeacherId: teacherId, groupId: group.id, kind: 'FRENCH_SPRINT', title: cleanTitle(input.title || 'French Sprint'), prompt, durationSeconds: input.durationSeconds, status: 'READY', remainingSeconds: input.durationSeconds, startedAt: null, pausedAt: null, selectedStudentId: null, drawOrder: '[]', drawIndex: 0, createdAt, updatedAt: createdAt, teamCount: 0, teamAssignments: '{}', promptDeckPrompts: '[]', promptRevealed: 1 });
     return minigameDto(db, value, true);
-  })();
+  });
 }
 
 export function launchFrenchSprintFromPreset(db: Database.Database, teacherId: string, groupId: string, presetId: string) {
@@ -427,9 +433,9 @@ function teamAssignmentSnapshot(studentIds: string[], teamCount: number) {
 
 export function launchTeamDraw(db: Database.Database, teacherId: string, groupId: string, input: TeamDrawInput) {
   const group = writable(repository.groupContext(db, teacherId, groupId) ?? notFound('Group not found.'));
-  const students = activeStudentIds(db, group.id);
-  if (!Number.isInteger(input.teamCount) || input.teamCount < 2 || input.teamCount > 10 || input.teamCount > students.length) validation('Team count must be between 2 and 10 and cannot exceed the active student count.');
   return db.transaction(() => {
+    const students = requireEligibleStudents(activeStudentIds(db, teacherId, group.id));
+    if (!Number.isInteger(input.teamCount) || input.teamCount < 2 || input.teamCount > 10 || input.teamCount > students.length) validation('Team count must be between 2 and 10 and cannot exceed the active student count.');
     closeActiveMinigame(db, teacherId, group.id);
     const createdAt = now();
      const value = repository.insertMinigame(db, { id: randomUUID(), ownerTeacherId: teacherId, groupId: group.id, kind: 'TEAM_DRAW', title: cleanTitle(input.title || 'Team Draw'), prompt: 'Everyone has a place in the next classroom team.', durationSeconds: 0, status: 'READY', remainingSeconds: 0, startedAt: null, pausedAt: null, selectedStudentId: null, drawOrder: '[]', drawIndex: 0, createdAt, updatedAt: createdAt, teamCount: input.teamCount, teamAssignments: teamAssignmentSnapshot(students, input.teamCount), promptDeckPrompts: '[]', promptRevealed: 1 });
@@ -442,9 +448,11 @@ export function shuffleTeamDraw(db: Database.Database, teacherId: string, miniga
   const group = writable(repository.groupContext(db, teacherId, current.groupId) ?? notFound('Group not found.'));
   ensureMutableMinigame(current);
   if (current.kind !== 'TEAM_DRAW') validation('Shuffle is only available for Team Draw.');
-  const students = activeStudentIds(db, group.id);
-  if (current.teamCount < 2 || current.teamCount > students.length) validation('Team configuration is no longer valid for the active roster.');
-  repository.updateMinigame(db, current.id, { teamAssignments: teamAssignmentSnapshot(students, current.teamCount), updatedAt: now() });
+  runImmediateTransaction(db, `game:shuffle-team-draw:${current.id}`, () => {
+    const students = requireEligibleStudents(activeStudentIds(db, teacherId, group.id));
+    if (current.teamCount < 2 || current.teamCount > students.length) validation('Team configuration is no longer valid for the active roster.');
+    repository.updateMinigame(db, current.id, { teamAssignments: teamAssignmentSnapshot(students, current.teamCount), updatedAt: now() });
+  });
   return minigameDto(db, repository.findMinigame(db, teacherId, current.id)!, true);
 }
 
@@ -472,14 +480,16 @@ export function drawStudent(db: Database.Database, teacherId: string, minigameId
       return minigameDto(db, current, true);
     }
     if (current.kind !== 'RANDOM_DRAW') validation('Student draw is only available for Random Student Draw.');
-    const students = activeStudentIds(db, group.id);
-    if (!students.length) validation('Add at least one student before drawing.');
-    let order = drawOrder(current.drawOrder).filter(studentId => students.includes(studentId));
-    let index = current.drawIndex;
-    if (!order.length || index >= order.length) { order = shuffle([...students]); index = 0; }
-    const selectedStudentId = order[index];
-    const advanced = repository.advanceDrawAtomically(db, current.id, current.drawIndex, selectedStudentId, JSON.stringify(order), index + 1, now());
-    if (advanced) return minigameDto(db, repository.findMinigame(db, teacherId, current.id)!, true);
+    const result = runImmediateTransaction(db, `game:draw-student:${current.id}`, () => {
+      const students = requireEligibleStudents(activeStudentIds(db, teacherId, group.id));
+      let order = drawOrder(current.drawOrder).filter(studentId => students.includes(studentId));
+      let index = current.drawIndex;
+      if (!order.length || index >= order.length) { order = shuffle([...students]); index = 0; }
+      const selectedStudentId = order[index];
+      const advanced = repository.advanceDrawAtomically(db, current.id, current.drawIndex, selectedStudentId, JSON.stringify(order), index + 1, now());
+      return advanced ? minigameDto(db, repository.findMinigame(db, teacherId, current.id)!, true) : null;
+    });
+    if (result) return result;
   }
   throw new ApiError('CONFLICT', 409, 'The student draw changed while it was being updated. Draw again.');
 }
@@ -552,12 +562,14 @@ export function resetMinigame(db: Database.Database, teacherId: string, minigame
   const current = activeMinigame(db, teacherId, minigameId);
   writable(repository.groupContext(db, teacherId, current.groupId) ?? notFound('Group not found.'));
   ensureMutableMinigame(current);
-  const students = current.kind === 'RANDOM_DRAW' ? activeStudentIds(db, current.groupId) : [];
-  const teamStudents = current.kind === 'TEAM_DRAW' ? activeStudentIds(db, current.groupId) : [];
-  const prompts = current.kind === 'PROMPT_DECK' ? promptSnapshot(current.promptDeckPrompts) : [];
-  if (current.kind === 'TEAM_DRAW' && (current.teamCount < 2 || current.teamCount > 10 || current.teamCount > teamStudents.length)) validation('Team configuration is no longer valid for the active roster.');
-  if (current.kind === 'PROMPT_DECK' && !prompts.length) throw new ApiError('INTERNAL_ERROR', 500, 'Prompt deck snapshot is invalid.');
-   repository.updateMinigame(db, current.id, { prompt: current.kind === 'PROMPT_DECK' ? prompts[0] ?? '' : current.prompt, status: 'READY', remainingSeconds: current.durationSeconds, startedAt: null, pausedAt: null, selectedStudentId: null, drawOrder: current.kind === 'RANDOM_DRAW' ? JSON.stringify(shuffle(students)) : '[]', drawIndex: 0, teamAssignments: current.kind === 'TEAM_DRAW' ? teamAssignmentSnapshot(teamStudents, current.teamCount) : current.teamAssignments, promptRevealed: current.kind === 'PROMPT_DECK' ? 0 : current.promptRevealed, updatedAt: now() });
+   runImmediateTransaction(db, `game:reset-minigame:${current.id}`, () => {
+     const students = current.kind === 'RANDOM_DRAW' ? requireEligibleStudents(activeStudentIds(db, teacherId, current.groupId)) : [];
+     const teamStudents = current.kind === 'TEAM_DRAW' ? requireEligibleStudents(activeStudentIds(db, teacherId, current.groupId)) : [];
+     const prompts = current.kind === 'PROMPT_DECK' ? promptSnapshot(current.promptDeckPrompts) : [];
+     if (current.kind === 'TEAM_DRAW' && (current.teamCount < 2 || current.teamCount > 10 || current.teamCount > teamStudents.length)) validation('Team configuration is no longer valid for the active roster.');
+     if (current.kind === 'PROMPT_DECK' && !prompts.length) throw new ApiError('INTERNAL_ERROR', 500, 'Prompt deck snapshot is invalid.');
+     repository.updateMinigame(db, current.id, { prompt: current.kind === 'PROMPT_DECK' ? prompts[0] ?? '' : current.prompt, status: 'READY', remainingSeconds: current.durationSeconds, startedAt: null, pausedAt: null, selectedStudentId: null, drawOrder: current.kind === 'RANDOM_DRAW' ? JSON.stringify(shuffle(students)) : '[]', drawIndex: 0, teamAssignments: current.kind === 'TEAM_DRAW' ? teamAssignmentSnapshot(teamStudents, current.teamCount) : current.teamAssignments, promptRevealed: current.kind === 'PROMPT_DECK' ? 0 : current.promptRevealed, updatedAt: now() });
+   });
   return minigameDto(db, repository.findMinigame(db, teacherId, current.id)!, true);
 }
 
