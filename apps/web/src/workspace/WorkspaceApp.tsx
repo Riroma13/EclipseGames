@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { filterStudents } from './search';
-import { activityState, classSummaryState, workspaceApi, type ActivityState, type AcademicYear, type Group, type TeacherStudent, type XpSummary } from './workspace-api';
+import { activityState, classSummaryState, workspaceApi, type ActivityState, type AcademicYear, type AvatarProfile, type Group, type TeacherStudent, type XpSummary } from './workspace-api';
 import { initialWorkspaceState, parseContext, reducer, sameStudentContext, type WorkspaceStudentContext } from './workspace-state';
 import { GroupSelector } from './GroupSelector';
 import { StudentPanel } from './StudentPanel';
+import { AvatarWorkflow } from './AvatarWorkflow';
 import { StudentRoster } from './StudentRoster';
 import { WorkspaceShell } from './WorkspaceShell';
 import { YearContextControl } from './YearContextControl';
@@ -81,6 +82,7 @@ export function WorkspaceApp() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [students, setStudents] = useState<TeacherStudent[]>([]);
   const [summaries, setSummaries] = useState<Record<string, XpSummary>>({});
+  const [avatarProfiles, setAvatarProfiles] = useState<Record<string, AvatarProfile | null>>({});
   const [summaryAvailable, setSummaryAvailable] = useState(true);
   const [summaryRetry, setSummaryRetry] = useState(0);
   const [yearId, setYearId] = useState(parseContext(params.get('year')));
@@ -324,9 +326,10 @@ export function WorkspaceApp() {
       {currentGroup && <RtGrid group={currentGroup} session={activeSession} students={students} />}
       {currentYear && currentGroup && <TermClosePanel context={{ academicYearId:currentYear.id, groupId:currentGroup.id, readOnly:currentYearIsHistorical }} onSelectStudent={id => { originRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; dispatch({ type:'select', studentId:id }); }} onSessionExpired={clearPrivateState} />}
      {!groups.length && !error ? <p className="empty-state">No groups in this year.</p> : <div className="workspace-grid">
-      <section className="roster-section"><div className="section-heading"><div><p className="eyebrow">ACADEMY ROSTER</p><h2 className="section-title">Roster <span>{visibleStudents.length}</span></h2></div><span className="section-note">Select a character to open their sheet</span></div><StudentRoster students={visibleStudents} summaries={summaries} selectedId={state.selectedStudentId} query={state.search} onSelect={id => { originRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; dispatch({ type: 'select', studentId: id }); }} /></section>
+       <section className="roster-section"><div className="section-heading"><div><p className="eyebrow">ACADEMY ROSTER</p><h2 className="section-title">Roster <span>{visibleStudents.length}</span></h2></div><span className="section-note">Select a character to open their sheet</span></div><StudentRoster students={visibleStudents} summaries={summaries} avatarProfiles={avatarProfiles} selectedId={state.selectedStudentId} query={state.search} onSelect={id => { originRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; dispatch({ type: 'select', studentId: id }); }} /></section>
       <ActivitySummary activity={activity} onRetry={() => { if (selected) workspaceApi.xpEvidence(selected.id, yearId!, 3).then(result => setActivity(activityState(result))).catch(() => setActivity(activityState(null))); }} />
-        <StudentPanel student={selected} context={context} historical={currentYearIsHistorical} feedback={state.feedback} undo={state.undo} onClose={() => dispatch({ type: 'select', studentId: '' })} originRef={originRef} onUndoResult={message => dispatch({ type: 'undo-result', message })} summary={selected ? summaries[selected.id] ?? null : null} onSummary={setSummary} onFeedback={message => dispatch({ type: 'action-result', message, undo: null })} onUndo={registerUndo} />
+         <StudentPanel student={selected} context={context} historical={currentYearIsHistorical} feedback={state.feedback} undo={state.undo} onClose={() => dispatch({ type: 'select', studentId: '' })} originRef={originRef} onUndoResult={message => dispatch({ type: 'undo-result', message })} summary={selected ? summaries[selected.id] ?? null : null} onSummary={setSummary} onFeedback={message => dispatch({ type: 'action-result', message, undo: null })} onUndo={registerUndo} />
+         {selected && context && <AvatarWorkflow student={selected} context={context} readOnly={currentYearIsHistorical || Boolean(selected.archivedAt)} onProfileState={profile => setAvatarProfiles(current => ({ ...current, [selected.id]: profile }))} />}
         {selected && context && <QuarterlyRubric key={`${context.academicYearId}:${context.groupId}:${context.studentId}`} context={context} onSessionExpired={clearPrivateState} />}
        {selected && context && <BehaviourPanel student={selected} context={context} session={activeSession} readOnly={currentYearIsHistorical || Boolean(selected.archivedAt)} onFeedback={message => dispatch({ type: 'action-result', message, undo: null })} />}
     </div>}

@@ -6,22 +6,13 @@ import { spawnSync } from 'node:child_process';
 import { migrateDatabase } from '../../src/db/migrate.js';
 import { migrations } from '../../src/db/migrations.js';
 import { DEMO_CHALLENGE, DEMO_EVENT, DEMO_GROUP, DEMO_PREPARED_CHALLENGE, DEMO_PREPARED_EVENT, DEMO_PRESET, DEMO_PROMPT_DECK, DEMO_STUDENTS, DEMO_YEAR, seedDemo } from '../../src/demo/seed-service.js';
+import { ensureDemoActiveSession } from '../../src/demo/bootstrap.js';
 import { ensureOwnedDemoRoster } from '../../src/roster/service.js';
-import { startFixtureRealClassSession } from '../../src/test-support/real-class-session.js';
 
 const databases: Database.Database[] = [];
 function db() { const value = new Database(':memory:'); value.pragma('foreign_keys = ON'); migrateDatabase(value, migrations); value.prepare('INSERT INTO teacher_accounts VALUES (?, ?, ?, ?)').run('teacher-demo', 'teacher@example.test', 'hash', '2026-01-01'); databases.push(value); return value; }
 afterEach(() => { for (const value of databases.splice(0)) value.close(); });
-function setupFixture(value: Database.Database) {
-  ensureOwnedDemoRoster(value, 'teacher-demo', { year: DEMO_YEAR, group: DEMO_GROUP, students: DEMO_STUDENTS });
-  if (!value.prepare('SELECT 1 FROM real_class_sessions WHERE owner_teacher_id=? AND ended_at IS NULL').get('teacher-demo')) {
-    startFixtureRealClassSession(value, { teacher: 'teacher-demo', year: DEMO_YEAR.id, group: DEMO_GROUP.id, key: '00000000-0000-4000-8000-000000009901' });
-  }
-}
-function seedFixture(value: Database.Database) {
-  setupFixture(value);
-  return seedDemo(value, 'teacher-demo');
-}
+function seedFixture(value: Database.Database) { return seedDemo(value, 'teacher-demo'); }
 function persistedState(value: Database.Database) {
   const tables = (value.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all() as Array<{ name: string }>).map(({ name }) => name);
   return tables.map((name) => ({ name, rows: value.prepare(`SELECT * FROM "${name.replaceAll('"', '""')}" ORDER BY rowid`).all() }));
@@ -45,6 +36,8 @@ describe('service-owned demo seed', () => {
     expect(first.roster.year.id).toBe(DEMO_YEAR.id);
     expect(first.roster.group.id).toBe(DEMO_GROUP.id);
     expect(first.roster.students).toHaveLength(16);
+    expect(value.prepare('SELECT COUNT(*) AS count FROM real_class_sessions WHERE owner_teacher_id=? AND academic_year_id=? AND group_id=? AND ended_at IS NULL').get('teacher-demo', DEMO_YEAR.id, DEMO_GROUP.id)).toEqual({ count: 1 });
+    expect(value.prepare('SELECT COUNT(*) AS count FROM real_class_session_behaviour_roster WHERE session_id=(SELECT id FROM real_class_sessions WHERE owner_teacher_id=? AND ended_at IS NULL)').get('teacher-demo')).toEqual({ count: 16 });
     expect(new Set(first.roster.students.map((student) => student.specialty)).size).toBe(8);
     expect(first.events).toHaveLength(64);
     expect(first.gameplay).toMatchObject({ event: DEMO_EVENT.id, challenge: DEMO_CHALLENGE.id, preset: DEMO_PRESET.id, promptDeck: DEMO_PROMPT_DECK.id, preparedEvent: DEMO_PREPARED_EVENT.id, preparedChallenge: DEMO_PREPARED_CHALLENGE.id });
@@ -112,7 +105,8 @@ describe('service-owned demo seed', () => {
 
   it('rolls back the complete seed transaction when a later fixed write fails', () => {
     const value = db();
-    setupFixture(value);
+    ensureOwnedDemoRoster(value, 'teacher-demo', { year: DEMO_YEAR, group: DEMO_GROUP, students: DEMO_STUDENTS });
+    ensureDemoActiveSession(value, 'teacher-demo', { yearId: DEMO_YEAR.id, groupId: DEMO_GROUP.id, startsOn: DEMO_YEAR.startsOn, endsOn: DEMO_YEAR.endsOn });
     const baseline = persistedState(value);
     value.prepare(`CREATE TRIGGER fail_demo_event_insert BEFORE INSERT ON classroom_events WHEN NEW.id='${DEMO_EVENT.id}' BEGIN SELECT RAISE(ABORT, 'synthetic seed failure'); END`).run();
     expect(() => seedDemo(value, 'teacher-demo')).toThrow('synthetic seed failure');

@@ -79,4 +79,22 @@ export const termCloseExpectedBodySchema = z.object({ expectedRevision: z.number
 export const termCloseReopenBodySchema = termCloseExpectedBodySchema.extend({ reason: z.string().trim().min(1).max(500) });
 export type TermCloseDto = { state: 'OPEN'|'CLOSED'|'REOPENED'; revision: number; currentSnapshotVersion: number|null; activeCount: number; readyCount: number; ready: boolean; students: Array<{ studentId: string; realName: string; rubricState: string|null; snapshotVersion: number|null; rtCount: number }>; blockers: Array<{ studentId: string; reason: string }>; staleReasons: string[] };
 
+export const avatarProfileSchema = z.object({
+  faceId: z.enum(['face-human', 'face-fox', 'face-owl', 'face-cat', 'face-wolf']),
+  skinToneId: z.enum(['skin-light', 'skin-medium-light', 'skin-medium', 'skin-medium-dark', 'skin-dark']),
+  hairId: z.enum(['hair-none', 'hair-short', 'hair-curly', 'hair-long']),
+  featureId: z.enum(['feature-none', 'feature-glasses', 'feature-freckles']),
+  clothingId: z.enum(['clothing-eclipse', 'clothing-field']),
+  accessoryId: z.enum(['accessory-none', 'accessory-pin']),
+  frameId: z.enum(['frame-none', 'frame-orbit']),
+  backgroundId: z.enum(['background-eclipse', 'background-night']),
+}).strict();
+export type AvatarProfile = z.infer<typeof avatarProfileSchema>;
+export type AvatarSpecialtyCategory = XpCategory | null;
+export type AvatarCatalogueCategory = { id: keyof AvatarProfile; label: string; items: Array<{ id: string; label: string }> };
+export type AvatarCatalogueDto = { version: 'm7-v1'; categories: AvatarCatalogueCategory[] };
+export type TeacherAvatarDto = { studentId:string; alias:string; specialty:string|null; specialtyCategory:AvatarSpecialtyCategory; academicYearId:string; annualEffectiveXp:number; level:1|2|3|4|5|6|7|8; progress:XpAnnualSummaryDto['progress']; badges:XpAnnualSummaryDto['badges']; revision:number; profile:AvatarProfile; updatedAt:string; editable:boolean };
+export type RestrictedAvatarDto = { studentId:string; alias:string; specialty:string|null; specialtyCategory:AvatarSpecialtyCategory; level:TeacherAvatarDto['level']; progress:TeacherAvatarDto['progress']; badges:TeacherAvatarDto['badges']; profile:AvatarProfile };
+export type AvatarHistoryDto = { revision:number; operation:'BACKFILL'|'CREATE'|'UPDATE'|'REVERT'; revertedFromRevision:number|null; reason:string|null; actorTeacherId:string|null; createdAt:string; profile:AvatarProfile };
+
 export { z };

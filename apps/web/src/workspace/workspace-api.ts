@@ -12,6 +12,10 @@ export type RtEntry = { id: string; studentId: string; value: RtValue; createdAt
 export type RtRoster = { sessionId: string; termId: string; students: Array<{ studentId: string }>; entries: RtEntry[] };
 export type RtSummary = { studentId: string; termId: string; average: number | null; energy: 'CRITICAL'|'LOW'|'STABLE'|'HIGH'|'MAXIMUM' | null; streak: number };
 export type TeacherStudent = { id: string; groupId: string; realName: string; alias: string; avatar: string; specialty: string | null; archivedAt: string | null };
+export type AvatarProfile = { faceId: string; skinToneId: string; hairId: string; featureId: string; clothingId: string; accessoryId: string; frameId: string; backgroundId: string };
+export type AvatarCatalogue = { version: 'm7-v1'; categories: Array<{ id: keyof AvatarProfile; label: string; items: Array<{ id: string; label: string }> }> };
+export type TeacherAvatar = { studentId:string; alias:string; specialty:string|null; specialtyCategory:XpCategory|null; academicYearId:string; annualEffectiveXp:number; level:1|2|3|4|5|6|7|8; progress:XpSummary['progress']; badges:XpSummary['badges']; revision:number; profile:AvatarProfile; updatedAt:string; editable:boolean };
+export type AvatarHistory = { revision:number; operation:'BACKFILL'|'CREATE'|'UPDATE'|'REVERT'; revertedFromRevision:number|null; reason:string|null; actorTeacherId:string|null; createdAt:string; profile:AvatarProfile };
 export type ApiFailure = Error & { status?: number; code?: string };
 export type XpCategory = 'COMMUNICATION'|'PRECISION'|'CONSISTENCY'|'COLLABORATION';
 export type XpSummary = { studentId:string; academicYearId:string; annualEffectiveXp:number; level:1|2|3|4|5|6|7|8; progress:{isMaxLevel:false;progressPercent:number;nextLevel:2|3|4|5|6|7|8;xpToNextLevel:number}|{isMaxLevel:true;progressPercent:100;nextLevel:null;xpToNextLevel:null}; badges:Array<{category:XpCategory;label:string;unlockedAt:string}> };
@@ -52,7 +56,18 @@ async function get<T>(url: string, signal?: AbortSignal, cache: RequestCache = '
 async function post<T>(url:string, body:unknown, key:string|undefined, signal?:AbortSignal):Promise<{value:T;replayed:boolean}> { const headers:Record<string,string>={'content-type':'application/json'}; if(key) headers['Idempotency-Key']=key; const response=await fetch(url,{method:'POST',credentials:'same-origin',headers,body:JSON.stringify(body),signal}); if(!response.ok){let bodyValue:{message?:string;code?:string}={};try{bodyValue=await response.json();}catch{} const error=new Error(bodyValue.message??'Could not save classroom action.') as ApiFailure;error.status=response.status;error.code=bodyValue.code;throw error;} return {value:await response.json() as T,replayed:response.status===200}; }
 const newKey=()=>crypto.randomUUID();
 
+async function fetchAvatar<T>(url:string, method:string, body:unknown, key:string, signal?:AbortSignal):Promise<T> {
+  const response = await fetch(url, { method, credentials:'same-origin', headers:{'content-type':'application/json','Idempotency-Key':key}, body:JSON.stringify(body), signal });
+  if (!response.ok) { let value:{message?:string;code?:string} = {}; try { value = await response.json(); } catch {} const error = new Error(value.message ?? 'No se pudo guardar el avatar.') as ApiFailure; error.status = response.status; error.code = value.code; throw error; }
+  return response.json() as Promise<T>;
+}
+
 export const workspaceApi = {
+  avatarCatalog: (signal?:AbortSignal) => get<AvatarCatalogue>('/api/v1/avatar-catalog', signal, 'no-store'),
+  avatar: (studentId:string, academicYearId:string, signal?:AbortSignal) => get<TeacherAvatar>(`/api/v1/students/${studentId}/avatar?academicYearId=${academicYearId}`, signal, 'no-store'),
+  avatarHistory: (studentId:string, signal?:AbortSignal) => get<AvatarHistory[]>(`/api/v1/students/${studentId}/avatar/history`, signal, 'no-store'),
+  saveAvatar: (studentId:string, academicYearId:string, expectedRevision:number, profile:AvatarProfile, key:string, signal?:AbortSignal) => fetchAvatar<TeacherAvatar>(`/api/v1/students/${studentId}/avatar?academicYearId=${academicYearId}`, 'PUT', { expectedRevision, profile }, key, signal),
+  revertAvatar: (studentId:string, academicYearId:string, expectedRevision:number, targetRevision:number, reason:string, key:string, signal?:AbortSignal) => fetchAvatar<TeacherAvatar>(`/api/v1/students/${studentId}/avatar/revert?academicYearId=${academicYearId}`, 'POST', { expectedRevision, targetRevision, reason }, key, signal),
   // Year metadata controls the private historical/read-only boundary. It must
   // always come from the server after reload, not from a cached active list.
   years: (includeArchived = false, signal?: AbortSignal) => get<AcademicYear[]>(`/api/v1/academic-years?${includeArchived ? 'includeArchived=true&' : ''}reload=${crypto.randomUUID()}`, signal, 'no-store'),

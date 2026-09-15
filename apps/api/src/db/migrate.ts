@@ -45,6 +45,10 @@ export function migrateDatabase(
         } else if (migration.id === '0014_behaviour_lives') {
           assertBehaviourPreflight(db, applied);
           db.exec(migration.sql);
+        } else if (migration.id === '0017_avatar_core') {
+          assertAvatarPreflight(db, applied);
+          db.exec(migration.sql);
+          assertAvatarPostflight(db);
         } else {
           db.exec(migration.sql);
         }
@@ -76,6 +80,24 @@ function assertBehaviourPreflight(db: Database.Database, applied: Set<string>) {
   if (columns.some(column => column.name === 'behaviour_snapshot_version')) {
     throw new Error('0014_behaviour_lives detected schema drift.');
   }
+}
+
+function assertAvatarPreflight(db: Database.Database, applied: Set<string>) {
+  const expected = migrations.slice(0, 16).map(migration => migration.id);
+  if (expected.some(id => !applied.has(id)) || [...applied].some(id => !expected.includes(id))) throw new Error('0017_avatar_core requires exactly the 0016 migration baseline.');
+  if (db.prepare("SELECT 1 FROM schema_migrations WHERE id='0017_avatar_core'").get()) throw new Error('0017_avatar_core marker already exists.');
+  if (db.prepare("SELECT 1 FROM sqlite_master WHERE name IN ('avatar_profiles','avatar_profile_versions','avatar_profile_requests')").get()) throw new Error('Avatar schema already exists without migration marker.');
+  if (db.prepare("SELECT 1 FROM students WHERE avatar NOT IN ('default','fox','owl','cat','wolf')").get()) throw new Error('0017_avatar_core found an unknown legacy avatar token.');
+  if (db.prepare('SELECT 1 FROM students s JOIN groups g ON g.id=s.group_id JOIN academic_years y ON y.id=g.academic_year_id WHERE g.owner_teacher_id <> y.owner_teacher_id').get()) throw new Error('0017_avatar_core found invalid student owner lineage.');
+  if (db.prepare('SELECT 1 FROM students s LEFT JOIN groups g ON g.id=s.group_id LEFT JOIN academic_years y ON y.id=g.academic_year_id WHERE g.id IS NULL OR y.id IS NULL OR y.owner_teacher_id IS NULL').get()) throw new Error('0017_avatar_core found missing student owner lineage.');
+}
+
+function assertAvatarPostflight(db: Database.Database) {
+  const students = (db.prepare('SELECT COUNT(*) AS count FROM students').get() as { count: number }).count;
+  const profiles = (db.prepare('SELECT COUNT(*) AS count FROM avatar_profiles').get() as { count: number }).count;
+  const versions = (db.prepare('SELECT COUNT(*) AS count FROM avatar_profile_versions').get() as { count: number }).count;
+  if (students !== profiles || students !== versions) throw new Error('0017_avatar_core did not create exactly one profile and revision per student.');
+  if (db.prepare("SELECT 1 FROM avatar_profiles p LEFT JOIN avatar_profile_versions v ON v.profile_student_id=p.student_id AND v.revision=p.current_revision WHERE v.profile_student_id IS NULL").get()) throw new Error('0017_avatar_core created an invalid profile head.');
 }
 
 function stage(options: MigrationTestOptions, name: MigrationStage) { options.onStage?.(name); }
