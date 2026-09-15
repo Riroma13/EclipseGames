@@ -68,4 +68,8 @@ export const migrations: Migration[] = [
     id: '0016_group_term_close_xlsx',
     sql: readFileSync(fileURLToPath(new URL('../../drizzle/0016_group_term_close_xlsx.sql', import.meta.url)), 'utf8'),
   },
+  {
+    id: '0017_avatar_core',
+    sql: readFileSync(fileURLToPath(new URL('../../drizzle/0017_avatar_core.sql', import.meta.url)), 'utf8'),
+  },
 ];

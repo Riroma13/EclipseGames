@@ -24,6 +24,7 @@ import { registerBehaviourRoutes } from './behaviour/routes.js';
 import { registerRubricRoutes } from './rubric/routes.js';
 import { sessionStartPort } from './behaviour/service.js';
 import { registerTermCloseRoutes } from './term-close/routes.js';
+import { registerAvatarRoutes } from './avatar-core/routes.js';
 
 type ServerOptions = {
   logger?: boolean;
@@ -64,6 +65,7 @@ export function createServer(databaseUrl = databasePathFromEnv(), options: Serve
     registerRubricRoutes(instance, db.database);
     registerRtRoutes(instance, db.database, coordinator);
     registerTermCloseRoutes(instance, db.database);
+    registerAvatarRoutes(instance, db.database);
     registerGemRoutes(instance, db.database, cursorCodec);
   });
   app.get('/health', async () => ({ status: 'ok' }));

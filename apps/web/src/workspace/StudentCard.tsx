@@ -1,5 +1,8 @@
-import type { TeacherStudent } from './workspace-api';
+import type { AvatarProfile, TeacherStudent } from './workspace-api';
 import type { XpSummary } from './workspace-api';
+import { AvatarPreview } from './AvatarPreview';
+
+function legacyProfile(avatar: string) { const face = avatar === 'default' ? 'human' : avatar; return { faceId: `face-${face}`, skinToneId: 'skin-medium', hairId: avatar === 'default' ? 'hair-short' : 'hair-none', featureId: 'feature-none', clothingId: 'clothing-eclipse', accessoryId: 'accessory-none', frameId: 'frame-none', backgroundId: 'background-eclipse' }; }
 
 export function studentCardMeta(student: TeacherStudent, summary?: XpSummary) { return { archived: Boolean(student.archivedAt), level: summary?.level ?? null, badge: summary?.badges[0]?.label ?? null, progress: summary?.progress ?? null }; }
 
@@ -10,11 +13,11 @@ export function studentInitials(name: string) {
   return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
 }
 
-export function StudentCard({ student, summary, selected, onSelect }: { student: TeacherStudent; summary?: XpSummary; selected: boolean; onSelect: () => void }) {
+export function StudentCard({ student, summary, avatarProfile, selected, onSelect }: { student: TeacherStudent; summary?: XpSummary; avatarProfile?: AvatarProfile | null; selected: boolean; onSelect: () => void }) {
   const badge = summary?.badges[0]?.label;
   const progress = summary?.progress.progressPercent ?? 0;
   return <button type="button" className={`workspace-student-card${selected ? ' is-selected' : ''}${student.archivedAt ? ' is-archived' : ''}`} aria-pressed={selected} aria-label={`${student.realName}, ${student.alias}${student.specialty ? `, ${student.specialty}` : ''}${student.archivedAt ? ', archived' : ''}`} onClick={onSelect}>
-    <span className="student-crest avatar" aria-hidden="true"><span className="crest-initials">{studentInitials(student.realName)}</span><span className="crest-orbit" /></span>
+    <AvatarPreview profile={avatarProfile === undefined ? legacyProfile(student.avatar) : avatarProfile} initials={studentInitials(student.realName)} size="card" />
     <span className="student-card-copy">
       <span className="student-card-topline"><strong>{student.realName}</strong>{selected && <span className="student-selected-marker" aria-hidden="true">Selected</span>}</span>
       <span className="student-alias">{student.alias}{student.specialty ? ` · ${student.specialty}` : ''}</span>

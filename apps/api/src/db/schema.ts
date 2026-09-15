@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { blob, check, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { blob, check, foreignKey, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 export const appMetadata = sqliteTable('app_metadata', {
   key: text('key').primaryKey(),
@@ -53,6 +53,23 @@ export const students = sqliteTable('students', {
     .where(sql`${table.archivedAt} IS NULL`),
   index('idx_students_group_archive_alias_id').on(table.groupId, table.archivedAt, table.alias, table.id),
 ]);
+
+const avatarColumns = {
+  faceId: text('face_id').notNull(), skinToneId: text('skin_tone_id').notNull(), hairId: text('hair_id').notNull(),
+  featureId: text('feature_id').notNull(), clothingId: text('clothing_id').notNull(), accessoryId: text('accessory_id').notNull(),
+  frameId: text('frame_id').notNull(), backgroundId: text('background_id').notNull(),
+};
+export const avatarProfileVersions = sqliteTable('avatar_profile_versions', {
+  profileStudentId: text('profile_student_id').notNull().references(() => students.id), revision: integer('revision').notNull(),
+  ...avatarColumns, operation: text('operation').notNull(), revertedFromRevision: integer('reverted_from_revision'), reason: text('reason'),
+  actorTeacherId: text('actor_teacher_id').notNull().references(() => teacherAccounts.id), createdAt: text('created_at').notNull(),
+}, (table) => [primaryKey({ columns: [table.profileStudentId, table.revision] }), index('idx_avatar_profile_versions_student_created').on(table.profileStudentId, table.createdAt, table.revision), check('ck_avatar_profile_versions_revision', sql`${table.revision} >= 1`), check('ck_avatar_profile_versions_operation', sql`${table.operation} IN ('BACKFILL', 'CREATE', 'UPDATE', 'REVERT')`), check('ck_avatar_profile_versions_revert', sql`(${table.operation} = 'REVERT' AND ${table.revertedFromRevision} IS NOT NULL AND ${table.reason} IS NOT NULL) OR (${table.operation} <> 'REVERT' AND ${table.revertedFromRevision} IS NULL AND ${table.reason} IS NULL)`)]);
+export const avatarProfiles = sqliteTable('avatar_profiles', {
+  studentId: text('student_id').primaryKey().references(() => students.id), currentRevision: integer('current_revision').notNull(), createdAt: text('created_at').notNull(), updatedAt: text('updated_at').notNull(),
+}, (table) => [foreignKey({ columns: [table.studentId, table.currentRevision], foreignColumns: [avatarProfileVersions.profileStudentId, avatarProfileVersions.revision], name: 'fk_avatar_profiles_current_revision' }), check('ck_avatar_profiles_revision', sql`${table.currentRevision} >= 1`)]);
+export const avatarProfileRequests = sqliteTable('avatar_profile_requests', {
+  ownerTeacherId: text('owner_teacher_id').notNull().references(() => teacherAccounts.id), idempotencyKey: text('idempotency_key').notNull(), operation: text('operation').notNull(), fingerprint: text('fingerprint').notNull(), studentId: text('student_id').notNull().references(() => students.id), resultingRevision: integer('resulting_revision'), createdAt: text('created_at').notNull(),
+}, (table) => [primaryKey({ columns: [table.ownerTeacherId, table.idempotencyKey] }), index('idx_avatar_profile_requests_student_created').on(table.studentId, table.createdAt), check('ck_avatar_profile_requests_operation', sql`${table.operation} IN ('CREATE', 'UPDATE', 'REVERT')`)]);
 
 export const xpEvidenceEvents = sqliteTable('xp_evidence_events', { id: text('id').primaryKey(), ownerTeacherId: text('owner_teacher_id').notNull(), studentId: text('student_id').notNull(), academicYearId: text('academic_year_id').notNull(), category: text('category').notNull(), baseXp: integer('base_xp').notNull(), realClassSessionId: text('real_class_session_id'), termId: text('term_id'), specialtyAtAward: text('specialty_at_award'), specialtyCategoryAtAward: text('specialty_category_at_award'), bonusEligibleAtAward: integer('bonus_eligible_at_award').notNull(), gemReceiptAllowedAtAward: integer('gem_receipt_allowed_at_award'), specialtyBonusXp: integer('specialty_bonus_xp').notNull(), effectiveXp: integer('effective_xp').notNull(), comment: text('comment'), createdAt: text('created_at').notNull(), createdByTeacherId: text('created_by_teacher_id').notNull(), clientRequestId: text('client_request_id').notNull(), requestFingerprint: text('request_fingerprint').notNull() }, (table) => [uniqueIndex('uq_xp_events_owner_request').on(table.ownerTeacherId, table.clientRequestId), index('idx_xp_events_student_year_created').on(table.studentId, table.academicYearId, table.createdAt, table.id), index('idx_xp_events_term_category_active').on(table.studentId, table.academicYearId, table.termId, table.category), check('ck_xp_events_attribution', sql`(${table.realClassSessionId} IS NULL AND ${table.termId} IS NULL) OR (${table.realClassSessionId} IS NOT NULL AND ${table.termId} IS NOT NULL)`), check('ck_xp_events_effective', sql`${table.effectiveXp} = ${table.baseXp} + ${table.specialtyBonusXp}`)]);
 export const xpEvidenceReversals = sqliteTable('xp_evidence_reversals', { id: text('id').primaryKey(), ownerTeacherId: text('owner_teacher_id').notNull(), targetEventId: text('target_event_id').notNull(), reason: text('reason'), createdAt: text('created_at').notNull(), createdByTeacherId: text('created_by_teacher_id').notNull(), clientRequestId: text('client_request_id').notNull(), requestFingerprint: text('request_fingerprint').notNull() }, (table) => [uniqueIndex('uq_xp_reversals_target').on(table.targetEventId), uniqueIndex('uq_xp_reversals_owner_request').on(table.ownerTeacherId, table.clientRequestId)]);

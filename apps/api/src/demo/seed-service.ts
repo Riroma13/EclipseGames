@@ -3,6 +3,7 @@ import { ensureOwnedDemoRoster, type DemoRosterStudent } from '../roster/service
 import * as xp from '../xp/service.js';
 import type { XpCategory } from '../xp/service.js';
 import * as game from '../game/repository.js';
+import { ensureDemoActiveSession } from './bootstrap.js';
 
 export const DEMO_YEAR = { id: '9b6f3b9e-3d0f-4b1e-9b1e-202620270001', label: '2026–2027', startsOn: '2026-09-01', endsOn: '2027-07-01' } as const;
 export const DEMO_GROUP = { id: '9b6f3b9e-3d0f-4b1e-9b1e-202620270002', name: 'Demo · Groupe principal' } as const;
@@ -78,6 +79,7 @@ export function seedDemo(database: Database.Database, teacherId: string) {
   return database.transaction(() => {
     preflightDemo(database, teacherId);
     const roster = ensureOwnedDemoRoster(database, teacherId, { year: DEMO_YEAR, group: DEMO_GROUP, students: DEMO_STUDENTS });
+    ensureDemoActiveSession(database, teacherId, { yearId: DEMO_YEAR.id, groupId: DEMO_GROUP.id, startsOn: DEMO_YEAR.startsOn, endsOn: DEMO_YEAR.endsOn });
     let keyIndex = 0;
     const events = roster.students.flatMap((student, index) => xpPlan[index].map((baseXp) => xp.create(database, teacherId, student.id, {
       category: categoryFor(student.specialty), baseXp: baseXp as 1 | 2 | 3,

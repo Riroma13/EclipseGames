@@ -102,7 +102,7 @@ describe('roster contracts and core boundaries', () => {
     });
 
     expect(students.statusCode).toBe(200);
-    expect(students.json().map((student: { avatar: string }) => student.avatar)).toEqual([...AVATARS]);
+    expect(students.json().map((student: { avatar: string }) => student.avatar)).toEqual(AVATARS.map(() => 'default'));
     await app.close();
     rmSync(filename, { force: true });
   });

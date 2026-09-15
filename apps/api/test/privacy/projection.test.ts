@@ -135,7 +135,7 @@ describe('projection privacy boundary', () => {
       activeEvent: null,
       activeChallenge: null,
       minigame: null,
-      students: [{ avatar: 'owl', alias: 'Visible Alias', specialty: 'Diplomat', xpLevel: 1, progressToNextLevel: 0, unlockedBadge: null }],
+       students: [{ avatar: 'default', alias: 'Visible Alias', specialty: 'Diplomat', xpLevel: 1, progressToNextLevel: 0, unlockedBadge: null }],
     });
     expect(Object.keys(response.json().students[0]).sort()).toEqual(['alias', 'avatar', 'progressToNextLevel', 'specialty', 'unlockedBadge', 'xpLevel'].sort());
     expect(JSON.stringify(response.json())).not.toMatch(/Private Display Name|realName|rtAverage|rubric|grade|comments|incidents|history|redCode|disciplinary/i);
