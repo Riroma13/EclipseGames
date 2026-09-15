@@ -75,5 +75,8 @@ export type RtTermSummaryDto = { studentId: string; termId: string; average: num
 export type ObservationRubricLevel = 1|2|3|4;
 export type ObservationRubricCategoryDto = { category: XpCategory; baseXp:number; qualifyingEventCount:number; suggestedLevel:ObservationRubricLevel; overrideLevel:ObservationRubricLevel|null; finalLevel:ObservationRubricLevel; lowEvidence:boolean };
 export type ObservationRubricDto = { studentId:string; academicYearId:string; termId:string; state:'OPEN'|'CLOSED'|'REOPENED'; revision:number; archived:boolean; draftComment:string|null; categories:ObservationRubricCategoryDto[]; snapshot:null|{version:number;gradeMilli:number;gradeDecimal:string;comment:string|null;closedAt:string;closedByTeacherId:string;priorVersion:number|null}; stale:boolean; unattributedAnnualEventCount:number };
+export const termCloseExpectedBodySchema = z.object({ expectedRevision: z.number().int().nonnegative() });
+export const termCloseReopenBodySchema = termCloseExpectedBodySchema.extend({ reason: z.string().trim().min(1).max(500) });
+export type TermCloseDto = { state: 'OPEN'|'CLOSED'|'REOPENED'; revision: number; currentSnapshotVersion: number|null; activeCount: number; readyCount: number; ready: boolean; students: Array<{ studentId: string; realName: string; rubricState: string|null; snapshotVersion: number|null; rtCount: number }>; blockers: Array<{ studentId: string; reason: string }>; staleReasons: string[] };
 
 export { z };
