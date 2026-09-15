@@ -28,3 +28,13 @@ export function runImmediateTransaction<T>(database: Database.Database, correlat
     try { return work(token); } finally { activeTokens.delete(token); activeDatabases.delete(database); }
   }).immediate();
 }
+
+export async function runImmediateTransactionAsync<T>(database: Database.Database, correlationId: string, work: (tx: GemSourceTx) => Promise<T>): Promise<T> {
+  if (activeDatabases.has(database)) throw new Error('Nested immediate transaction is not allowed.');
+  database.exec('BEGIN IMMEDIATE');
+  const token = Object.freeze({ db: database, mode: 'IMMEDIATE' as const, correlationId, [gemSourceTxBrand]: true as const });
+  activeDatabases.add(database); activeTokens.add(token);
+  try { const result = await work(token); database.exec('COMMIT'); return result; }
+  catch (error) { try { database.exec('ROLLBACK'); } catch { /* preserve original failure */ } throw error; }
+  finally { activeTokens.delete(token); activeDatabases.delete(database); }
+}

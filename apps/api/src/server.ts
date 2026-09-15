@@ -23,6 +23,7 @@ import { reconcileBeforeReadiness, type StartupReconciliationOptions } from './g
 import { registerBehaviourRoutes } from './behaviour/routes.js';
 import { registerRubricRoutes } from './rubric/routes.js';
 import { sessionStartPort } from './behaviour/service.js';
+import { registerTermCloseRoutes } from './term-close/routes.js';
 
 type ServerOptions = {
   logger?: boolean;
@@ -62,6 +63,7 @@ export function createServer(databaseUrl = databasePathFromEnv(), options: Serve
     registerBehaviourRoutes(instance, db.database);
     registerRubricRoutes(instance, db.database);
     registerRtRoutes(instance, db.database, coordinator);
+    registerTermCloseRoutes(instance, db.database);
     registerGemRoutes(instance, db.database, cursorCodec);
   });
   app.get('/health', async () => ({ status: 'ok' }));

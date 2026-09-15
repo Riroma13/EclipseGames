@@ -27,6 +27,12 @@ describe('workspace XP idempotency', () => {
     await workspaceApi.redeemGem('student', 'context', 'emerald-assessment-advantage', undefined, '00000000-0000-4000-8000-000000000009');
     expect((fetchMock.mock.calls[0][1] as RequestInit).headers).toEqual({ 'content-type': 'application/json', 'Idempotency-Key': '00000000-0000-4000-8000-000000000009' });
   });
+  it('uses private group-term close routes and preserves mutation keys', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ revision:4, version:2 }), { status:201 }));
+    await workspaceApi.closeTerm('group', 'term', 'year', 3, '00000000-0000-4000-8000-000000000021');
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/groups/group/terms/term/term-close/close?academicYearId=year');
+    expect((fetchMock.mock.calls[0][1] as RequestInit).headers).toMatchObject({ 'Idempotency-Key':'00000000-0000-4000-8000-000000000021' });
+  });
 
   it('reads the tuple-scoped action state with both ownership selectors', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ studentId: 'student', academicYearId: 'year', assessmentContextId: 'context', resultReward: null, advantageRedemption: null }), { status: 200 }));
