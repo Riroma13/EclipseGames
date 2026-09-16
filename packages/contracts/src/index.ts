@@ -97,4 +97,20 @@ export type TeacherAvatarDto = { studentId:string; alias:string; specialty:strin
 export type RestrictedAvatarDto = { studentId:string; alias:string; specialty:string|null; specialtyCategory:AvatarSpecialtyCategory; level:TeacherAvatarDto['level']; progress:TeacherAvatarDto['progress']; badges:TeacherAvatarDto['badges']; profile:AvatarProfile };
 export type AvatarHistoryDto = { revision:number; operation:'BACKFILL'|'CREATE'|'UPDATE'|'REVERT'; revertedFromRevision:number|null; reason:string|null; actorTeacherId:string|null; createdAt:string; profile:AvatarProfile };
 
+export type ClassroomEnergyState = 'CRITICAL'|'LOW'|'STABLE'|'HIGH'|'MAXIMUM';
+export type ClassroomBehaviourState = 'NORMAL'|'VIGILANCE'|'ALERT'|'RED_CODE';
+export type ClassroomStudentDto = {
+  avatar: RestrictedAvatarDto;
+  energy: ClassroomEnergyState | null;
+  gems: { EMERALD:number; RUBY:number; DIAMOND:number };
+};
+export type ShowStudentDto = {
+  kind: 'SHOW_STUDENT';
+  expiresAt: string;
+  student: ClassroomStudentDto;
+  behaviour: { state: ClassroomBehaviourState } | null;
+};
+export type DisplayScene = 'IDLE'|'EVENT'|'CHALLENGE'|'MINIGAME'|'SHOW_STUDENT';
+export type ClassroomDisplayDto = { scene: DisplayScene; showStudent: ShowStudentDto|null };
+
 export { z };

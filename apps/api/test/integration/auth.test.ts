@@ -51,13 +51,38 @@ describe('teacher authentication', () => {
     expect(response.json().code).toBe('AUTH_RATE_LIMITED');
   });
 
-  it('sets a revocable secure cookie for a valid login', async () => {
+  it('sets an HTTP-compatible session cookie outside production', async () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    delete process.env.NODE_ENV;
     const response = await app().inject({ method: 'POST', url: '/api/v1/auth/session', headers: { origin }, payload: credentials });
+    if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = originalNodeEnv;
+
     expect(response.statusCode).toBe(204);
+    expect(response.headers['set-cookie']).toMatch(/^eclipse-session=/);
+    expect(response.headers['set-cookie']).not.toMatch(/^__Host-session=/);
+    expect(response.headers['set-cookie']).toMatch(/HttpOnly/);
+    expect(response.headers['set-cookie']).not.toMatch(/; Secure(?:;|$)/);
+    expect(response.headers['set-cookie']).toMatch(/SameSite=Strict/);
+    expect(response.headers['set-cookie']).toMatch(/Path=\//);
+    expect(response.headers['set-cookie']).toMatch(/Max-Age=\d+/);
+  });
+
+  it('preserves the Secure session cookie in production', async () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    const response = await app().inject({ method: 'POST', url: '/api/v1/auth/session', headers: { origin }, payload: credentials });
+    if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = originalNodeEnv;
+
+    expect(response.statusCode).toBe(204);
+    expect(response.headers['set-cookie']).toMatch(/^__Host-session=/);
+    expect(response.headers['set-cookie']).not.toMatch(/Domain=/);
     expect(response.headers['set-cookie']).toMatch(/HttpOnly/);
     expect(response.headers['set-cookie']).toMatch(/Secure/);
     expect(response.headers['set-cookie']).toMatch(/SameSite=Strict/);
     expect(response.headers['set-cookie']).toMatch(/Path=\//);
+    expect(response.headers['set-cookie']).toMatch(/Max-Age=\d+/);
   });
 
   it('rejects a revoked session with AUTH_REQUIRED', async () => {
@@ -66,8 +91,24 @@ describe('teacher authentication', () => {
     const cookie = login.headers['set-cookie'];
     await server.inject({ method: 'DELETE', url: '/api/v1/auth/session', headers: { origin, cookie } });
 
-    const response = await server.inject({ method: 'GET', url: '/api/v1/teacher/groups/00000000-0000-4000-8000-000000000001/students', headers: { origin, cookie } });
+    const response = await server.inject({ method: 'GET', url: '/api/v1/academic-years', headers: { origin, cookie } });
     expect(response.statusCode).toBe(401);
     expect(response.json().code).toBe('AUTH_REQUIRED');
+  });
+
+  it('uses the canonical non-production cookie name for session reads and logout', async () => {
+    const server = app();
+    const login = await server.inject({ method: 'POST', url: '/api/v1/auth/session', headers: { origin }, payload: credentials });
+    const cookie = login.headers['set-cookie'];
+
+    const sessionRead = await server.inject({ method: 'GET', url: '/api/v1/academic-years', headers: { origin, cookie } });
+    expect(sessionRead.statusCode).not.toBe(401);
+
+    const logout = await server.inject({ method: 'DELETE', url: '/api/v1/auth/session', headers: { origin, cookie } });
+    expect(logout.statusCode).toBe(204);
+    expect(logout.headers['set-cookie']).toMatch(/^eclipse-session=/);
+    expect(logout.headers['set-cookie']).toMatch(/Path=\//);
+    expect(logout.headers['set-cookie']).toMatch(/Max-Age=0/);
+    expect(logout.headers['set-cookie']).not.toMatch(/Secure/);
   });
 });

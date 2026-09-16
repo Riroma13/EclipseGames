@@ -5,10 +5,10 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { openDatabase } from './db/client.js';
 import { ApiError, registerErrorBoundary, type AuditEntry } from './http/errors.js';
-import { bootstrapTeacher } from './auth/service.js';
+import { authenticateSessionById, bootstrapTeacher } from './auth/service.js';
 import { registerAuthRoutes } from './auth/routes.js';
-import { ensureProjectionFixture } from './projection/repository.js';
 import { registerProjectionRoutes } from './projection/routes.js';
+import { LeaseRegistry, parseShowStudentTtlSeconds } from './projection/lease-registry.js';
 import { databasePathFromEnv } from './db/path.js';
 import { registerRosterRoutes } from './roster/routes.js';
 import { registerXpRoutes } from './xp/routes.js';
@@ -40,9 +40,11 @@ export function createServer(databaseUrl = databasePathFromEnv(), options: Serve
   const db = openDatabase(databaseUrl);
   const coordinator = createGemSourceOrchestrator();
   try { reconcileBeforeReadiness(db.database, coordinator, options.startupReconciliation); } catch (error) { db.close(); throw error; }
-  const app = Fastify({ logger: options.logger ? { serializers: { req: (request: { method:string }) => ({ method: request.method }), request: (request: { method:string }) => ({ method: request.method }) }, redact: { paths: ['req.url','req.raw.url','request.url','request.raw.url','raw.url','rawReq.url','url','query','params','body','headers','req.headers','request.headers'], remove: true } } : options.logger ?? true, disableRequestLogging: true });
+   const app = Fastify({ logger: options.logger ? { serializers: { req: (request: { method:string }) => ({ method: request.method }), request: (request: { method:string }) => ({ method: request.method }) }, redact: { paths: ['req.url','req.raw.url','request.url','request.raw.url','raw.url','rawReq.url','url','query','params','body','headers','req.headers','request.headers'], remove: true } } : options.logger ?? true, disableRequestLogging: true });
+  const leases = new LeaseRegistry({ ttlSeconds: parseShowStudentTtlSeconds(), isTeacherSessionValid: (teacherId, teacherSessionId) => Boolean(authenticateSessionById(db.database, teacherSessionId, teacherId)) });
   registerErrorBoundary(app, options.audit);
   app.addHook('onRequest', async (request, reply) => {
+    if (request.url.startsWith('/api/')) reply.header('Cache-Control', 'no-store').header('Referrer-Policy', 'no-referrer');
     app.log.info({ event:'http.request.incoming', requestId:request.id, method:request.method }, 'http request incoming');
     const origin = request.headers.origin;
     if (origin && origin !== (options.allowedOrigin ?? process.env.APP_ORIGIN ?? 'http://localhost:5173')) {
@@ -53,13 +55,12 @@ export function createServer(databaseUrl = databasePathFromEnv(), options: Serve
   app.register(async (instance) => {
     await instance.register(cookie);
     const teacher = options.bootstrapTeacher ? await bootstrapTeacher(db.database, options.bootstrapTeacher.email, options.bootstrapTeacher.password) : undefined;
-    if (teacher) ensureProjectionFixture(db.database, teacher.id);
     registerAuthRoutes(instance, db.database);
-    registerProjectionRoutes(instance, db.database);
+     registerProjectionRoutes(instance, db.database, leases);
     registerRosterRoutes(instance, db.database);
     registerXpRoutes(instance, db.database, coordinator);
     registerCoinRoutes(instance, db.database);
-    registerGameRoutes(instance, db.database);
+     registerGameRoutes(instance, db.database, leases);
     registerCalendarRoutes(instance, db.database, sessionStartPort);
     registerBehaviourRoutes(instance, db.database);
     registerRubricRoutes(instance, db.database);

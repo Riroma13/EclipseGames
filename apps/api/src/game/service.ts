@@ -4,6 +4,7 @@ import { ApiError } from '../http/errors.js';
 import { runImmediateTransaction } from '../services/transactions.js';
 import * as xp from '../xp/service.js';
 import * as repository from './repository.js';
+import type { ShowStudentDto } from '@eclipse/contracts';
 
 const now = () => new Date().toISOString();
 const notFound = (message: string): never => { throw new ApiError('NOT_FOUND', 404, message); };
@@ -594,14 +595,15 @@ function safeTeamAssignments(db: Database.Database, value: repository.MinigameRe
   }));
 }
 
-function projectionPayload(db: Database.Database, state: ReturnType<typeof projectionState>) {
+function projectionPayload(db: Database.Database, state: ReturnType<typeof projectionState>, showStudent: ShowStudentDto|null = null) {
   const safeStudents = repository.listSafeStudents(db, state.group.id);
   const summaries = xp.groupSummaries(db, state.teacherId, state.group.id, state.group.academicYearId).summaries;
   const summaryByStudent = new Map(summaries.map(item => [item.studentId, item.summary]));
   const promptRevealed = state.minigame?.kind !== 'PROMPT_DECK' || state.minigame.promptRevealed === 1;
-  const scene = state.minigame ? 'MINIGAME' as const : state.challenge ? 'CHALLENGE' as const : state.event ? 'EVENT' as const : 'IDLE' as const;
+    const scene = showStudent !== null ? 'SHOW_STUDENT' as const : state.minigame ? 'MINIGAME' as const : state.challenge ? 'CHALLENGE' as const : state.event ? 'EVENT' as const : 'IDLE' as const;
   return {
-    scene,
+     scene,
+     showStudent,
     group: { id: state.group.id, name: state.group.name },
     activeEvent: state.event ? { title: state.event.title, description: state.event.description, theme: state.event.theme, status: state.event.status } : null,
     activeChallenge: state.challenge ? { title: state.challenge.title, description: state.challenge.description, target: state.challenge.target, progress: state.challenge.progress, status: state.challenge.status } : null,
@@ -610,13 +612,13 @@ function projectionPayload(db: Database.Database, state: ReturnType<typeof proje
   };
 }
 
-export function projectionDisplay(db: Database.Database, teacherId: string, groupId: string) {
-  return projectionPayload(db, projectionState(db, teacherId, groupId));
+export function projectionDisplay(db: Database.Database, teacherId: string, groupId: string, showStudent: ShowStudentDto|null = null) {
+  return projectionPayload(db, projectionState(db, teacherId, groupId), showStudent);
 }
 
-export function projectionControl(db: Database.Database, teacherId: string, groupId: string) {
+export function projectionControl(db: Database.Database, teacherId: string, groupId: string, showStudent: ShowStudentDto|null = null) {
   const state = projectionState(db, teacherId, groupId);
-  const display = projectionPayload(db, state);
+  const display = projectionPayload(db, state, showStudent);
   const resource = state.minigame ?? state.challenge ?? state.event;
   return { scene: display.scene, resourceId: resource?.id ?? null, title: resource?.title ?? null, kind: state.minigame?.kind ?? null, display };
 }

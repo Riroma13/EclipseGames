@@ -1,4 +1,8 @@
 import type { ApiFailure } from '../workspace/workspace-api';
+export type RestrictedAvatar = { studentId: string; alias: string; specialty: string | null; specialtyCategory: string | null; level: number; progress: { progressPercent: number }; badges: Array<{ label: string }>; profile: Record<string, string> };
+export type ClassroomStudentDto = { avatar: RestrictedAvatar; energy: 'CRITICAL'|'LOW'|'STABLE'|'HIGH'|'MAXIMUM'|null; gems: { EMERALD: number; RUBY: number; DIAMOND: number } };
+export type ShowStudentDto = { kind: 'SHOW_STUDENT'; expiresAt: string; student: ClassroomStudentDto; behaviour: { state: 'NORMAL'|'VIGILANCE'|'ALERT'|'RED_CODE' } | null };
+export type ClassroomDisplayDto = { scene: 'IDLE'|'EVENT'|'CHALLENGE'|'MINIGAME'|'SHOW_STUDENT'; showStudent: ShowStudentDto | null };
 
 export type EventStatus = 'DRAFT' | 'ACTIVE' | 'COMPLETED';
 export type EventTheme = 'MISSION' | 'NARRATIVE' | 'CELEBRATION';
@@ -13,7 +17,8 @@ export type MinigameSession = { id: string; groupId: string; kind: MinigameKind;
 export type MinigamePreset = { id: string; title: string; prompt: string; durationSeconds: number; archivedAt: string | null; createdAt: string; updatedAt: string };
 export type PromptDeck = { id: string; title: string; prompts: string[]; archivedAt: string | null; createdAt: string; updatedAt: string };
 export type ProjectionStudent = { avatar: string; alias: string; specialty: string | null; xpLevel: number; progressToNextLevel: number; unlockedBadge: string | null };
-export type ProjectionDisplay = { scene: 'MINIGAME' | 'CHALLENGE' | 'EVENT' | 'IDLE'; group: { id: string; name: string }; activeEvent: { title: string; description: string; theme: EventTheme; status: 'ACTIVE' } | null; activeChallenge: { title: string; description: string; target: number; progress: number; status: 'ACTIVE' | 'COMPLETED' } | null; minigame: { kind: MinigameKind; title: string; prompt: string; status: Exclude<MinigameStatus, 'ENDED'>; durationSeconds: number; remainingSeconds: number; startedAt: string | null; selectedAlias: string | null; teamCount?: number; teams?: Array<{ team: number; aliases: string[] }>; promptRevealed?: boolean } | null; students: ProjectionStudent[] };
+export type ProjectionDisplay = { scene: 'MINIGAME' | 'CHALLENGE' | 'EVENT' | 'IDLE' | 'SHOW_STUDENT'; group: { id: string; name: string }; activeEvent: { title: string; description: string; theme: EventTheme; status: 'ACTIVE' | 'COMPLETED' } | null; activeChallenge: { title: string; description: string; target: number; progress: number; status: 'ACTIVE' | 'COMPLETED' } | null; minigame: { kind: MinigameKind; title: string; prompt: string; status: Exclude<MinigameStatus, 'ENDED'>; durationSeconds: number; remainingSeconds: number; startedAt: string | null; selectedAlias: string | null; teamCount?: number; teams?: Array<{ team: number; aliases: string[] }>; promptRevealed?: boolean } | null; students: ProjectionStudent[]; showStudent?: ShowStudentDto | null };
+export type ShowStudentCreation = { accessCode: string; accessUrl: string; expiresAt: string; showStudent: ShowStudentDto };
 export type ProjectionControl = { scene: ProjectionDisplay['scene']; resourceId: string | null; title: string | null; kind: MinigameKind | null; display: ProjectionDisplay };
 
 async function request<T>(url: string, init: RequestInit = {}) {
@@ -26,6 +31,7 @@ async function request<T>(url: string, init: RequestInit = {}) {
     error.code = body.code;
     throw error;
   }
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 
@@ -69,6 +75,11 @@ export const gameApi = {
   projectionDisplay: (groupId: string) => request<ProjectionDisplay>(`/api/v1/projection/groups/${groupId}/display`),
   projectionControl: (groupId: string) => request<ProjectionControl>(`/api/v1/teacher/groups/${groupId}/display`),
   clearProjection: (groupId: string) => request<ProjectionControl>(`/api/v1/teacher/groups/${groupId}/display/clear`, json({})),
+  classroomCards: (groupId: string, academicYearId: string, signal?: AbortSignal) => request<ClassroomStudentDto[]>(`/api/v1/teacher/groups/${groupId}/classroom-cards?academicYearId=${encodeURIComponent(academicYearId)}`, { signal }),
+  createShowStudent: (groupId: string, studentId: string, idempotencyKey = crypto.randomUUID(), signal?: AbortSignal) => request<ShowStudentCreation>(`/api/v1/teacher/groups/${groupId}/show-student`, { ...json({ studentId }, idempotencyKey), signal }),
+  revokeShowStudent: (groupId: string, idempotencyKey = crypto.randomUUID(), signal?: AbortSignal) => request<void>(`/api/v1/teacher/groups/${groupId}/show-student`, { method: 'DELETE', headers: { 'Idempotency-Key': idempotencyKey }, signal }),
+  exchangeShowStudent: (credential: { token?: string; code?: string }, signal?: AbortSignal) => request<void>('/api/v1/show-student/exchange', { ...json(credential), signal }),
+  showStudent: (signal?: AbortSignal) => request<ShowStudentDto>('/api/v1/show-student', { signal }),
   minigamePresets: (includeArchived = false) => request<MinigamePreset[]>(`/api/v1/minigame-presets${includeArchived ? '?includeArchived=true' : ''}`),
   createMinigamePreset: (body: { title: string; prompt: string; durationSeconds: number }) => request<MinigamePreset>('/api/v1/minigame-presets', json(body)),
   updateMinigamePreset: (presetId: string, body: { title: string; prompt: string; durationSeconds: number }) => request<MinigamePreset>(`/api/v1/minigame-presets/${presetId}`, { method: 'PATCH', body: JSON.stringify(body) }),

@@ -9,6 +9,7 @@ import { MinigamesApp } from './minigames/MinigamesApp';
 import { ProjectionApp } from './projection/ProjectionApp';
 import { WorkspaceApp } from './workspace/WorkspaceApp';
 import { RuntimePresentationHarness } from './workspace/RuntimePresentationHarness';
+import { ShowStudentApp } from './projection/ShowStudentApp';
 
 const runtimeHarnessEnabled = window.location.hostname === '127.0.0.1' || import.meta.env.VITE_WORKSPACE_RUNTIME_TEST === 'true';
 
@@ -19,5 +20,6 @@ createRoot(document.getElementById('root')!).render(<StrictMode><HashRouter><Rou
   <Route path="/challenges" element={<ChallengesApp />} />
   <Route path="/minigames" element={<MinigamesApp />} />
   <Route path="/projection" element={<ProjectionApp />} />
+  <Route path="/show-student" element={<ShowStudentApp />} />
   <Route path="/workspace-runtime-test" element={runtimeHarnessEnabled ? <RuntimePresentationHarness /> : <HomeApp />} />
 </Routes></HashRouter></StrictMode>);

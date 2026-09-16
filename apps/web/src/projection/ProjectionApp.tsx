@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { gameApi, type ProjectionDisplay } from '../game/game-api';
+import { AvatarPreview, initialsForAvatar } from '../workspace/AvatarPreview';
 
 const defaultGroupId = '9b6f3b9e-3d0f-4b1e-9b1e-202620270002';
 
@@ -10,6 +11,7 @@ function groupFromUrl() {
 
 function formatSeconds(seconds: number) { return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(Math.max(0, seconds % 60)).padStart(2, '0')}`; }
 function percent(value: number, target: number) { return target ? Math.min(100, Math.max(0, value / target * 100)) : 0; }
+function latestScene(display: ProjectionDisplay): ProjectionDisplay['scene'] { return display.minigame ? 'MINIGAME' : display.activeChallenge ? 'CHALLENGE' : display.activeEvent ? 'EVENT' : 'IDLE'; }
 
 function ProjectionSignIn({ onSignedIn }: { onSignedIn: () => void }) {
   const [error, setError] = useState('');
@@ -24,6 +26,11 @@ function ProjectionSignIn({ onSignedIn }: { onSignedIn: () => void }) {
 }
 
 function ProjectionContent({ display }: { display: ProjectionDisplay }) {
+  if (display.showStudent) {
+    const student = display.showStudent;
+    const card = student.student;
+    return <section className="display-hero show-student-overlay" aria-live="polite"><p className="display-kicker">VISTA TEMPORAL DEL ALUMNO</p><AvatarPreview profile={card.avatar.profile} initials={initialsForAvatar(card.avatar.alias)} /><h2>{card.avatar.alias}</h2><p>{card.avatar.specialty ?? 'Academy member'} · Level {card.avatar.level}</p><p>{card.energy ? `Energy: ${card.energy}` : 'Energía aún no disponible'}</p><p>Gems: {card.gems.EMERALD} · {card.gems.RUBY} · {card.gems.DIAMOND}</p><p>{card.avatar.badges.length ? `${card.avatar.badges.length} badges` : 'No badges yet'}</p>{student.behaviour?.state === 'ALERT' && <strong>Alerta</strong>}</section>;
+  }
   if (display.minigame) {
     const minigame = display.minigame;
     if (minigame.kind === 'TEAM_DRAW') return <section className="display-hero minigame-display" aria-live="polite"><p className="display-kicker">TEAM DRAW</p><h2>{minigame.title}</h2><p className="display-prompt">{minigame.prompt}</p><div className="display-team-grid">{minigame.teams?.map(team => <section className="display-team" key={team.team}><span>Team {team.team}</span><ul>{team.aliases.map(alias => <li key={alias}>{alias}</li>)}</ul></section>)}</div></section>;
@@ -52,6 +59,13 @@ function ProjectionView() {
     const interval = window.setInterval(read, 2_000);
     return () => { cancelled = true; window.clearInterval(interval); };
   }, [groupId]);
+
+  useEffect(() => {
+    if (!display?.showStudent) return;
+    const delay = Math.max(0, Date.parse(display.showStudent.expiresAt) - Date.now());
+    const timer = window.setTimeout(() => setDisplay(current => current?.showStudent ? { ...current, scene: latestScene(current), showStudent: null } : current), delay);
+    return () => window.clearTimeout(timer);
+  }, [display?.showStudent?.expiresAt]);
 
   useEffect(() => {
     if (display?.minigame?.status !== 'RUNNING') return;

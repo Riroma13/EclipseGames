@@ -15,6 +15,7 @@ import type { Session } from './workspace-api';
 import { BehaviourPanel } from './BehaviourPanel';
 import { QuarterlyRubric } from './QuarterlyRubric';
 import { TermClosePanel } from './TermClosePanel';
+import { ClassroomMode } from './ClassroomMode';
 
 export function requestedYearRequiresArchivedLookup(requestedYearId: string | null, activeYears: AcademicYear[]) {
   return Boolean(requestedYearId && !activeYears.some(year => year.id === requestedYearId));
@@ -318,7 +319,8 @@ export function WorkspaceApp() {
       <div className="toolbar-title"><span className="toolbar-kicker">CLASS ROSTER</span><span>Find a student, then record the moment.</span></div>
        <GroupSelector groups={groups} value={groupId ?? ''} onChange={id => { setGroupId(id); setStudents([]); setSummaries({}); setSummaryAvailable(true); setActivity({ kind: 'zero' }); dispatch({ type: 'context-changed' }); }} />
       <label className="search-control" htmlFor="student-search">Search students<input ref={searchRef} id="student-search" type="search" value={state.search} placeholder="Name or alias" onChange={event => dispatch({ type: 'search', value: event.target.value })} onKeyDown={event => { if (event.key === 'Escape') { dispatch({ type: 'search', value: '' }); searchRef.current?.focus(); } }} /></label>
-      {state.search && <button type="button" aria-label="Clear student search" onClick={() => { dispatch({ type: 'search', value: '' }); searchRef.current?.focus(); }}>Clear</button>}
+       {state.search && <button type="button" aria-label="Clear student search" onClick={() => { dispatch({ type: 'search', value: '' }); searchRef.current?.focus(); }}>Clear</button>}
+       {groupId && yearId && <ClassroomMode groupId={groupId} academicYearId={yearId} students={students} historical={showingHistorical} />}
     </div>
      {showingHistorical && <p className="read-only-note" role="status">Historical year — records are read-only.</p>}
      {groupId && summary}

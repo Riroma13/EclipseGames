@@ -498,3 +498,85 @@ test('actual FastActionShell and UndoBanner runtime harness proves controlled pr
   await page.getByRole('button', { name: 'Replace opportunity' }).click();
   await expect(page.getByRole('button', { name: 'Undo', exact: true })).toHaveCount(0);
 });
+
+test('SPEC-0039 Slice 5 built artifact proves the teacher, Classroom Mode, and temporary viewer journey', async ({ page, context }) => {
+  const suffix = `${Date.now()}-slice-5`;
+  const { yearId, groupId } = await seedRoster(page, suffix);
+  await signIn(page, `/#/workspace?year=${yearId}&group=${groupId}`);
+  await expect(page.locator('.context-line')).toContainText(`Group ${suffix}`);
+  await page.getByLabel('Search students').fill('ada');
+  await page.getByRole('button', { name: /Ada Lovelace/ }).click();
+  await expect(page.getByRole('heading', { name: 'Ada Lovelace' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Modo aula' }).click();
+  const classroom = page.getByRole('dialog', { name: 'Safe classroom cards' });
+  await expect(classroom.getByRole('button', { name: /Calculus/ })).toBeVisible();
+  await expect(classroom).not.toContainText('Ada Lovelace');
+  await classroom.getByRole('button', { name: /Calculus/ }).click();
+  await classroom.getByRole('button', { name: 'Mostrar al alumno' }).click();
+  const firstUrl = await classroom.getByLabel('Show Student URL').inputValue();
+  expect(firstUrl).toMatch(/#\/show-student\?token=/);
+  await expect(classroom.getByRole('img', { name: 'QR de acceso temporal del alumno' })).toBeVisible();
+
+  const projection = await context.newPage();
+  await projection.goto(`/#/projection?group=${groupId}`);
+  await expect(projection.getByText('VISTA TEMPORAL DEL ALUMNO', { exact: true })).toBeVisible();
+  await expect(projection.getByRole('heading', { name: 'Calculus' })).toBeVisible();
+
+  const viewer = await context.newPage();
+  const viewerPayloads: unknown[] = [];
+  const documentRequests: string[] = [];
+  viewer.on('request', request => { if (request.resourceType() === 'document') documentRequests.push(request.url()); });
+  viewer.on('response', async response => {
+    if (!response.url().includes('/api/v1/show-student')) return;
+    try { viewerPayloads.push(await response.json()); } catch { /* exchange is intentionally empty */ }
+  });
+   await viewer.goto(firstUrl);
+   await expect(viewer.getByRole('heading', { name: 'Calculus' })).toBeVisible();
+  await expect(viewer.getByText(/Level/)).toBeVisible();
+  await expect(viewer.getByText(/Gems:/)).toBeVisible();
+  await expect(viewer.locator('body')).not.toContainText(/Ada Lovelace|Zoë Durand|realName|xpEvidence|incidents|proposals|history/i);
+  expect(new URL(viewer.url()).hash).toBe('#/show-student');
+  expect(documentRequests.every(url => !url.includes('token=') && !url.includes('code='))).toBe(true);
+  expect(await viewer.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length }))).toEqual({ local: 0, session: 0 });
+   const firstViewerPayload = viewerPayloads.find(value => typeof value === 'object' && value !== null && 'kind' in value) as Record<string, unknown> | undefined;
+   expect(firstViewerPayload).toBeDefined();
+   expect(JSON.stringify(firstViewerPayload)).not.toMatch(/Ada Lovelace|Zoë Durand|realName|xpEvidence|incidents|proposals|history/i);
+   expect(Object.keys(firstViewerPayload ?? {}).sort()).toEqual(['behaviour', 'expiresAt', 'kind', 'student']);
+  await expect(projection.getByText('VISTA TEMPORAL DEL ALUMNO', { exact: true })).toBeVisible();
+  await expect(projection.getByRole('heading', { name: 'Calculus' })).toBeVisible();
+
+  await viewer.reload();
+  await expect(viewer.getByRole('heading', { name: 'Calculus' })).toBeVisible();
+  const refreshedPayload = viewerPayloads.filter(value => typeof value === 'object' && value !== null && 'kind' in value).at(-1) as Record<string, unknown>;
+  expect(refreshedPayload.expiresAt).toBe(firstViewerPayload?.expiresAt);
+
+  await classroom.getByRole('button', { name: 'Close Classroom Mode' }).click();
+  await page.getByLabel('Search students').fill('zoe');
+  await page.getByRole('button', { name: /Zoë Durand/ }).click();
+  await page.getByRole('button', { name: 'Modo aula' }).click();
+  const replacement = page.getByRole('dialog', { name: 'Safe classroom cards' });
+  await replacement.getByRole('button', { name: /Zoe/ }).click();
+  await replacement.getByRole('button', { name: 'Mostrar al alumno' }).click();
+   const replacementUrl = await replacement.getByLabel('Show Student URL').inputValue();
+   await viewer.reload();
+  await expect(viewer.getByRole('heading', { name: 'El acceso ha finalizado' })).toBeVisible();
+  await viewer.goto(replacementUrl);
+  await expect(viewer.getByRole('heading', { name: 'Zoe' })).toBeVisible();
+
+   await replacement.getByRole('button', { name: 'Finalizar acceso' }).click();
+   await expect(replacement.getByText('Access ended.')).toBeVisible();
+  await expect(projection.getByText('VISTA TEMPORAL DEL ALUMNO', { exact: true })).toHaveCount(0);
+  await expect(projection.getByRole('heading', { name: 'The room is ready for its next chapter.' })).toBeVisible();
+   await expect(projection.locator('.show-student-overlay')).toHaveCount(0);
+   await viewer.reload();
+  await expect(viewer.getByRole('heading', { name: 'El acceso ha finalizado' })).toBeVisible();
+  await projection.reload();
+  await expect(projection.getByRole('heading', { name: 'The room is ready for its next chapter.' })).toBeVisible();
+
+  await viewer.route('**/api/v1/show-student', async route => { await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ message: 'Not found.' }) }); });
+  await viewer.goto('/#/show-student');
+  await expect(viewer.getByRole('heading', { name: 'El acceso ha finalizado' })).toBeVisible();
+  await projection.close();
+  await viewer.close();
+});
