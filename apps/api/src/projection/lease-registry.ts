@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const WINDOW_MS = 10 * 60 * 1000;
@@ -15,8 +15,11 @@ export function parseShowStudentTtlSeconds(value = process.env.SHOW_STUDENT_TTL_
 }
 
 export type LeaseCreateInput = { teacherId: string; teacherSessionId: string; groupId: string; studentId: string; idempotencyKey: string; receiptFingerprint?: string };
-export type LeaseMaterial = { grantId: string; version: number; studentId: string; groupId: string; accessToken: string; accessCode: string; accessUrl: string; expiresAt: string };
-type LeaseRecord = Omit<LeaseMaterial, 'accessToken' | 'accessCode'> & { teacherId: string; teacherSessionId: string; tokenHash: string; codeHash: string; viewerHash?: string; encryptedMaterial: string; redeemed: boolean; revoked: boolean; createdAt: number; receiptFingerprint?: string };
+export type LeaseMetadata = { grantId: string; version: number; studentId: string; groupId: string; expiresAt: string };
+export type LeaseIssuance = LeaseMetadata & { accessToken: string; accessCode: string; accessUrl: string; replay: false };
+export type LeaseReplayReceipt = Pick<LeaseMetadata, 'grantId' | 'expiresAt'> & { replay: true };
+export type LeaseCreateResult = LeaseIssuance | LeaseReplayReceipt;
+type LeaseRecord = LeaseMetadata & { teacherId: string; teacherSessionId: string; tokenHash: string; codeHash: string; viewerHash?: string; redeemed: boolean; revoked: boolean; createdAt: number; receiptFingerprint?: string };
 type Attempt = { key: string; at: number };
 
 export type LeaseEvent = 'created' | 'replaced' | 'revoked' | 'expired' | 'restarted' | 'redeemed';
@@ -29,7 +32,6 @@ export class LeaseRegistry {
   private readonly records = new Map<string, LeaseRecord>();
   private readonly idempotency = new Map<string, string>();
   private readonly attempts = new Map<string, Attempt[]>();
-  private readonly encryptionKey = randomBytes(32);
   private readonly now: () => Date;
   private currentByTeacher = new Map<string, string>();
 
@@ -38,32 +40,21 @@ export class LeaseRegistry {
     this.now = options.now ?? (() => new Date());
   }
 
-  private material(record: LeaseRecord): LeaseMaterial {
-    const [ivEncoded, tagEncoded, encryptedEncoded] = record.encryptedMaterial.split('.');
-    const decipher = createDecipheriv('aes-256-gcm', this.encryptionKey, Buffer.from(ivEncoded, 'base64url'));
-    const tag = Buffer.from(tagEncoded, 'base64url');
-    decipher.setAuthTag(tag);
-    return JSON.parse(Buffer.concat([decipher.update(Buffer.from(encryptedEncoded, 'base64url')), decipher.final()]).toString()) as LeaseMaterial;
-  }
-  private seal(material: LeaseMaterial) {
-    const iv = randomBytes(18); const cipher = createCipheriv('aes-256-gcm', this.encryptionKey, iv);
-    const encrypted = Buffer.concat([cipher.update(JSON.stringify(material)), cipher.final()]);
-    return `${iv.toString('base64url')}.${cipher.getAuthTag().toString('base64url')}.${encrypted.toString('base64url')}`;
-  }
   private active(record: LeaseRecord, at = this.now().getTime()) {
     if (record.revoked || at >= Date.parse(record.expiresAt)) { if (!record.revoked && at >= Date.parse(record.expiresAt)) this.options.onEvent?.('expired', record.grantId); return false; }
     return true;
   }
   private fail(): never { throw new LeaseError(404); }
 
-  create(input: LeaseCreateInput): LeaseMaterial {
+  create(input: LeaseCreateInput): LeaseCreateResult {
     if (!UUID_V4.test(input.idempotencyKey)) throw new LeaseError(422, 'A UUID v4 Idempotency-Key is required.');
     const priorId = this.idempotency.get(`${input.teacherId}:${input.idempotencyKey}`);
-    if (priorId) { const prior = this.records.get(priorId)!; if (prior.studentId !== input.studentId || prior.groupId !== input.groupId || prior.receiptFingerprint !== input.receiptFingerprint) throw new LeaseError(409, 'Idempotency-Key was already used for a different request.'); if (this.active(prior)) { const value = this.material(prior); Object.defineProperty(value, 'replay', { value: true }); return value; } this.fail(); }
+    if (priorId) { const prior = this.records.get(priorId)!; if (prior.studentId !== input.studentId || prior.groupId !== input.groupId || prior.receiptFingerprint !== input.receiptFingerprint) throw new LeaseError(409, 'Idempotency-Key was already used for a different request.'); if (this.active(prior)) return { grantId: prior.grantId, expiresAt: prior.expiresAt, replay: true }; this.fail(); }
     const previousId = this.currentByTeacher.get(input.teacherId); if (previousId) { const previous = this.records.get(previousId); if (previous && this.active(previous)) { previous.revoked = true; this.options.onEvent?.('replaced', previous.grantId); } }
     const now = this.now().getTime(); const grantId = randomUUID(); const accessToken = randomBytes(16).toString('base64url'); const accessCode = crockford(randomBytes(8));
-    const material: LeaseMaterial = { grantId, version: 1, studentId: input.studentId, groupId: input.groupId, accessToken, accessCode, accessUrl: `/#/show-student?token=${encodeURIComponent(accessToken)}`, expiresAt: new Date(now + this.options.ttlSeconds * 1000).toISOString() };
-    const record: LeaseRecord = { grantId, version: 1, studentId: input.studentId, groupId: input.groupId, accessUrl: material.accessUrl, expiresAt: material.expiresAt, teacherId: input.teacherId, teacherSessionId: input.teacherSessionId, tokenHash: hash(accessToken).toString('hex'), codeHash: hash(accessCode).toString('hex'), encryptedMaterial: this.seal(material), redeemed: false, revoked: false, createdAt: now, receiptFingerprint: input.receiptFingerprint };
+    const metadata: LeaseMetadata = { grantId, version: 1, studentId: input.studentId, groupId: input.groupId, expiresAt: new Date(now + this.options.ttlSeconds * 1000).toISOString() };
+    const material: LeaseIssuance = { ...metadata, accessToken, accessCode, accessUrl: `/#/show-student?token=${encodeURIComponent(accessToken)}`, replay: false };
+    const record: LeaseRecord = { ...metadata, teacherId: input.teacherId, teacherSessionId: input.teacherSessionId, tokenHash: hash(accessToken).toString('hex'), codeHash: hash(accessCode).toString('hex'), redeemed: false, revoked: false, createdAt: now, receiptFingerprint: input.receiptFingerprint };
     this.records.set(grantId, record); this.idempotency.set(`${input.teacherId}:${input.idempotencyKey}`, grantId); this.currentByTeacher.set(input.teacherId, grantId); this.options.onEvent?.('created', grantId); return material;
   }
 
@@ -101,7 +92,7 @@ export class LeaseRegistry {
   current(input: { teacherId: string; teacherSessionId: string; groupId: string }) {
     const id = this.currentByTeacher.get(input.teacherId); const record = id ? this.records.get(id) : undefined;
     if (!record || record.teacherSessionId !== input.teacherSessionId || record.groupId !== input.groupId || !this.active(record)) return undefined;
-    return this.material(record);
+     return { grantId: record.grantId, version: record.version, studentId: record.studentId, groupId: record.groupId, expiresAt: record.expiresAt };
   }
   restart() { for (const record of this.records.values()) record.revoked = true; this.options.onEvent?.('restarted', ''); this.attempts.clear(); this.currentByTeacher.clear(); }
   debugRecords() { return [...this.records.values()]; }

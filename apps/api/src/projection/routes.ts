@@ -44,7 +44,11 @@ export function registerProjectionRoutes(app: FastifyInstance, db: Database.Data
     noStore(reply); const groupId = param(r, 'groupId'); const body = showBody.parse(r.body); const c = context(db, teacher(r), groupId); if (c.yearArchivedAt) throw new ApiError('CONFLICT', 409, 'Archived groups cannot issue Show Student access.');
     const student = db.prepare('SELECT id FROM students WHERE id=? AND group_id=? AND archived_at IS NULL').get(body.studentId, groupId); if (!student) throw new ApiError('NOT_FOUND', 404, 'Student not found.');
     const key = r.headers['idempotency-key']; if (typeof key !== 'string' || !keyPattern.test(key)) throw new ApiError('VALIDATION_FAILED', 422, 'A UUID v4 Idempotency-Key is required.');
-   try { const material = leases.create({ teacherId: teacher(r), teacherSessionId: sessionId(r), groupId, studentId: body.studentId, idempotencyKey: key }); return reply.code((material as any).replay ? 200 : 201).send({ accessCode: material.accessCode, accessUrl: material.accessUrl, expiresAt: material.expiresAt, showStudent: await showDto(db, teacher(r), material) }); } catch (e) { return safeError(e); }
+    try {
+      const material = leases.create({ teacherId: teacher(r), teacherSessionId: sessionId(r), groupId, studentId: body.studentId, idempotencyKey: key });
+      if (material.replay) return reply.code(200).send(material);
+      return reply.code(201).send({ accessCode: material.accessCode, accessUrl: material.accessUrl, expiresAt: material.expiresAt, showStudent: await showDto(db, teacher(r), material) });
+    } catch (e) { return safeError(e); }
   });
   app.delete('/api/v1/teacher/groups/:groupId/show-student', { preHandler: session }, async (r, reply) => { noStore(reply); const key = r.headers['idempotency-key']; if (typeof key !== 'string' || !keyPattern.test(key)) throw new ApiError('VALIDATION_FAILED', 422, 'A UUID v4 Idempotency-Key is required.'); try { leases.revokeGroup({ teacherId: teacher(r), teacherSessionId: sessionId(r), groupId: param(r, 'groupId') }); } catch (e) { return safeError(e); } return reply.code(204).send(); });
   app.post('/api/v1/show-student/exchange', async (r, reply) => { noStore(reply); try { const body = exchangeBody.parse(r.body); const result = leases.exchange({ ...body, clientId: r.ip }); reply.setCookie('show-student', result.cookie, result.cookieOptions); return reply.code(204).send(); } catch (e) { return safeError(e); } });

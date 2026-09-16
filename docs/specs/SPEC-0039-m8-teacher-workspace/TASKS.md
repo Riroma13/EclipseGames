@@ -39,6 +39,15 @@
 - Added RED-before-GREEN focused coverage in `apps/api/src/projection/lease-registry.test.ts`.
 - Slice 3 API/runtime registration and all later slices remain pending.
 
+### Hash-only replay correction
+
+- [x] Remove encrypted or otherwise recoverable `accessToken`, `accessCode`, and token-bearing `accessUrl` material from the lease registry. Preserve same-key/same-payload idempotency without duplicate mutation by returning an explicit non-secret `200` replay receipt; return `409` for same-key/different-payload without bootstrap secrets. A new idempotency key intentionally creates a replacement grant and returns newly generated bootstrap secrets once. Add focused negative tests proving lost bootstrap secrets cannot be recovered or replayed, while same-key replay does not create a second grant and exchange remains single-use.
+
+#### Hash-only replay correction result
+
+- Implemented in `apps/api/src/projection/lease-registry.ts`: records retain only token/code hashes, same-key replay returns `{ grantId, expiresAt, replay: true }`, and conflicting payloads return `409` without secrets.
+- Focused evidence: `pnpm exec vitest run apps/api/src/projection/lease-registry.test.ts` — 1 file, 8 tests passed.
+
 ### Slice 3 — API and runtime authority
 
 - [x] Add classroom-card, create/revoke, exchange, viewer, and teacher display-control routes with owner-as-404, exact status/body validation, no-store headers, redacted logs, and lineage/archive checks; extend `game/service.ts` display precedence/fallback.
@@ -86,3 +95,8 @@ Decision needed before apply: No
 Chained PRs recommended: No
 Chain strategy: pending
 400-line budget risk: High
+
+## Terra correction result
+
+- TTL UI correction applied in `ClassroomMode.tsx`: display, countdown, and polite expiry announcements derive from the server `expiresAt`, including configured 30–300 second leases; focused web tests and web typecheck pass.
+- Lease privacy correction resolved in `apps/api/src/projection/lease-registry.ts`: verifier/hash-only registry storage is paired with an explicit non-secret idempotent replay receipt, preserving the hash-only privacy boundary. Focused evidence: `pnpm exec vitest run apps/api/src/projection/lease-registry.test.ts` — 1 file, 8 tests passed.

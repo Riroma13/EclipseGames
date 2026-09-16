@@ -565,7 +565,7 @@ test('SPEC-0039 Slice 5 built artifact proves the teacher, Classroom Mode, and t
   await expect(viewer.getByRole('heading', { name: 'Zoe' })).toBeVisible();
 
    await replacement.getByRole('button', { name: 'Finalizar acceso' }).click();
-   await expect(replacement.getByText('Access ended.')).toBeVisible();
+   await expect(page.getByRole('button', { name: 'Modo aula' })).toBeVisible();
   await expect(projection.getByText('VISTA TEMPORAL DEL ALUMNO', { exact: true })).toHaveCount(0);
   await expect(projection.getByRole('heading', { name: 'The room is ready for its next chapter.' })).toBeVisible();
    await expect(projection.locator('.show-student-overlay')).toHaveCount(0);

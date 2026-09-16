@@ -3,7 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { gameApi } from '../game/game-api';
-import { ClassroomMode } from './ClassroomMode';
+import { ClassroomMode, durationLabel, remainingSeconds } from './ClassroomMode';
 
 const student = { id: 'student-a', alias: 'Ada' };
 const card = { avatar: { studentId: student.id, alias: student.alias, specialty: null, specialtyCategory: null, level: 1, progress: { progressPercent: 0 }, badges: [], profile: {} }, energy: null, gems: { EMERALD: 0, RUBY: 0, DIAMOND: 0 } };
@@ -14,6 +14,14 @@ describe('ClassroomMode context safety', () => {
   let container: HTMLDivElement | undefined;
 
   afterEach(() => { act(() => root?.unmount()); container?.remove(); vi.restoreAllMocks(); });
+
+  it('derives TTL copy and countdown values from the server expiry', () => {
+    const now = Date.parse('2026-01-01T00:00:00.000Z');
+    const expiresAt = new Date(now + 30_000).toISOString();
+    expect(remainingSeconds(expiresAt, now)).toBe(30);
+    expect(durationLabel(remainingSeconds(expiresAt, now))).toBe('30 segundos');
+    expect(durationLabel(120)).toBe('2 minutos');
+  });
 
   async function render(groupId = 'group-a', academicYearId = 'year-a') {
     container = document.createElement('div'); document.body.append(container); root = createRoot(container);

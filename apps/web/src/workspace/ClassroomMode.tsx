@@ -9,6 +9,16 @@ function copy(value: string) {
   return navigator.clipboard?.writeText(value).then(() => undefined);
 }
 
+export function remainingSeconds(expiresAt: string, now = Date.now()) {
+  return Math.max(0, Math.ceil((Date.parse(expiresAt) - now) / 1000));
+}
+
+export function durationLabel(seconds: number) {
+  return seconds === 60 || seconds % 60 === 0
+    ? `${seconds / 60} minuto${seconds === 60 ? '' : 's'}`
+    : `${seconds} segundos`;
+}
+
 export function ClassroomMode({ groupId, academicYearId, students, historical }: Props) {
   const [open, setOpen] = useState(false);
   const [cards, setCards] = useState<ClassroomStudentDto[]>([]);
@@ -17,10 +27,13 @@ export function ClassroomMode({ groupId, academicYearId, students, historical }:
   const [state, setState] = useState<'idle' | 'loading' | 'error'>('idle');
   const [message, setMessage] = useState('');
   const [copied, setCopied] = useState('');
+  const [leaseRemaining, setLeaseRemaining] = useState(0);
+  const [leaseAnnouncement, setLeaseAnnouncement] = useState('');
   const generation = useRef(0);
   const contextRef = useRef({ groupId, academicYearId });
   const leaseContext = useRef<string | null>(null);
   const leaseGroupId = useRef<string | null>(null);
+  const announcedLeaseSeconds = useRef<number | null>(null);
   const createController = useRef<AbortController | null>(null);
   const failedRevokeGroup = useRef<string | null>(null);
   const pendingCloseGroup = useRef<string | null>(null);
@@ -76,7 +89,27 @@ export function ClassroomMode({ groupId, academicYearId, students, historical }:
     return () => controller.abort();
   }, [open, groupId, academicYearId]);
   useEffect(() => { if (!open) triggerRef.current?.focus(); else dialogRef.current?.focus(); }, [open]);
-  useEffect(() => { if (!lease) return; const timer = window.setTimeout(() => { setLease(null); leaseContext.current = null; leaseGroupId.current = null; setMessage('El acceso ha finalizado.'); }, Math.max(0, Date.parse(lease.expiresAt) - Date.now())); return () => window.clearTimeout(timer); }, [lease]);
+   useEffect(() => {
+     if (!lease) { setLeaseRemaining(0); setLeaseAnnouncement(''); announcedLeaseSeconds.current = null; return; }
+     const update = () => {
+       const seconds = remainingSeconds(lease.expiresAt);
+       setLeaseRemaining(seconds);
+       if (seconds === 0) {
+         setLease(null); leaseContext.current = null; leaseGroupId.current = null;
+         setMessage('El acceso ha finalizado.');
+         return;
+       }
+       // Keep the live region useful without announcing every visual tick.
+       const shouldAnnounce = announcedLeaseSeconds.current === null || [60, 30, 10, 5].includes(seconds);
+       if (shouldAnnounce && announcedLeaseSeconds.current !== seconds) {
+         announcedLeaseSeconds.current = seconds;
+         setLeaseAnnouncement(`El acceso finaliza en ${durationLabel(seconds)}.`);
+       }
+     };
+     update();
+     const timer = window.setInterval(update, 1000);
+     return () => window.clearInterval(timer);
+   }, [lease]);
   useEffect(() => () => {
     const issuingGroupId = leaseGroupId.current ?? pendingCloseGroup.current ?? failedRevokeGroup.current;
     if (issuingGroupId) void canonicalRevoke(issuingGroupId).catch(() => undefined);
@@ -151,7 +184,7 @@ export function ClassroomMode({ groupId, academicYearId, students, historical }:
         <AvatarPreview profile={card.avatar.profile} initials={initialsForAvatar(card.avatar.alias)} size="card" /><strong>{card.avatar.alias}</strong><span>{card.avatar.specialty ?? 'Academy member'} · Level {card.avatar.level}</span><span>{card.energy ? `Energy: ${card.energy}` : 'Energía aún no disponible'}</span><span>Gems: {card.gems.EMERALD} · {card.gems.RUBY} · {card.gems.DIAMOND}</span><span>{card.avatar.badges.length ? `${card.avatar.badges.length} badges` : 'No badges yet'}</span>
       </button>)}</div>}
       <button type="button" disabled={!selected || historical || state === 'loading'} onClick={create}>Mostrar al alumno</button>
-        {lease && leaseContext.current === `${academicYearId}:${groupId}` && <div className="show-student-creation" role="status"><strong>Acceso disponible durante 2 minutos</strong><label>Enlace<input readOnly value={lease.accessUrl} aria-label="Show Student URL" /></label><LocalQrCode accessUrl={lease.accessUrl} /><p className="sr-status">El QR contiene el enlace temporal de acceso.</p><button type="button" onClick={() => { void copy(lease.accessUrl).then(() => setCopied('Link copied.')); }}>Copiar enlace</button><button type="button" onClick={() => { void copy(lease.accessCode).then(() => setCopied('Code copied.')); }}>Copiar código</button><span role="status">{copied}</span><code>{lease.accessCode}</code><button type="button" onClick={revoke}>Finalizar acceso</button></div>}
+         {lease && leaseContext.current === `${academicYearId}:${groupId}` && <div className="show-student-creation" role="status"><strong>Acceso disponible durante {durationLabel(leaseRemaining)}</strong><span aria-label="Tiempo restante">Tiempo restante: {durationLabel(leaseRemaining)}</span><span aria-live="polite" className="sr-status">{leaseAnnouncement}</span><label>Enlace<input readOnly value={lease.accessUrl} aria-label="Show Student URL" /></label><LocalQrCode accessUrl={lease.accessUrl} /><p className="sr-status">El QR contiene el enlace temporal de acceso.</p><button type="button" onClick={() => { void copy(lease.accessUrl).then(() => setCopied('Link copied.')); }}>Copiar enlace</button><button type="button" onClick={() => { void copy(lease.accessCode).then(() => setCopied('Code copied.')); }}>Copiar código</button><span role="status">{copied}</span><code>{lease.accessCode}</code><button type="button" onClick={revoke}>Finalizar acceso</button></div>}
     </div></div>}
   </section>;
 }
