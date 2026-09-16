@@ -21,6 +21,10 @@ export function findSession(database: Database.Database, tokenHash: string): Ses
   return database.prepare('SELECT id, teacher_id AS teacherId, expires_at AS expiresAt, revoked_at AS revokedAt FROM sessions WHERE token_hash = ?').get(tokenHash) as SessionRecord | undefined;
 }
 
+export function findSessionById(database: Database.Database, id: string): SessionRecord | undefined {
+  return database.prepare('SELECT id, teacher_id AS teacherId, expires_at AS expiresAt, revoked_at AS revokedAt FROM sessions WHERE id = ?').get(id) as SessionRecord | undefined;
+}
+
 export function revokeSession(database: Database.Database, tokenHash: string) {
   database.prepare('UPDATE sessions SET revoked_at = ? WHERE token_hash = ? AND revoked_at IS NULL').run(new Date().toISOString(), tokenHash);
 }

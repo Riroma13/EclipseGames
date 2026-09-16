@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type Database from 'better-sqlite3';
 import { ApiError } from '../http/errors.js';
 import { validateBody } from '../http/validation.js';
-import { authenticate, authenticateSession, issueSession, revoke, SESSION_COOKIE } from './service.js';
+import { authenticate, authenticateSession, issueSession, revoke, sessionCookieName, sessionCookieOptions } from './service.js';
 
 const credentialsSchema = z.object({ email: z.string().email(), password: z.string().min(1) });
 
@@ -25,22 +25,24 @@ export function registerAuthRoutes(app: FastifyInstance, database: Database.Data
     }
     rate.delete(key);
     const session = issueSession(database, teacher);
-    return reply.code(204).setCookie(SESSION_COOKIE, session.token, { httpOnly: true, secure: true, sameSite: 'strict', path: '/', maxAge: session.maxAge }).send();
+     return reply.code(204).setCookie(sessionCookieName(), session.token, sessionCookieOptions(session.maxAge)).send();
   });
 
   app.delete('/api/v1/auth/session', async (request, reply) => {
-    const token = (request as FastifyRequest & { cookies?: Record<string, string> }).cookies?.[SESSION_COOKIE];
+    const token = (request as FastifyRequest & { cookies?: Record<string, string> }).cookies?.[sessionCookieName()];
     if (!authenticateSession(database, token)) throw new ApiError('AUTH_REQUIRED', 401, 'Authentication is required.');
     revoke(database, token);
-    return reply.code(204).clearCookie(SESSION_COOKIE, { httpOnly: true, secure: true, sameSite: 'strict', path: '/' }).send();
+    return reply.code(204).clearCookie(sessionCookieName(), sessionCookieOptions(0)).send();
   });
 }
 
 export function requireSession(database: Database.Database) {
   return async (request: FastifyRequest) => {
-    const token = (request as FastifyRequest & { cookies?: Record<string, string> }).cookies?.[SESSION_COOKIE];
+    const token = (request as FastifyRequest & { cookies?: Record<string, string> }).cookies?.[sessionCookieName()];
     const session = authenticateSession(database, token);
     if (!session) throw new ApiError('AUTH_REQUIRED', 401, 'Authentication is required.');
-    (request as FastifyRequest & { teacherId?: string }).teacherId = session.teacherId;
+    const target = request as FastifyRequest & { teacherId?: string; sessionId?: string };
+    target.teacherId = session.teacherId;
+    target.sessionId = session.id;
   };
 }

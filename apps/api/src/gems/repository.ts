@@ -7,6 +7,18 @@ export function balances(db: Database.Database, studentId: string, academicYearI
   return { studentId, academicYearId, balances: result };
 }
 
+export function groupBalances(db: Database.Database, studentIds: readonly string[], academicYearId: string) {
+  const result = new Map(studentIds.map((studentId) => [studentId, { EMERALD: 0, RUBY: 0, DIAMOND: 0 }] as [string, { EMERALD:number; RUBY:number; DIAMOND:number }]));
+  if (!studentIds.length) return result;
+  const placeholders = studentIds.map(() => '?').join(',');
+  const rows = db.prepare(`SELECT student_id AS studentId, currency, COALESCE(SUM(amount),0) AS balance FROM gem_ledger WHERE academic_year_id=? AND student_id IN (${placeholders}) GROUP BY student_id, currency`).all(academicYearId, ...studentIds) as Array<{ studentId:string; currency:string; balance:number }>;
+  for (const row of rows) {
+    const balances = result.get(row.studentId);
+    if (balances && row.currency in balances) balances[row.currency as keyof typeof balances] = Number(row.balance);
+  }
+  return result;
+}
+
 export function ledger(db: Database.Database, studentId: string, academicYearId: string, limit: number, cursor: { createdAt:string; id:string } | null) {
   const clause = cursor ? ' AND (created_at > ? OR (created_at = ? AND id > ?))' : '';
   const args = cursor ? [studentId, academicYearId, cursor.createdAt, cursor.createdAt, cursor.id, limit + 1] : [studentId, academicYearId, limit + 1];

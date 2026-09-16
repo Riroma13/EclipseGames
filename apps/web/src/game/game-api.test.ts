@@ -4,6 +4,21 @@ import { gameApi } from './game-api';
 afterEach(() => vi.restoreAllMocks());
 
 describe('Game Master client routes', () => {
+  it('supports classroom and one-time viewer routes, including empty 204 responses', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(null, { status: 204 }));
+    await gameApi.classroomCards('group', 'year');
+    await gameApi.createShowStudent('group', 'student', '00000000-0000-4000-8000-000000000601');
+    await gameApi.revokeShowStudent('group', '00000000-0000-4000-8000-000000000602');
+    await gameApi.exchangeShowStudent({ code: 'ABCD' });
+    await gameApi.showStudent();
+    expect(fetchMock.mock.calls.map(call => call[0])).toEqual([
+      '/api/v1/teacher/groups/group/classroom-cards?academicYearId=year',
+      '/api/v1/teacher/groups/group/show-student',
+      '/api/v1/teacher/groups/group/show-student',
+      '/api/v1/show-student/exchange',
+      '/api/v1/show-student',
+    ]);
+  });
   it('targets the Team Draw, Prompt Deck, and projection-control endpoints', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }));
 

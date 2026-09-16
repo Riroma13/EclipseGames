@@ -64,7 +64,7 @@ describe('roster DTO privacy boundary', () => {
     expect(audit[0]).toEqual(expect.objectContaining({ code: 'AUTH_REQUIRED', requestId: expect.any(String) }));
   });
 
-  it('never uses browser fields filtering or a private DTO fallback for projection', async () => {
+  it('keeps the removed fixture projection route absent', async () => {
     const app = createServer(':memory:', { logger: false, bootstrapTeacher: credentials });
     apps.push(app);
     const login = await app.inject({ method: 'POST', url: '/api/v1/auth/session', headers: { origin }, payload: credentials });
@@ -74,7 +74,6 @@ describe('roster DTO privacy boundary', () => {
       url: '/api/v1/projection/groups/00000000-0000-4000-8000-000000000001/students?fields=realName,groupId,archivedAt',
       headers: { origin, cookie },
     });
-    expect(response.statusCode).toBe(200);
-    expect(JSON.stringify(response.json())).not.toMatch(/realName|groupId|academicYearId|archivedAt|groupCorrectionLockedAt/);
+    expect(response.statusCode).toBe(404);
   });
 });

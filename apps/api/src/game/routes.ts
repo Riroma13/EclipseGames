@@ -5,6 +5,8 @@ import { requireSession } from '../auth/routes.js';
 import { ApiError } from '../http/errors.js';
 import { validateBody } from '../http/validation.js';
 import * as service from './service.js';
+import type { LeaseRegistry } from '../projection/lease-registry.js';
+import { showDto } from '../projection/routes.js';
 
 const uuid = z.string().uuid();
 const idempotencyKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -23,7 +25,7 @@ const teacher = (request: FastifyRequest) => (request as FastifyRequest & { teac
 const param = (request: FastifyRequest, key: string) => uuid.parse((request.params as Record<string, string>)[key]);
 const requiredIdempotencyKey = (request: FastifyRequest) => { const value = request.headers['idempotency-key']; if (typeof value !== 'string' || !idempotencyKeyPattern.test(value)) throw new ApiError('VALIDATION_FAILED', 422, 'A UUID v4 Idempotency-Key header is required.'); return value; };
 
-export function registerGameRoutes(app: FastifyInstance, db: Database.Database) {
+export function registerGameRoutes(app: FastifyInstance, db: Database.Database, leases?: LeaseRegistry) {
   const session = requireSession(db);
 
   app.get('/api/v1/groups/:groupId/events', { preHandler: session }, async request => service.listEvents(db, teacher(request), param(request, 'groupId')));
@@ -62,9 +64,9 @@ export function registerGameRoutes(app: FastifyInstance, db: Database.Database) 
   app.post('/api/v1/minigames/:minigameId/reset', { preHandler: session }, async request => service.resetMinigame(db, teacher(request), param(request, 'minigameId')));
   app.post('/api/v1/minigames/:minigameId/end', { preHandler: session }, async request => service.endMinigame(db, teacher(request), param(request, 'minigameId')));
 
-  app.get('/api/v1/projection/groups/:groupId/display', { preHandler: session }, async request => service.projectionDisplay(db, teacher(request), param(request, 'groupId')));
-  app.get('/api/v1/teacher/groups/:groupId/display', { preHandler: session }, async request => service.projectionControl(db, teacher(request), param(request, 'groupId')));
-  app.post('/api/v1/teacher/groups/:groupId/display/clear', { preHandler: session }, async request => service.clearProjection(db, teacher(request), param(request, 'groupId')));
+  app.get('/api/v1/projection/groups/:groupId/display', { preHandler: session }, async (request, reply) => { reply.header('Cache-Control','no-store').header('Referrer-Policy','no-referrer'); const id=param(request,'groupId'); const lease=leases?.current({ teacherId:teacher(request),teacherSessionId:(request as any).sessionId,groupId:id }); return service.projectionDisplay(db, teacher(request), id, lease ? await showDto(db, teacher(request), lease) : null); });
+  app.get('/api/v1/teacher/groups/:groupId/display', { preHandler: session }, async (request, reply) => { reply.header('Cache-Control','no-store').header('Referrer-Policy','no-referrer'); const id=param(request,'groupId'); const lease=leases?.current({ teacherId:teacher(request),teacherSessionId:(request as any).sessionId,groupId:id }); return service.projectionControl(db, teacher(request), id, lease ? await showDto(db, teacher(request), lease) : null); });
+  app.post('/api/v1/teacher/groups/:groupId/display/clear', { preHandler: session }, async (request, reply) => { reply.header('Cache-Control','no-store'); return service.clearProjection(db, teacher(request), param(request, 'groupId')); });
 
   app.get('/api/v1/minigame-presets', { preHandler: session }, async request => service.listMinigamePresets(db, teacher(request), includeArchivedQuery.parse(request.query).includeArchived === 'true'));
   app.post('/api/v1/minigame-presets', { preHandler: [session, validateBody(presetBody)] }, async (request, reply) => reply.code(201).send(service.createMinigamePreset(db, teacher(request), request.body as z.infer<typeof presetBody>)));
