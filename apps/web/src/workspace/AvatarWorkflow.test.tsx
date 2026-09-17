@@ -3,7 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AvatarWorkflow } from './AvatarWorkflow';
-import { workspaceApi, type AvatarCatalogue, type AvatarHistory, type AvatarProfile, type TeacherAvatar, type TeacherStudent } from './workspace-api';
+import { workspaceApi, type AvatarCatalogue, type AvatarHistory, type AvatarProfile, type BoutiqueState, type TeacherAvatar, type TeacherStudent } from './workspace-api';
 
 const student: TeacherStudent = { id: 'student-1', groupId: 'group-1', realName: 'Ada Lovelace', alias: 'Ada', avatar: 'default', specialty: 'Leader', archivedAt: null };
 const context = { academicYearId: 'year-1', groupId: 'group-1', studentId: 'student-1', realName: student.realName, alias: student.alias, readOnly: false } as const;
@@ -229,4 +229,70 @@ describe('AvatarWorkflow focused teacher coverage', () => {
     await settle();
     expect(document.body.querySelector('.avatar-face-fox')).not.toBeNull();
   });
+
+  it('keeps purchase and equip separate, retains the retry key, and refreshes owned state', async () => {
+    const m9Catalog: AvatarCatalogue = { version: 'm9-v1', categories: [{ id: 'hairId', label: 'Cabello', items: [
+      { id: 'hair-short', label: 'Corto', access: { kind: 'BASE' } },
+      { id: 'hair-braids', label: 'Trenzas', access: { kind: 'BOUTIQUE', currency: 'EMERALD', cost: 1, minLevel: 2, requiredSpecialtyCategory: null, availableFromTerm: 'T1' } },
+    ] }] };
+     const shop = (owned: boolean, equipped = false): BoutiqueState => ({ studentId: student.id, academicYearId: context.academicYearId, catalogueVersion: 'm9-v1', currentTerm: 'T1', emeraldBalance: owned ? 1 : 2, editable: true, items: [{ id: 'hair-braids', category: 'hairId', label: 'Trenzas', cost: 1, minLevel: 2, requiredSpecialtyCategory: null, availableFromTerm: 'T1', owned, equipped, status: 'AVAILABLE' }] });
+    vi.spyOn(workspaceApi, 'avatar').mockResolvedValue(avatar());
+    vi.spyOn(workspaceApi, 'avatarCatalog').mockResolvedValue(m9Catalog);
+    vi.spyOn(workspaceApi, 'avatarHistory').mockResolvedValue(history);
+     const boutique = vi.spyOn(workspaceApi, 'boutique').mockResolvedValueOnce(shop(false)).mockResolvedValueOnce(shop(true)).mockResolvedValueOnce(shop(true, true));
+    const network = Object.assign(new Error('timeout'), {});
+    const purchase = vi.spyOn(workspaceApi, 'purchaseBoutique').mockRejectedValueOnce(network).mockResolvedValueOnce({ value: { purchaseId: 'purchase-1', studentId: student.id, academicYearId: context.academicYearId, itemId: 'hair-braids', currency: 'EMERALD', cost: 1, emeraldBalance: 1, purchasedAt: '2026-09-17T08:00:00Z', replay: false }, replayed: false });
+    const save = vi.spyOn(workspaceApi, 'saveAvatar').mockResolvedValue(avatar({ profile: { ...profile, hairId: 'hair-braids' }, revision: 3 }));
+    const { container } = await renderWorkflow();
+    await waitFor(container, () => button(container, 'Comprar por 1 esmeralda') !== undefined);
+    await act(async () => { button(container, 'Comprar por 1 esmeralda')?.click(); });
+    await waitFor(container, () => container.querySelector('[role="alert"]')?.textContent?.includes('No se pudo completar la compra') === true);
+    await act(async () => { button(container, 'Reintentar')?.click(); });
+     await waitFor(container, () => button(container, 'Equipar') !== undefined);
+     expect(purchase).toHaveBeenCalledTimes(2);
+     expect(purchase.mock.calls[0][4]).toBe(purchase.mock.calls[1][4]);
+     expect(save).not.toHaveBeenCalled();
+      expect(container.querySelector('.boutique-owned-status')?.textContent).toBe('Comprado');
+      expect(button(container, 'Equipar')).toBeDefined();
+      expect(button(container, 'Comprar por 1 esmeralda')).toBeUndefined();
+      await act(async () => { button(container, 'Equipar')?.click(); });
+     await waitFor(container, () => save.mock.calls.length === 1);
+     expect(save).toHaveBeenCalledWith(student.id, context.academicYearId, 2, expect.objectContaining({ hairId: 'hair-braids' }), expect.any(String));
+     await waitFor(container, () => button(container, 'Equipado') !== undefined);
+     expect(container.querySelector('.boutique-owned-status')?.textContent).toBe('Comprado');
+     expect(boutique).toHaveBeenCalledTimes(3);
+   });
+
+   it('renders locked boutique items and keeps their purchase action disabled', async () => {
+     const m9Catalog: AvatarCatalogue = { version: 'm9-v1', categories: [{ id: 'hairId', label: 'Cabello', items: [{ id: 'hair-braids', label: 'Trenzas', access: { kind: 'BOUTIQUE', currency: 'EMERALD', cost: 1, minLevel: 5, requiredSpecialtyCategory: null, availableFromTerm: 'T1' } }] }] };
+     const lockedShop: BoutiqueState = { studentId: student.id, academicYearId: context.academicYearId, catalogueVersion: 'm9-v1', currentTerm: 'T1', emeraldBalance: 2, editable: true, items: [{ id: 'hair-braids', category: 'hairId', label: 'Trenzas', cost: 1, minLevel: 5, requiredSpecialtyCategory: null, availableFromTerm: 'T1', owned: false, equipped: false, status: 'LOCKED_LEVEL' }] };
+     vi.spyOn(workspaceApi, 'avatar').mockResolvedValue(avatar());
+     vi.spyOn(workspaceApi, 'avatarCatalog').mockResolvedValue(m9Catalog);
+     vi.spyOn(workspaceApi, 'avatarHistory').mockResolvedValue(history);
+     vi.spyOn(workspaceApi, 'boutique').mockResolvedValue(lockedShop);
+     const purchase = vi.spyOn(workspaceApi, 'purchaseBoutique');
+     const { container } = await renderWorkflow();
+     await waitFor(container, () => container.querySelector('.boutique-panel') !== null);
+     expect(container.textContent).toContain('Requiere nivel 5');
+     expect(button(container, 'Comprar por 1 esmeralda')?.disabled).toBe(true);
+     expect(purchase).not.toHaveBeenCalled();
+   });
+
+   it.each([
+     ['insufficient balance', 'INSUFFICIENT_EMERALDS', 'No tienes suficientes esmeraldas.'],
+     ['policy restriction', 'BEHAVIOUR_RESTRICTED', 'La política de comportamiento no permite comprar ahora.'],
+   ])('maps %s purchase failures to the required Spanish message', async (_label, code, message) => {
+     const m9Catalog: AvatarCatalogue = { version: 'm9-v1', categories: [{ id: 'hairId', label: 'Cabello', items: [{ id: 'hair-braids', label: 'Trenzas', access: { kind: 'BOUTIQUE', currency: 'EMERALD', cost: 1, minLevel: 2, requiredSpecialtyCategory: null, availableFromTerm: 'T1' } }] }] };
+     const shop: BoutiqueState = { studentId: student.id, academicYearId: context.academicYearId, catalogueVersion: 'm9-v1', currentTerm: 'T1', emeraldBalance: 1, editable: true, items: [{ id: 'hair-braids', category: 'hairId', label: 'Trenzas', cost: 1, minLevel: 2, requiredSpecialtyCategory: null, availableFromTerm: 'T1', owned: false, equipped: false, status: 'AVAILABLE' }] };
+     vi.spyOn(workspaceApi, 'avatar').mockResolvedValue(avatar());
+     vi.spyOn(workspaceApi, 'avatarCatalog').mockResolvedValue(m9Catalog);
+     vi.spyOn(workspaceApi, 'avatarHistory').mockResolvedValue(history);
+     vi.spyOn(workspaceApi, 'boutique').mockResolvedValue(shop);
+     vi.spyOn(workspaceApi, 'purchaseBoutique').mockRejectedValue(Object.assign(new Error(code), { status: 409, code }));
+     const { container } = await renderWorkflow();
+     await waitFor(container, () => button(container, 'Comprar por 1 esmeralda') !== undefined);
+     await act(async () => { button(container, 'Comprar por 1 esmeralda')?.click(); });
+     await waitFor(container, () => container.querySelector('[role="alert"]')?.textContent?.includes(message) === true);
+     expect(container.querySelector('[role="alert"]')?.textContent).toContain(message);
+   });
 });

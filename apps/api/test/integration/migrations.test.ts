@@ -21,7 +21,7 @@ describe('SQLite migrations', () => {
       expect(migrateDatabase(db, migrations)).toEqual({ applied: [...migrations.map(migration => migration.id)] });
     expect(migrateDatabase(db, migrations)).toEqual({ applied: [] });
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'app_metadata'").get()).toBeTruthy();
-     expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 17 });
+     expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get()).toEqual({ count: 18 });
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'projection_students'").get()).toBeTruthy();
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'classroom_events'").get()).toBeTruthy();
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'classroom_challenges'").get()).toBeTruthy();
@@ -45,7 +45,8 @@ describe('SQLite migrations', () => {
          { id: '0014_behaviour_lives' },
           { id: '0015_quarterly_observation_rubric' },
            { id: '0016_group_term_close_xlsx' },
-           { id: '0017_avatar_core' },
+            { id: '0017_avatar_core' },
+            { id: '0018_m9_boutique' },
     ]);
     const table = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='xp_level_grant_transitions'").get() as {sql:string};
     expect(table.sql).toContain('UNIQUE (sequence)');
@@ -66,12 +67,12 @@ describe('SQLite migrations', () => {
     db.prepare(`INSERT INTO minigame_sessions (id,owner_teacher_id,group_id,kind,title,prompt,duration_seconds,status,remaining_seconds,created_at,updated_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?)`).run(ids.minigame, ids.teacher, ids.group, 'RANDOM_DRAW', 'Legacy draw', 'Legacy prompt', 0, 'ENDED', 0, at, at);
 
-    expect(migrateDatabase(db, migrations.slice(0, 9))).toEqual({ applied: ['0008_game_master_content', '0009_event_create_idempotency'] });
+     expect(migrateDatabase(db, migrations.slice(0, 9))).toEqual({ applied: ['0008_game_master_content', '0009_event_create_idempotency'] });
     expect(db.prepare('SELECT id,status,progress,target FROM classroom_challenges WHERE id=?').get(ids.challenge)).toEqual({ id: ids.challenge, status: 'ACTIVE', progress: 1, target: 3 });
     expect(db.prepare('SELECT id,kind,team_count AS teamCount,team_assignments AS teamAssignments,prompt_deck_prompts AS promptDeckPrompts FROM minigame_sessions WHERE id=?').get(ids.minigame)).toEqual({ id: ids.minigame, kind: 'RANDOM_DRAW', teamCount: 0, teamAssignments: '{}', promptDeckPrompts: '[]' });
     db.prepare(`INSERT INTO minigame_sessions (id,owner_teacher_id,group_id,kind,title,prompt,duration_seconds,status,remaining_seconds,draw_index,created_at,updated_at,team_count,team_assignments,prompt_deck_prompts)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(ids.promptDeck, ids.teacher, ids.group, 'PROMPT_DECK', 'Legacy deck', 'Legacy prompt', 0, 'READY', 0, 0, at, at, 0, '{}', JSON.stringify(['Legacy prompt', 'Next prompt']));
-      expect(migrateDatabase(db, migrations)).toEqual({ applied: ['0010_prompt_reveal', '0011_academic_calendar_real_sessions', '0012_rt_absent_term_energy', '0013_gems', '0014_behaviour_lives', '0015_quarterly_observation_rubric', '0016_group_term_close_xlsx', '0017_avatar_core'] });
+       expect(migrateDatabase(db, migrations)).toEqual({ applied: ['0010_prompt_reveal', '0011_academic_calendar_real_sessions', '0012_rt_absent_term_energy', '0013_gems', '0014_behaviour_lives', '0015_quarterly_observation_rubric', '0016_group_term_close_xlsx', '0017_avatar_core', '0018_m9_boutique'] });
     expect(db.prepare('SELECT id,kind,prompt,prompt_revealed AS promptRevealed FROM minigame_sessions WHERE id=?').get(ids.promptDeck)).toEqual({ id: ids.promptDeck, kind: 'PROMPT_DECK', prompt: 'Legacy prompt', promptRevealed: 1 });
     db.prepare(`INSERT INTO classroom_challenges (id,owner_teacher_id,group_id,title,description,target,status,show_on_projection,created_at,updated_at)
       VALUES (?,?,?,?,?,?,?,?,?,?)`).run('00000000-0000-4000-8000-000000000208', ids.teacher, ids.group, 'Paused challenge', '', 2, 'PAUSED', 1, at, at);

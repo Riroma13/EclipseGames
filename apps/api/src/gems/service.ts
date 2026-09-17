@@ -57,7 +57,24 @@ function movement(db: Database.Database, input: { id?:string; studentId:string; 
 function activeFunding(db: Database.Database, studentId: string, yearId: string, currency: string, cost: number) {
   return db.prepare(`SELECT l.* FROM gem_ledger l LEFT JOIN gem_spend_allocations a ON a.funding_movement_id=l.id AND a.released_at IS NULL
     WHERE l.student_id=? AND l.academic_year_id=? AND l.currency=? AND l.amount=1 AND l.movement_kind IN ('GRANT','REINSTATE') AND a.id IS NULL
+    AND NOT EXISTS (SELECT 1 FROM boutique_spend_allocations ba WHERE ba.funding_movement_id=l.id)
     AND NOT EXISTS (SELECT 1 FROM gem_ledger n WHERE n.correction_of_id=l.id) ORDER BY l.created_at,l.id LIMIT ?`).all(studentId,yearId,currency,cost) as any[];
+}
+
+/** Allocates canonical Emerald units to a boutique purchase. The caller must
+ * already hold the immediate transaction and must have inserted the purchase. */
+export function allocateBoutiqueSpend(tx: GemSourceTx, input: { purchaseId:string; ownerTeacherId:string; studentId:string; academicYearId:string; cost:1|2|3; requestKey:string; requestFingerprint:string }) {
+  assertGemSourceTransaction(tx);
+  const funds = activeFunding(tx.db, input.studentId, input.academicYearId, 'EMERALD', input.cost);
+  if (funds.length !== input.cost) throw new ApiError('INSUFFICIENT_EMERALDS', 409, 'Insufficient Emeralds.');
+  const ids: string[] = [];
+  for (let index = 0; index < funds.length; index += 1) {
+    const spendId = movement(tx.db, { studentId: input.studentId, academicYearId: input.academicYearId, currency: 'EMERALD', amount: -1, kind: 'SPEND', sourceKind: 'REDEMPTION', sourceId: `redemption:boutique:${input.purchaseId}`, family: `redemption:${input.purchaseId}`, unit: index + 1, owner: input.ownerTeacherId, requestKey: input.requestKey, requestFingerprint: input.requestFingerprint });
+    tx.db.prepare('INSERT INTO boutique_spend_allocations (id,purchase_id,funding_movement_id,spend_movement_id,created_at) VALUES (?,?,?,?,?)').run(randomUUID(), input.purchaseId, funds[index].id, spendId, now());
+    ids.push(spendId);
+  }
+  const balance = (tx.db.prepare("SELECT COALESCE(SUM(amount),0) AS value FROM gem_ledger WHERE student_id=? AND academic_year_id=? AND currency='EMERALD'").get(input.studentId, input.academicYearId) as { value:number }).value;
+  return { spendMovementIds: ids, emeraldBalance: Number(balance) };
 }
 function ownedStudent(db: Database.Database, owner: string, studentId: string) {
   const row = db.prepare(`SELECT s.id,g.academic_year_id AS academicYearId FROM students s JOIN groups g ON g.id=s.group_id WHERE s.id=? AND g.owner_teacher_id=?`).get(studentId,owner) as any;

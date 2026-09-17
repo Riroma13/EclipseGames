@@ -13,9 +13,12 @@ export type RtRoster = { sessionId: string; termId: string; students: Array<{ st
 export type RtSummary = { studentId: string; termId: string; average: number | null; energy: 'CRITICAL'|'LOW'|'STABLE'|'HIGH'|'MAXIMUM' | null; streak: number };
 export type TeacherStudent = { id: string; groupId: string; realName: string; alias: string; avatar: string; specialty: string | null; archivedAt: string | null };
 export type AvatarProfile = { faceId: string; skinToneId: string; hairId: string; featureId: string; clothingId: string; accessoryId: string; frameId: string; backgroundId: string };
-export type AvatarCatalogue = { version: 'm7-v1'; categories: Array<{ id: keyof AvatarProfile; label: string; items: Array<{ id: string; label: string }> }> };
+export type AvatarCatalogue = { version: 'm7-v1'|'m9-v1'; categories: Array<{ id: keyof AvatarProfile; label: string; items: Array<{ id: string; label: string; order?: number; access?: { kind:'BASE' } | { kind:'BOUTIQUE'; currency:'EMERALD'; cost:1|2|3; minLevel:number; requiredSpecialtyCategory:XpCategory|null; availableFromTerm:'T1'|'T2'|'T3' } }> }> };
 export type TeacherAvatar = { studentId:string; alias:string; specialty:string|null; specialtyCategory:XpCategory|null; academicYearId:string; annualEffectiveXp:number; level:1|2|3|4|5|6|7|8; progress:XpSummary['progress']; badges:XpSummary['badges']; revision:number; profile:AvatarProfile; updatedAt:string; editable:boolean };
 export type AvatarHistory = { revision:number; operation:'BACKFILL'|'CREATE'|'UPDATE'|'REVERT'; revertedFromRevision:number|null; reason:string|null; actorTeacherId:string|null; createdAt:string; profile:AvatarProfile };
+export type BoutiqueItem = { id:string; category:keyof AvatarProfile; label:string; cost:1|2|3; minLevel:number; requiredSpecialtyCategory:XpCategory|null; availableFromTerm:'T1'|'T2'|'T3'; owned:boolean; equipped:boolean; status:'AVAILABLE'|'LOCKED_LEVEL'|'LOCKED_SPECIALTY'|'LOCKED_TERM' };
+export type BoutiqueState = { studentId:string; academicYearId:string; catalogueVersion:'m9-v1'; currentTerm:'T1'|'T2'|'T3'|null; emeraldBalance:number; editable:boolean; items:BoutiqueItem[] };
+export type BoutiquePurchase = { purchaseId:string; studentId:string; academicYearId:string; itemId:string; currency:'EMERALD'; cost:1|2|3; emeraldBalance:number; purchasedAt:string; replay:boolean };
 export type ApiFailure = Error & { status?: number; code?: string };
 export type XpCategory = 'COMMUNICATION'|'PRECISION'|'CONSISTENCY'|'COLLABORATION';
 export type XpSummary = { studentId:string; academicYearId:string; annualEffectiveXp:number; level:1|2|3|4|5|6|7|8; progress:{isMaxLevel:false;progressPercent:number;nextLevel:2|3|4|5|6|7|8;xpToNextLevel:number}|{isMaxLevel:true;progressPercent:100;nextLevel:null;xpToNextLevel:null}; badges:Array<{category:XpCategory;label:string;unlockedAt:string}> };
@@ -66,6 +69,8 @@ export const workspaceApi = {
   avatarCatalog: (signal?:AbortSignal) => get<AvatarCatalogue>('/api/v1/avatar-catalog', signal, 'no-store'),
   avatar: (studentId:string, academicYearId:string, signal?:AbortSignal) => get<TeacherAvatar>(`/api/v1/students/${studentId}/avatar?academicYearId=${academicYearId}`, signal, 'no-store'),
   avatarHistory: (studentId:string, signal?:AbortSignal) => get<AvatarHistory[]>(`/api/v1/students/${studentId}/avatar/history`, signal, 'no-store'),
+  boutique: (studentId:string, academicYearId:string, signal?:AbortSignal) => get<BoutiqueState>(`/api/v1/students/${studentId}/boutique?academicYearId=${academicYearId}`, signal, 'no-store'),
+  purchaseBoutique: (studentId:string, academicYearId:string, itemId:string, sessionId:string|null, key:string, signal?:AbortSignal) => post<BoutiquePurchase>(`/api/v1/students/${studentId}/boutique-purchases?academicYearId=${academicYearId}`, { itemId, sessionId }, key, signal),
   saveAvatar: (studentId:string, academicYearId:string, expectedRevision:number, profile:AvatarProfile, key:string, signal?:AbortSignal) => fetchAvatar<TeacherAvatar>(`/api/v1/students/${studentId}/avatar?academicYearId=${academicYearId}`, 'PUT', { expectedRevision, profile }, key, signal),
   revertAvatar: (studentId:string, academicYearId:string, expectedRevision:number, targetRevision:number, reason:string, key:string, signal?:AbortSignal) => fetchAvatar<TeacherAvatar>(`/api/v1/students/${studentId}/avatar/revert?academicYearId=${academicYearId}`, 'POST', { expectedRevision, targetRevision, reason }, key, signal),
   // Year metadata controls the private historical/read-only boundary. It must

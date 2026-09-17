@@ -30,12 +30,12 @@ export function registerAvatarRoutes(app: FastifyInstance, db: Database.Database
   app.get('/api/v1/students/:studentId/avatar/history', { preHandler: session }, async (request) => avatar.getHistory(db, teacherId(request), studentId(request)).map(toAvatarHistory));
   app.put('/api/v1/students/:studentId/avatar', { preHandler: [session, validateBody(updateSchema)] }, async (request) => {
     const body = updateSchema.parse(request.body);
-    const value = await avatar.updateAvatar(db, { ownerTeacherId: teacherId(request), studentId: studentId(request), academicYearId: academicYearId(request), expectedRevision: body.expectedRevision, idempotencyKey: key(request), profile: body.profile });
+     const value = await avatar.updateAvatar(db, { ownerTeacherId: teacherId(request), studentId: studentId(request), academicYearId: academicYearId(request), expectedRevision: body.expectedRevision, idempotencyKey: key(request), profile: body.profile, availability: avatar.createContextualAvailability(db, teacherId(request)) });
     return teacherDto(db, request, value);
   });
   app.post('/api/v1/students/:studentId/avatar/revert', { preHandler: [session, validateBody(revertSchema)] }, async (request) => {
     const body = revertSchema.parse(request.body);
-    const value = avatar.revertAvatar(db, { ownerTeacherId: teacherId(request), studentId: studentId(request), academicYearId: academicYearId(request), expectedRevision: body.expectedRevision, targetRevision: body.targetRevision, reason: body.reason, idempotencyKey: key(request) });
+     const value = avatar.revertAvatar(db, { ownerTeacherId: teacherId(request), studentId: studentId(request), academicYearId: academicYearId(request), expectedRevision: body.expectedRevision, targetRevision: body.targetRevision, reason: body.reason, idempotencyKey: key(request), availability: avatar.createContextualAvailability(db, teacherId(request)) });
     return teacherDto(db, request, value as ReturnType<typeof avatar.getAvatar>);
   });
 }

@@ -7,7 +7,7 @@ import BetterSqlite3 from 'better-sqlite3';
 import { migrateDatabase } from '../db/migrate.js';
 import { migrations } from '../db/migrations.js';
 import { createStudents } from '../roster/service.js';
-import { getAvatar, getHistory, revertAvatar, updateAvatar } from './service.js';
+import { createContextualAvailability, getAvatar, getHistory, revertAvatar, updateAvatar } from './service.js';
 import { availability } from './domain.js';
 
 const dbs: BetterSqlite3.Database[] = [];
@@ -61,7 +61,7 @@ describe('avatar persistence and service', () => {
 
   it('forwards the real student ID to avatar availability checks and awaits delayed decisions', async () => {
     const { db, studentId } = setup();
-    const allows = vi.spyOn(availability, 'allows').mockImplementation(async (_checkedStudentId, itemId) => {
+    const allows = vi.spyOn(availability, 'allows').mockImplementation(async ({ studentId: checkedStudentId, itemId }) => {
       await new Promise((resolve) => setTimeout(resolve, 1));
       return itemId !== 'face-invalid';
     });
@@ -69,7 +69,7 @@ describe('avatar persistence and service', () => {
     await updateAvatar(db, input(studentId, '00000000-0000-4000-8000-000000000007'));
 
     expect(allows).toHaveBeenCalledTimes(8);
-    expect(allows.mock.calls.map(([checkedStudentId]) => checkedStudentId)).toEqual(Array(8).fill(studentId));
+    expect(allows.mock.calls.map(([context]) => context.studentId)).toEqual(Array(8).fill(studentId));
   });
 
   it('rejects a profile when async availability denies an item', async () => {
@@ -77,6 +77,23 @@ describe('avatar persistence and service', () => {
     vi.spyOn(availability, 'allows').mockResolvedValue(false);
 
     await expect(updateAvatar(db, input(studentId, '00000000-0000-4000-8000-000000000008'))).rejects.toThrow(/catalogue/i);
+    expect(getHistory(db, 'teacher', studentId, 'year')).toHaveLength(1);
+  });
+
+  it('uses student/year ownership rather than catalogue membership for boutique items', async () => {
+    const { db, studentId } = setup();
+    const contextual = createContextualAvailability(db, 'teacher');
+    expect(contextual.allows({ studentId, academicYearId: 'year', itemId: 'hair-braids', currentTerm: 'T1', level: 8, specialtyCategory: null, owned: true })).toBe(false);
+    expect(contextual.allows({ studentId, academicYearId: 'year', itemId: 'face-human', currentTerm: null, level: 1, specialtyCategory: null, owned: false })).toBe(true);
+    await expect(updateAvatar(db, { ...input(studentId, '00000000-0000-4000-8000-000000000009'), availability: contextual, profile: { ...profile, hairId: 'hair-braids' } })).rejects.toThrow(/unavailable/i);
+    expect(getHistory(db, 'teacher', studentId, 'year')).toHaveLength(1);
+  });
+
+  it('validates revert snapshots through the same availability adapter', async () => {
+    const { db, studentId } = setup();
+    db.prepare('UPDATE avatar_profile_versions SET hair_id=? WHERE profile_student_id=? AND revision=1').run('hair-braids', studentId);
+    const contextual = { allows: ({ itemId }: { itemId:string }) => itemId !== 'hair-braids' };
+    expect(() => revertAvatar(db, { ...input(studentId, '00000000-0000-4000-8000-000000000010'), availability: contextual, targetRevision: 1, reason: 'Restaurar snapshot' })).toThrow(/unavailable/i);
     expect(getHistory(db, 'teacher', studentId, 'year')).toHaveLength(1);
   });
 
