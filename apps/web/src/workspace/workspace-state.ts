@@ -10,7 +10,7 @@ export type WorkspaceNonUndoableActionResult = Readonly<{ message: string; undo?
 export type WorkspaceUndoableAction = Readonly<{ id: string; label: string; undoPolicy?: Exclude<UndoPolicy, { kind: 'none' }>; perform: (context: WorkspaceStudentContext) => Promise<WorkspaceActionResult> }>;
 export type WorkspaceNonUndoableAction = Readonly<{ id: string; label: string; undoPolicy: Readonly<{ kind: 'none' }>; perform: (context: WorkspaceStudentContext) => Promise<WorkspaceNonUndoableActionResult> }>;
 export type WorkspaceAction = WorkspaceUndoableAction | WorkspaceNonUndoableAction;
-export type UndoOpportunity = Readonly<{ actionId: string; studentId: string; groupId: string; expiresAt: number; label: string; undo: WorkspaceUndoCapability['undo'] }>;
+export type UndoOpportunity = Readonly<{ actionId: string; studentId: string; groupId: string; expiresAt: number; label: string; undo: WorkspaceUndoCapability['undo']; result?: Readonly<{ message: string }> }>;
 
 export type WorkspaceState = Readonly<{ search: string; selectedStudentId: string | null; feedback: string; undo: UndoOpportunity | null; requestGeneration: number; pendingActionId: string | null }>;
 export type WorkspaceEvent =
@@ -39,7 +39,7 @@ export function reducer(state: WorkspaceState, event: WorkspaceEvent): Workspace
       return { ...state, pendingActionId: null, feedback: event.message ?? state.feedback, undo: event.undo };
     case 'undo-expired': return { ...state, undo: null, feedback: 'Undo period ended.' };
     case 'undo-pending': return { ...state, pendingActionId: '__undo__' };
-    case 'undo-result': return { ...state, pendingActionId: null, undo: null, feedback: event.message };
+    case 'undo-result': return { ...state, pendingActionId: null, undo: state.undo ? { ...state.undo, result: { message: event.message } } : null, feedback: event.message };
     case 'selection-invalidated': return { ...state, selectedStudentId: null, undo: null, pendingActionId: null, feedback: 'The selected student is no longer available.' };
   }
 }

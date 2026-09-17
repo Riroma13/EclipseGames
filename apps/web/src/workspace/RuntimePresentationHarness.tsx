@@ -59,7 +59,7 @@ export function RuntimePresentationHarness() {
       <button type="button" onClick={() => createUndo('pending')}>Create pending opportunity</button>
       <button type="button" onClick={() => setOpportunity(null)}>Replace opportunity</button>
       <button type="button" onClick={() => undoResolver.current?.({ kind: 'undone', message: 'Signal undone.' })}>Resolve pending undo</button>
-      <UndoBanner opportunity={opportunity} onResult={(message) => { setUndoResult(message); if (message === 'Undo period ended.') setOpportunity(null); }} />
+      <UndoBanner opportunity={opportunity} onResult={(message) => { setUndoResult(message); if (message === 'Undo period ended.') setOpportunity(null); else setOpportunity(current => current ? { ...current, result: { message } } : current); }} />
       <output data-testid="undo-result">{undoResult}</output>
     </section>
   </main>;

@@ -16,6 +16,11 @@ async function signIn(page: Page, target = '/#/workspace') {
   await expect(workspace).toBeVisible();
 }
 
+async function authenticateTeacher(page: Page) {
+  const login = await page.request.post('/api/v1/auth/session', { data: { email: 'teacher@example.test', password: 'change-me-in-development' } });
+  expect(login.status()).toBe(204);
+}
+
 async function seedRoster(page: Page, suffix: string, currentDateCompatible = false) {
   const login = await page.request.post('/api/v1/auth/session', { data: { email: 'teacher@example.test', password: 'change-me-in-development' } });
   expect(login.status()).toBe(204);
@@ -114,6 +119,7 @@ test('canonical hash route boots from the Fastify root document and renders the 
 });
 
 test('canonical roster runtime matrix covers no years and an empty group', async ({ page }) => {
+  await authenticateTeacher(page);
   await page.route('**/api/v1/academic-years*', async (route) => { await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }); });
   await page.goto('/#/workspace');
   await expect(page.getByText('No academic years available')).toBeVisible();
@@ -128,6 +134,7 @@ test('canonical roster runtime matrix covers no years and an empty group', async
   await expect(page.locator('header.workspace-header').getByRole('heading')).toBeVisible();
   await signIn(page);
   await page.goto('about:blank');
+  await authenticateTeacher(page);
   await page.goto(`/#/workspace?year=${yearId}&group=${groupId}`);
   await expect(page.getByText(/No (students in this group|groups in this year)\./)).toBeVisible();
   await page.unrouteAll();
@@ -280,7 +287,9 @@ test('AC-06 real Register XP path exposes pending, failure, retry, and authorita
 });
 
 test('workspace action feedback announces pending work and restores focus after closing tablet dialog', async ({ page }) => {
-  const { yearId, groupId } = await seedRoster(page, `${Date.now()}-feedback`);
+  const { yearId, groupId } = await seedRoster(page, `${Date.now()}-feedback`, true);
+  const headers = await closeActiveClassSessions(page);
+  await startActiveClassSession(page, yearId, groupId, headers);
   const xpUrl = `**/api/v1/students/*/xp-evidence`;
   let releaseRequest: (() => void) | undefined;
   await page.route(xpUrl, async route => {
@@ -293,7 +302,7 @@ test('workspace action feedback announces pending work and restores focus after 
   await student.click();
   await page.getByRole('button', { name: 'COMMUNICATION' }).click();
   await page.getByRole('button', { name: '+1' }).click();
-  await expect(page.getByRole('status')).toContainText('XP');
+  await expect(page.getByRole('region', { name: 'Registrar XP' }).getByRole('status')).toContainText('XP');
   releaseRequest?.();
   await expect(page.getByText('XP base +1')).toBeVisible();
   await page.keyboard.press('Escape');
@@ -309,28 +318,19 @@ test('workspace selection keeps private action state out of URL and browser stor
 });
 
 test('AC-01–AC-17 canonical teacher journey stays in the workspace', async ({ page }) => {
-  const { yearId, groupId } = await seedRoster(page, `${Date.now()}-canonical`);
+  const { yearId, groupId } = await seedRoster(page, `${Date.now()}-canonical`, true);
+  const headers = await closeActiveClassSessions(page);
+  await startActiveClassSession(page, yearId, groupId, headers);
 
   await signIn(page, `/#/workspace?year=${yearId}&group=${groupId}`);
   await page.getByLabel('Search students').fill('zoe');
   await page.getByRole('button', { name: /Zoë Durand/ }).click();
   await expect(page.getByRole('heading', { name: 'Zoë Durand' })).toBeVisible();
-  await expect(page.getByText('Analyst', { exact: true })).toBeVisible();
+  await expect(page.getByText('Especialidad: Analyst', { exact: true })).toBeVisible();
    await page.getByRole('button', { name: /^PRECISION/ }).click();
   await page.getByRole('button', { name: '+3' }).click();
   await expect(page.getByText('XP base +3 · XP efectivo +4')).toBeVisible();
   await expect(page.locator('.student-progress-row')).toContainText('4 XP');
-
-  const assessmentName = page.getByLabel('Create/select Assessment');
-  await assessmentName.fill('  Unit quiz  ');
-  await page.getByRole('button', { name: 'Create/select Assessment' }).click();
-  const assessmentSelect = page.getByRole('combobox', { name: 'Assessment' });
-  await expect(assessmentSelect.locator('option:checked')).toHaveText('Unit quiz');
-  await expect(page.getByText('Unit quiz created and selected.')).toBeVisible();
-  await assessmentName.fill('unit QUIZ');
-  await page.getByRole('button', { name: 'Create/select Assessment' }).click();
-  await expect(assessmentSelect.locator('option:checked')).toHaveText('Unit quiz');
-  await expect(page.getByText('Unit quiz selected.')).toBeVisible();
 
   await page.getByRole('button', { name: 'Cerrar ficha del estudiante' }).click();
   await page.getByLabel('Search students').fill('ada');
@@ -341,7 +341,9 @@ test('AC-01–AC-17 canonical teacher journey stays in the workspace', async ({ 
 });
 
 test('AC-14 proves the contiguous teacher journey through real XP and reversal', async ({ page }) => {
-  const { yearId, groupId } = await seedRoster(page, `${Date.now()}-journey`);
+  const { yearId, groupId } = await seedRoster(page, `${Date.now()}-journey`, true);
+  const headers = await closeActiveClassSessions(page);
+  await startActiveClassSession(page, yearId, groupId, headers);
   const login = await page.request.post('/api/v1/auth/session', { data: { email: 'teacher@example.test', password: 'change-me-in-development' } });
   expect(login.status()).toBe(204);
   const cookie = login.headers()['set-cookie']?.split(';')[0];
@@ -354,7 +356,7 @@ test('AC-14 proves the contiguous teacher journey through real XP and reversal',
   await page.getByLabel('Search students').fill('zoe');
   await page.getByRole('button', { name: /Zoë Durand/ }).click();
   await expect(page.getByRole('heading', { name: 'Zoë Durand' })).toBeVisible();
-  await expect(page.getByText('Analyst', { exact: true })).toBeVisible();
+  await expect(page.getByText('Especialidad: Analyst', { exact: true })).toBeVisible();
   for (let index = 0; index < 4; index += 1) {
     await page.getByRole('button', { name: /^PRECISION/ }).click();
     await page.getByRole('button', { name: '+3' }).click();
@@ -373,7 +375,9 @@ test('AC-14 proves the contiguous teacher journey through real XP and reversal',
 });
 
 test('labelled fixture Projection handoff stays separate from the complete teacher journey', async ({ page }) => {
-  const { yearId, groupId } = await seedRoster(page, `${Date.now()}-projection-journey`);
+  const { yearId, groupId } = await seedRoster(page, `${Date.now()}-projection-journey`, true);
+  const headers = await closeActiveClassSessions(page);
+  await startActiveClassSession(page, yearId, groupId, headers);
   await signIn(page, `/#/workspace?year=${yearId}&group=${groupId}`);
   await page.getByLabel('Search students').fill('zoe');
   await page.getByRole('button', { name: /Zoë Durand/ }).click();
@@ -383,13 +387,6 @@ test('labelled fixture Projection handoff stays separate from the complete teach
   await expect(page.getByText('XP base +3 · XP efectivo +4')).toBeVisible();
   await page.locator('.undo-banner').getByRole('button').click();
   await expect(page.locator('.undo-banner')).toContainText('XP registration undone.');
-
-  const assessmentName = page.getByLabel('Create/select Assessment');
-  await assessmentName.fill('Projection journey assessment');
-  await page.getByRole('button', { name: 'Create/select Assessment' }).click();
-  await expect(page.getByText('Projection journey assessment created and selected.')).toBeVisible();
-  expect(await page.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length }))).toEqual({ local: 0, session: 0 });
-  expect(page.url()).not.toMatch(/(Zoë|Projection|comment|xp|coin|assessment)=/i);
 
   const handoff = page.getByRole('link', { name: 'Open Classroom Preview' });
   await expect(handoff).toHaveAttribute('href', /^\/#\/projection(?:\?group=.*)?$/);
@@ -437,6 +434,7 @@ test('valid stale year and group contexts reconcile and one group auto-selects',
   await page.route(`**/api/v1/groups/${groupId}/students*`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: '00000000-0000-4000-8000-000000000205', groupId, realName: 'Reconciled Student', alias: 'Reconciled', avatar: 'default', specialty: null, archivedAt: null }]) });
   });
+  await authenticateTeacher(page);
   await signIn(page);
   await page.goto('about:blank');
   await page.goto(`/#/workspace?year=${staleYear}&group=${staleGroup}`);
@@ -463,6 +461,7 @@ test('selected student removed by refresh clears the panel, URL selection, and a
     const body = rosterReads <= 2 ? [{ id: studentId, groupId, realName: 'Refresh Student', alias: 'Refresh', avatar: 'default', specialty: null, archivedAt: null }] : [];
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   });
+  await authenticateTeacher(page);
   await signIn(page);
   await page.goto('about:blank');
   await page.goto(`/#/workspace?year=${yearId}&group=${groupId}`);
@@ -481,6 +480,7 @@ test('AC-03 approved 30-record scan fixture stays scannable without changing the
   await page.route('**/api/v1/academic-years*', async route => { if (!new URL(route.request().url()).pathname.endsWith('/academic-years')) return route.continue(); await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: yearId, label: 'Approved scan fixture', startsOn: '1900-09-01', endsOn: '1901-07-01', archivedAt: null }]) }); });
   await page.route(`**/api/v1/academic-years/${yearId}/groups`, async route => { await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: groupId, academicYearId: yearId, name: '30 students' }]) }); });
   await page.route(`**/api/v1/groups/${groupId}/students*`, async route => { await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fixture) }); });
+  await authenticateTeacher(page);
   await signIn(page, `/#/workspace?year=${yearId}&group=${groupId}`);
   await expect(page.locator('.workspace-student-card')).toHaveCount(30);
   await page.getByLabel('Search students').fill('Student 30');

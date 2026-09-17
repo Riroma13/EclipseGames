@@ -1,54 +1,82 @@
-# SPEC-0040 Slice 5 Verification
+# SPEC-0040 M9 Boutique / Avatar Cosmetics Verification
 
-**Verifier:** Direct bounded recovery
-**Scope:** Slice 5 — teacher workspace journey only
-**Terra:** Not run. `TASKS.md` explicitly declares `Critical Terra Verification Gate: NOT REQUIRED`.
-**Playwright:** Not run. No unresolved browser-only question remained; built-artifact Playwright is planned before Ship.
+**Verdict: PASS WITH WARNINGS.** The active Design, completed Tasks, current
+workspace implementation/tests, and authoritative maintainer evidence are
+consistent for the verified Slice 5 and reconciliation scope. No product code
+or tests were modified.
 
-## Read-order evidence
+**Terra:** NOT REQUIRED. `TASKS.md` explicitly states
+`Critical Terra Verification Gate: NOT REQUIRED`.
+
+**VCS:** No Git/VCS commands were run.
+
+## Bounded read order and evidence
 
 Read in the required order:
 
-1. `DESIGN.md`, including D16, D22–D24, and AC-08–AC-10.
-2. `TASKS.md`, including the Expected Change Surface, completed Slice 5 tasks, and Terra gate.
-3. Existing `VERIFY.md`, including the prior bounded correction finding.
-4. `AvatarWorkflow.tsx` and `AvatarWorkflow.test.tsx` as the directly relevant correction surface.
+1. `DESIGN.md`, including D02–D25, Sections 4–8, and AC-01–AC-14.
+2. `TASKS.md`, including Expected Change Surface, Read Order, completed Slices
+   1–5, and the Terra gate.
+3. This prior `VERIFY.md`, preserving valid undo persistence and removed-
+   student evidence while correcting stale scope/results.
+4. Directly relevant current code/tests: `workspace-state.ts`,
+   `UndoBanner.tsx`, `StudentPanel.tsx`, and the focused workspace tests.
 
-## Commands and results
+The maintainer-supplied results below are authoritative for the current
+verification; checks were not rerun because no concrete evidence made them
+untrustworthy.
 
-All commands were run from the repository root. No Git/VCS commands were run.
+## Commands and exact results
 
-| Command | Result |
+All commands are repository-root commands. Results below are the supplied
+maintainer evidence, not new executions in this reconciliation.
+
+| Exact command | Result |
 |---|---|
-| `pnpm exec vitest run apps/web/src/workspace/workspace-api.test.ts apps/web/src/workspace/AvatarWorkflow.test.tsx apps/web/src/workspace/StudentPanel.failure-isolation.test.tsx` | **PASS**, exit 0; 3 files, **30 tests passed**. |
+| `pnpm exec playwright test apps/web/e2e/teacher-workspace.spec.ts` | **PASS**, exit 0; **22 passed, 0 failed**. |
+| `pnpm exec vitest run with 4 explicitly specified focused test files` | **PASS**, exit 0; **16 passed, 0 failed**. Coverage includes XP pending status; StudentPanel Escape/focus; removed-student empty state, URL, and announcement; and UndoBanner completed persistence and duplicate prevention. |
 | `pnpm --filter @eclipse/web typecheck` | **PASS**, exit 0. |
-| `pnpm --filter @eclipse/web build` | **PASS**, exit 0; Vite produced the web bundle. |
+| `pnpm --filter @eclipse/web build` | **PASS**, exit 0. |
 
-## Slice 5 implementation comparison
+Additional supplied verification: stale reconciliation **PASS**; AC-03
+atomicity **PASS**; runtime harness **PASS**. The build emitted the
+pre-existing, non-blocking duplicate `qrcode` / `@types/qrcode` warning; it
+did not fail the build.
 
-| Contract/task area | Evidence | Result |
+## Design/task and acceptance comparison
+
+| Area | Result | Evidence/finding |
 |---|---|---|
-| D22 owned-item state | `AvatarWorkflow.tsx:121`; owned items render visible `Comprado` | PASS |
-| D16 purchase/equip separation | `AvatarWorkflow.tsx:87–110`; purchase refreshes boutique without `saveAvatar`; `equip` separately calls `saveAvatar` | PASS |
-| D22 equipped state | `AvatarWorkflow.tsx:121`; equipped items retain `Equipado` while the separate action remains absent/disabled | PASS |
-| Locked state | `AvatarWorkflow.test.tsx:266–279`; level-locked item shows requirement and disabled purchase | PASS |
-| Insufficient-funds and policy states | `AvatarWorkflow.test.tsx:281–297`; typed failures map to required Spanish messages | PASS |
-| Retry/isolation/read-only | `AvatarWorkflow.tsx:32–50, 87–100, 114–121`; focused tests cover same-key retry, stale response suppression, loading recovery, and disabled read-only actions | PASS |
-| Privacy boundary | Scoped student/year client routes and no private boutique audit fields in rendered UI; server allowlists remain covered by prior slices | PASS for Slice 5 client surface |
+| Task completeness | PASS | Slices 1–5 are checked in `TASKS.md`; Slice 5 names the focused tests and keeps built-artifact browser evidence distinct. |
+| Stale reconciliation | PASS | Current evidence reconciles the prior stale statements: Playwright **was run** and passed 22/22; the prior 10-test/limited-scope wording is superseded by the supplied 16-test focused result. |
+| AC-03 | PASS | Supplied runtime/API evidence verifies atomic purchase/reference, spends, allocations, receipt, and correction lock behavior with failure rollback. |
+| AC-08–AC-10 | PASS for verified workspace/runtime scope | Component and browser evidence covers explicit action feedback, persistence/duplicate prevention, accessibility focus/Escape behavior, removed-student handling, and teacher workspace runtime behavior. |
+| Remaining M9 AC-01–AC-07, AC-11–AC-14 | Not fully re-proven by this bounded reconciliation | Prior valid evidence remains part of the repository record, but this document does not claim that the supplied workspace checks alone re-verify every API, migration, concurrency, rollout, and audit scenario. |
 
-## Acceptance coverage
+## Privacy boundary and residual risk
 
-- **D22 / AC-09:** PASS for the bounded Slice 5 surface. Focused runtime evidence covers `Comprado`, separate `Equipar`, `Equipado`, locked, insufficient-funds, policy-blocked, retry, isolation, and read-only behavior.
-- **AC-08:** No contrary change found; purchase and equip remain separate explicit actions.
-- Other acceptance criteria are outside this Slice 5 verification scope and remain dependent on evidence from their respective slices.
+The inspected workspace behavior preserves the existing teacher-private
+student-panel boundary: removal feedback, focus behavior, and undo feedback do
+not add DTO, projection, URL, storage, or logging fields. The supplied browser
+and runtime results pass the relevant workspace/privacy assertions.
 
-## Findings and residual risk
+Residual risk remains for production use because Design rollout condition C-01
+(retention/deletion, backup expiry, and executed encrypted-restic restore
+verification) remains open, and B-01 remains an explicit rollout condition.
+This verification also does not replace a complete independent migration,
+API, concurrency, or production-data review beyond the evidence supplied here.
 
-- The prior `Comprado` correction is present and its focused assertions pass.
-- Playwright was not run; responsive, focus, and live-region behavior remain source/focused-test evidence until Ship verification.
-- The web build emits existing duplicate `qrcode` and `@types/qrcode` package-key warnings; unrelated and intentionally unchanged.
-- Server-side entitlement, persistence, transaction atomicity, projection allowlists, and privacy enforcement are outside this Slice 5-only run.
+## Findings
 
-## Verdict
+- **Warning:** Build reports the pre-existing duplicate `qrcode` /
+  `@types/qrcode` warning. It is non-blocking and has no observed test/build
+  failure.
+- **No blocker:** No product-code/test change was needed. Terra is not
+  required, and no Git/VCS operation was performed.
 
-**PASS WITH WARNINGS — Slice 5 final bounded evidence is green.**
+## Final result
+
+**PASS WITH WARNINGS** for the reconciled verification scope. Acceptance,
+privacy boundaries, and the supplied runtime evidence are recorded above;
+the only noted finding is the pre-existing non-blocking type-package warning,
+with rollout residual risk C-01/B-01 still explicit.

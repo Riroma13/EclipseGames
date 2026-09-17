@@ -28,7 +28,7 @@ describe('workspace state', () => {
     expect(makeUndoOpportunity(action(), { message: 'Done' }, context, 100)).toBeNull();
     expect(makeUndoOpportunity(action({ kind: 'none' }), { message: 'Done', undo: { label: 'Undo', undo } }, context, 100)).toBeNull();
   });
-  it('clears an opportunity on selection, expiry, replacement, and undo result', () => {
+  it('clears an opportunity on selection, expiry, and replacement, but preserves its completed result', () => {
     const opportunity = { actionId: 'a', studentId: context.studentId, groupId: context.groupId, expiresAt: 4, label: 'Undo', undo: vi.fn() };
     let state = reducer({ ...initialWorkspaceState, undo: opportunity }, { type: 'select', studentId: context.studentId });
     expect(state.undo).toBeNull();
@@ -36,7 +36,8 @@ describe('workspace state', () => {
     expect(state.feedback).toBe('Undo period ended.');
     state = reducer({ ...initialWorkspaceState, undo: opportunity }, { type: 'action-result', message: 'New', undo: null });
     expect(state.undo).toBeNull();
-    expect(reducer({ ...initialWorkspaceState, undo: opportunity, pendingActionId: '__undo__' }, { type: 'undo-result', message: 'Could not undo Award' }).feedback).toContain('Could not');
+    const completed = reducer({ ...initialWorkspaceState, undo: opportunity, pendingActionId: '__undo__' }, { type: 'undo-result', message: 'XP registration undone.' });
+    expect(completed).toMatchObject({ pendingActionId: null, feedback: 'XP registration undone.', undo: { result: { message: 'XP registration undone.' } } });
   });
 
   it('resets search, selection, feedback, undo, and pending work for every new context', () => {
@@ -59,11 +60,11 @@ describe('workspace state', () => {
     expect(sameStudentContext(context, context)).toBe(true);
   });
 
-  it('keeps undo pending until the callback returns and then removes it', () => {
+  it('keeps undo pending until the callback returns and records the completed result', () => {
     const opportunity = { actionId: 'a', studentId: context.studentId, groupId: context.groupId, expiresAt: 10, label: 'Undo', undo: vi.fn() };
     const pending = reducer({ ...initialWorkspaceState, undo: opportunity }, { type: 'undo-pending' });
     expect(pending.undo).toBe(opportunity);
     expect(pending.pendingActionId).toBe('__undo__');
-    expect(reducer(pending, { type: 'undo-result', message: 'The domain rejected this correction.' })).toMatchObject({ undo: null, pendingActionId: null, feedback: 'The domain rejected this correction.' });
+    expect(reducer(pending, { type: 'undo-result', message: 'The domain rejected this correction.' })).toMatchObject({ pendingActionId: null, feedback: 'The domain rejected this correction.', undo: { result: { message: 'The domain rejected this correction.' } } });
   });
 });
