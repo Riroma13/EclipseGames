@@ -6,6 +6,18 @@ import { isSelectedYearHistorical, requestedYearNeedsAuthoritativeLookup, reques
 afterEach(() => vi.restoreAllMocks());
 
 describe('workspace XP idempotency', () => {
+  it('loads boutique state privately and sends the purchase key/session tuple', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      if (String(input).includes('/boutique-purchases')) return new Response(JSON.stringify({ purchaseId: 'purchase', studentId: 'student', academicYearId: 'year', itemId: 'hair-braids', currency: 'EMERALD', cost: 1, emeraldBalance: 1, purchasedAt: '2026-09-17T08:00:00.000Z', replay: false }), { status: 201 });
+      return new Response(JSON.stringify({ studentId: 'student', academicYearId: 'year', catalogueVersion: 'm9-v1', currentTerm: 'T1', emeraldBalance: 2, editable: true, items: [] }), { status: 200 });
+    });
+    await workspaceApi.boutique('student', 'year');
+    await workspaceApi.purchaseBoutique('student', 'year', 'hair-braids', null, '00000000-0000-4000-8000-000000000040');
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ cache: 'no-store' });
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/v1/students/student/boutique-purchases?academicYearId=year');
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ headers: { 'Idempotency-Key': '00000000-0000-4000-8000-000000000040' } });
+    expect(JSON.parse((fetchMock.mock.calls[1][1] as RequestInit).body as string)).toEqual({ itemId: 'hair-braids', sessionId: null });
+  });
   it('uses the private rubric routes and supplied idempotency key', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ state:'OPEN' }), { status: 200 }));
     await workspaceApi.saveRubric('student', 'term', 'year', { expectedRevision: 0, overrides: { COMMUNICATION: 4, PRECISION: null, CONSISTENCY: null, COLLABORATION: null }, comment: 'private' }, '00000000-0000-4000-8000-000000000020');

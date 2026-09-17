@@ -49,6 +49,13 @@ export function migrateDatabase(
           assertAvatarPreflight(db, applied);
           db.exec(migration.sql);
           assertAvatarPostflight(db);
+        } else if (migration.id === '0018_m9_boutique') {
+          stage(testOptions, 'preflight');
+          assertBoutiquePreflight(db, applied);
+          executeBoutiqueSql(db, migration.sql, testOptions);
+          stage(testOptions, 'postflight');
+          assertBoutiquePostflight(db);
+          stage(testOptions, 'migration-marker-before-commit');
         } else {
           db.exec(migration.sql);
         }
@@ -98,6 +105,38 @@ function assertAvatarPostflight(db: Database.Database) {
   const versions = (db.prepare('SELECT COUNT(*) AS count FROM avatar_profile_versions').get() as { count: number }).count;
   if (students !== profiles || students !== versions) throw new Error('0017_avatar_core did not create exactly one profile and revision per student.');
   if (db.prepare("SELECT 1 FROM avatar_profiles p LEFT JOIN avatar_profile_versions v ON v.profile_student_id=p.student_id AND v.revision=p.current_revision WHERE v.profile_student_id IS NULL").get()) throw new Error('0017_avatar_core created an invalid profile head.');
+}
+
+function assertBoutiquePreflight(db: Database.Database, applied: Set<string>) {
+  const expected = migrations.slice(0, 17).map(migration => migration.id);
+  if (expected.some(id => !applied.has(id)) || [...applied].some(id => !expected.includes(id))) throw new Error('0018_m9_boutique requires exactly the 0017 migration baseline.');
+  if (db.prepare("SELECT 1 FROM schema_migrations WHERE id='0018_m9_boutique'").get()) throw new Error('0018_m9_boutique marker already exists.');
+  if (db.prepare("SELECT 1 FROM sqlite_master WHERE name IN ('boutique_purchases','boutique_purchase_requests','boutique_spend_allocations')").get()) throw new Error('Boutique schema already exists without migration marker.');
+  assertIntegrity(db);
+  if (db.prepare("SELECT 1 FROM avatar_profile_versions WHERE face_id NOT IN ('face-human','face-fox','face-owl','face-cat','face-wolf') OR skin_tone_id NOT IN ('skin-light','skin-medium-light','skin-medium','skin-medium-dark','skin-dark') OR hair_id NOT IN ('hair-none','hair-short','hair-curly','hair-long') OR feature_id NOT IN ('feature-none','feature-glasses','feature-freckles') OR clothing_id NOT IN ('clothing-eclipse','clothing-field') OR accessory_id NOT IN ('accessory-none','accessory-pin') OR frame_id NOT IN ('frame-none','frame-orbit') OR background_id NOT IN ('background-eclipse','background-night')").get()) throw new Error('0018_m9_boutique found an unknown avatar profile value.');
+  if (db.prepare('SELECT 1 FROM avatar_profiles p LEFT JOIN avatar_profile_versions v ON v.profile_student_id=p.student_id AND v.revision=p.current_revision WHERE v.profile_student_id IS NULL').get()) throw new Error('0018_m9_boutique found an invalid profile head.');
+}
+
+function executeBoutiqueSql(db: Database.Database, sql: string, options: MigrationTestOptions) {
+  for (const statement of sql.split(';').map(value => value.trim()).filter(Boolean)) {
+    db.exec(statement);
+    const table = /^CREATE TABLE\s+(?:IF NOT EXISTS\s+)?([\w]+)/i.exec(statement)?.[1];
+    if (table) stage(options, `table:${table}`);
+    const index = /^CREATE\s+(?:UNIQUE\s+)?INDEX\s+([\w]+)/i.exec(statement)?.[1];
+    if (index) stage(options, `index:${index}`);
+  }
+}
+
+function assertBoutiquePostflight(db: Database.Database) {
+  assertIntegrity(db);
+  const versions = (db.prepare('SELECT COUNT(*) AS count FROM avatar_profile_versions').get() as { count: number }).count;
+  const profiles = (db.prepare('SELECT COUNT(*) AS count FROM avatar_profiles').get() as { count: number }).count;
+  if (versions !== profiles) throw new Error('0018_m9_boutique changed avatar profile counts.');
+  if (db.prepare('SELECT 1 FROM avatar_profiles p LEFT JOIN avatar_profile_versions v ON v.profile_student_id=p.student_id AND v.revision=p.current_revision WHERE v.profile_student_id IS NULL').get()) throw new Error('0018_m9_boutique created an invalid profile head.');
+  for (const table of ['boutique_purchases', 'boutique_purchase_requests', 'boutique_spend_allocations']) {
+    if ((db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number }).count !== 0) throw new Error(`0018_m9_boutique seeded ${table}.`);
+  }
+  if ((db.prepare("SELECT COUNT(*) AS count FROM gem_ledger WHERE movement_kind='SPEND'").get() as { count: number }).count !== 0) throw new Error('0018_m9_boutique seeded Gem spends.');
 }
 
 function stage(options: MigrationTestOptions, name: MigrationStage) { options.onStage?.(name); }

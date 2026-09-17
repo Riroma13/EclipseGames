@@ -1,13 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { avatarProfileSchema, avatarCatalogue, legacyAvatarProfile, specialtyCategoryFor, availability, renderAvatar } from './domain.js';
+import { avatarProfileSchema, avatarCatalogue, legacyAvatarProfile, specialtyCategoryFor, availability, renderAvatar, boutiqueAvailabilityStatus } from './domain.js';
 import { deriveAvatarXp, toRestrictedAvatarDto, toTeacherAvatarDto } from './contracts.js';
 
-describe('M7 avatar domain contracts', () => {
+describe('M9 avatar catalogue and availability contracts', () => {
   it('exposes exact ordered catalogue and rejects cross-category or extra fields', () => {
+    expect(avatarCatalogue.version).toBe('m9-v1');
     expect(avatarCatalogue.categories.map((category) => category.items.map((item) => item.id))).toEqual([
       ['face-human', 'face-fox', 'face-owl', 'face-cat', 'face-wolf'], ['skin-light', 'skin-medium-light', 'skin-medium', 'skin-medium-dark', 'skin-dark'],
-      ['hair-none', 'hair-short', 'hair-curly', 'hair-long'], ['feature-none', 'feature-glasses', 'feature-freckles'], ['clothing-eclipse', 'clothing-field'], ['accessory-none', 'accessory-pin'], ['frame-none', 'frame-orbit'], ['background-eclipse', 'background-night'],
+      ['hair-none', 'hair-short', 'hair-curly', 'hair-long', 'hair-braids'], ['feature-none', 'feature-glasses', 'feature-freckles', 'feature-eclipse-mark'], ['clothing-eclipse', 'clothing-field', 'clothing-orbit'], ['accessory-none', 'accessory-pin', 'accessory-comet', 'accessory-signal', 'accessory-compass', 'accessory-anchor', 'accessory-alliance'], ['frame-none', 'frame-orbit', 'frame-emerald'], ['background-eclipse', 'background-night', 'background-dawn'],
     ]);
+    const boutiqueItems = avatarCatalogue.categories.flatMap((category) => category.items).filter((item) => item.access.kind === 'BOUTIQUE');
+    expect(boutiqueItems).toHaveLength(10);
+    expect(boutiqueItems.find((item) => item.id === 'hair-braids')).toMatchObject({ label: 'Trenzas', order: 1, access: { currency: 'EMERALD', cost: 1, minLevel: 2, availableFromTerm: 'T1' } });
+    expect(boutiqueItems.find((item) => item.id === 'clothing-orbit')).toMatchObject({ label: 'Traje orbital', order: 2, access: { currency: 'EMERALD', cost: 2, minLevel: 4, availableFromTerm: 'T2' } });
+    expect(boutiqueItems.find((item) => item.id === 'background-dawn')).toMatchObject({ label: 'Amanecer', order: 3, access: { currency: 'EMERALD', cost: 3, minLevel: 6, availableFromTerm: 'T3' } });
     expect(avatarProfileSchema.safeParse({ ...legacyAvatarProfile('default'), faceId: 'skin-medium' }).success).toBe(false);
     expect(avatarProfileSchema.safeParse({ ...legacyAvatarProfile('default'), extra: 'nope' }).success).toBe(false);
   });
@@ -16,7 +22,18 @@ describe('M7 avatar domain contracts', () => {
     expect(legacyAvatarProfile('default')).toMatchObject({ faceId: 'face-human', hairId: 'hair-short' });
     expect(['fox', 'owl', 'cat', 'wolf'].map((token) => legacyAvatarProfile(token as 'fox')).map((profile) => profile.faceId)).toEqual(['face-fox', 'face-owl', 'face-cat', 'face-wolf']);
     expect(specialtyCategoryFor('Leader')).toBe('COMMUNICATION'); expect(specialtyCategoryFor('Ally')).toBe('COLLABORATION'); expect(specialtyCategoryFor(null)).toBeNull();
-    expect(await availability.allows('student', 'face-human')).toBe(true); expect(await availability.allows('student', 'not-catalogued')).toBe(false);
+    expect(await availability.allows({ studentId: 'student', academicYearId: 'year', itemId: 'face-human', currentTerm: 'T1', level: 1, specialtyCategory: null, owned: false })).toBe(true);
+    expect(await availability.allows({ studentId: 'student', academicYearId: 'year', itemId: 'hair-braids', currentTerm: 'T1', level: 2, specialtyCategory: null, owned: true })).toBe(true);
+    expect(await availability.allows({ studentId: 'student', academicYearId: 'year', itemId: 'hair-braids', currentTerm: 'T1', level: 2, specialtyCategory: null, owned: false })).toBe(false);
+  });
+
+  it('uses cumulative term, level, specialty, and ownership statuses', () => {
+    const item = 'accessory-signal';
+    expect(boutiqueAvailabilityStatus({ itemId: item, currentTerm: 'T1', level: 3, specialtyCategory: 'COMMUNICATION', owned: true })).toBe('LOCKED_TERM');
+    expect(boutiqueAvailabilityStatus({ itemId: item, currentTerm: 'T2', level: 2, specialtyCategory: 'COMMUNICATION', owned: true })).toBe('LOCKED_LEVEL');
+    expect(boutiqueAvailabilityStatus({ itemId: item, currentTerm: 'T2', level: 3, specialtyCategory: 'PRECISION', owned: true })).toBe('LOCKED_SPECIALTY');
+    expect(boutiqueAvailabilityStatus({ itemId: item, currentTerm: 'T2', level: 3, specialtyCategory: 'COMMUNICATION', owned: false })).toBe('AVAILABLE');
+    expect(boutiqueAvailabilityStatus({ itemId: item, currentTerm: null, level: 3, specialtyCategory: 'COMMUNICATION', owned: true })).toBe('LOCKED_TERM');
   });
 
   it('returns a deterministic neutral initials fallback for invalid renderer input', () => {

@@ -72,4 +72,8 @@ export const migrations: Migration[] = [
     id: '0017_avatar_core',
     sql: readFileSync(fileURLToPath(new URL('../../drizzle/0017_avatar_core.sql', import.meta.url)), 'utf8'),
   },
+  {
+    id: '0018_m9_boutique',
+    sql: readFileSync(fileURLToPath(new URL('../../drizzle/0018_m9_boutique.sql', import.meta.url)), 'utf8'),
+  },
 ];

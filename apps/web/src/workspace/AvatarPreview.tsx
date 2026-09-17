@@ -5,7 +5,7 @@ export function initialsForAvatar(name: string) {
   return parts.length > 1 ? `${parts[0][0]}${parts.at(-1)?.[0]}`.toUpperCase() : (parts[0]?.slice(0, 2) || '·').toUpperCase();
 }
 
-const allowed = new Set(['face-human', 'face-fox', 'face-owl', 'face-cat', 'face-wolf', 'skin-light', 'skin-medium-light', 'skin-medium', 'skin-medium-dark', 'skin-dark', 'hair-none', 'hair-short', 'hair-curly', 'hair-long', 'feature-none', 'feature-glasses', 'feature-freckles', 'clothing-eclipse', 'clothing-field', 'accessory-none', 'accessory-pin', 'frame-none', 'frame-orbit', 'background-eclipse', 'background-night']);
+const allowed = new Set(['face-human', 'face-fox', 'face-owl', 'face-cat', 'face-wolf', 'skin-light', 'skin-medium-light', 'skin-medium', 'skin-medium-dark', 'skin-dark', 'hair-none', 'hair-short', 'hair-curly', 'hair-long', 'hair-braids', 'feature-none', 'feature-glasses', 'feature-freckles', 'feature-eclipse-mark', 'clothing-eclipse', 'clothing-field', 'clothing-orbit', 'accessory-none', 'accessory-pin', 'accessory-comet', 'accessory-signal', 'accessory-compass', 'accessory-anchor', 'accessory-alliance', 'frame-none', 'frame-orbit', 'frame-emerald', 'background-eclipse', 'background-night', 'background-dawn']);
 const keys = ['faceId', 'skinToneId', 'hairId', 'featureId', 'clothingId', 'accessoryId', 'frameId', 'backgroundId'] as const;
 
 export function isAvatarProfile(value: unknown): value is AvatarProfile {

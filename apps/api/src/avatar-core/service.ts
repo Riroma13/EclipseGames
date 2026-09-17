@@ -2,12 +2,14 @@ import { createHash, randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import { avatarProfileSchema, type AvatarProfile } from '@eclipse/contracts';
 import { ApiError } from '../http/errors.js';
-import { availability } from './domain.js';
+import { availability, boutiqueAvailabilityStatus, catalogueCategoryForItem, catalogueItem, type AvatarAvailabilityPort } from './catalogue.js';
+import { categoryForSpecialty, getSummary } from '../xp/service.js';
+import * as boutiqueRepository from '../boutique/repository.js';
 import * as repository from './repository.js';
 
 const uuidV4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const stamp = () => new Date().toISOString();
-function fail(code: 'NOT_FOUND' | 'CONFLICT' | 'VALIDATION_FAILED', status: number, message: string): never { throw new ApiError(code, status, message); }
+function fail(code: 'NOT_FOUND' | 'CONFLICT' | 'VALIDATION_FAILED' | 'AVATAR_ITEM_UNAVAILABLE', status: number, message: string): never { throw new ApiError(code, status, message); }
 const fingerprint = (operation: string, studentId: string, body: unknown) => createHash('sha256').update(JSON.stringify({ operation, studentId, body })).digest('hex');
 
 export type AvatarMutation = {
@@ -19,15 +21,33 @@ export type AvatarMutation = {
   profile?: unknown;
   targetRevision?: number;
   reason?: string;
+  availability?: AvatarAvailabilityPort;
 };
 
-async function validatedProfile(value: unknown, studentId: string): Promise<AvatarProfile> {
+export function createContextualAvailability(db: Database.Database, ownerTeacherId: string): AvatarAvailabilityPort {
+  return { allows: ({ studentId, academicYearId, itemId }) => {
+    const item = catalogueItem(itemId);
+    if (!item) return false;
+    if (item.access.kind === 'BASE') return true;
+    const student = db.prepare('SELECT specialty FROM students WHERE id=?').get(studentId) as { specialty:string|null }|undefined;
+    const summary = getSummary(db, ownerTeacherId, studentId, academicYearId);
+    const currentTerm = boutiqueRepository.currentTerm(db, academicYearId, new Date().toISOString().slice(0, 10))?.code ?? null;
+    const owned = Boolean(db.prepare('SELECT 1 FROM boutique_purchases WHERE student_id=? AND academic_year_id=? AND item_id=? AND owner_teacher_id=?').get(studentId, academicYearId, itemId, ownerTeacherId));
+    return owned && boutiqueAvailabilityStatus({ itemId, currentTerm, level: summary.level, specialtyCategory: categoryForSpecialty(student?.specialty ?? null), owned }) === 'AVAILABLE';
+  } };
+}
+
+async function validatedProfile(value: unknown, input: Pick<AvatarMutation, 'studentId'|'academicYearId'>, port: AvatarAvailabilityPort): Promise<AvatarProfile> {
   const parsed = avatarProfileSchema.safeParse(value);
   if (!parsed.success) fail('VALIDATION_FAILED', 422, 'Avatar profile contains an invalid catalogue item.');
   const profile: AvatarProfile = parsed.data;
-  const fields: string[] = [profile.faceId, profile.skinToneId, profile.hairId, profile.featureId, profile.clothingId, profile.accessoryId, profile.frameId, profile.backgroundId];
-  for (const id of fields) {
-    if (!(await availability.allows(studentId, id))) fail('VALIDATION_FAILED', 422, 'Avatar profile contains an invalid catalogue item.');
+  const fields: Array<[keyof AvatarProfile, string]> = Object.entries(profile) as Array<[keyof AvatarProfile, string]>;
+  for (const [category, id] of fields) {
+    const item = catalogueItem(id);
+    if (!item || catalogueCategoryForItem(id) !== category) fail('VALIDATION_FAILED', 422, 'Avatar profile contains an invalid catalogue item.');
+    if (!(await port.allows({ studentId: input.studentId, academicYearId: input.academicYearId, itemId: id, currentTerm: 'T1', level: 99, specialtyCategory: null, owned: false }))) {
+      fail('AVATAR_ITEM_UNAVAILABLE', 409, 'Avatar catalogue item is unavailable.');
+    }
   }
   return profile;
 }
@@ -88,7 +108,8 @@ export function getHistory(db: Database.Database, ownerTeacherId: string, studen
 }
 
 export async function updateAvatar(db: Database.Database, input: AvatarMutation) {
-  const profile = await validatedProfile(input.profile, input.studentId);
+  ownerOr404(db, input);
+  const profile = await validatedProfile(input.profile, input, input.availability ?? availability);
   return mutate(input, 'UPDATE', { expectedRevision: input.expectedRevision, profile }, () => ({ profile }))(db);
 }
 
@@ -97,16 +118,25 @@ export function revertAvatar(db: Database.Database, input: AvatarMutation) {
   const reasonInput = input.reason;
   if (typeof targetRevision !== 'number' || !Number.isInteger(targetRevision) || targetRevision < 1 || typeof reasonInput !== 'string' || !reasonInput.trim() || reasonInput.trim().length > 500) fail('VALIDATION_FAILED', 422, 'A valid revert reason and target revision are required.');
   const reason = reasonInput.trim();
+  ownerOr404(db, input);
   return mutate(input, 'REVERT', { expectedRevision: input.expectedRevision, targetRevision, reason }, (database) => {
     const foundTarget = repository.findVersion(database, input.studentId, targetRevision); if (!foundTarget) fail('NOT_FOUND', 404, 'Avatar revision not found.');
     const target = foundTarget;
     const profile: AvatarProfile = { faceId: target.faceId, skinToneId: target.skinToneId, hairId: target.hairId, featureId: target.featureId, clothingId: target.clothingId, accessoryId: target.accessoryId, frameId: target.frameId, backgroundId: target.backgroundId };
+    const port = input.availability ?? availability;
+    const fields: Array<[keyof AvatarProfile, string]> = Object.entries(profile) as Array<[keyof AvatarProfile, string]>;
+    for (const [category, id] of fields) {
+      if (!catalogueItem(id) || catalogueCategoryForItem(id) !== category) fail('VALIDATION_FAILED', 422, 'Avatar profile contains an invalid catalogue item.');
+      const allowed = port.allows({ studentId: input.studentId, academicYearId: input.academicYearId, itemId: id, currentTerm: 'T1', level: 99, specialtyCategory: null, owned: false });
+      if (allowed instanceof Promise || !allowed) fail('AVATAR_ITEM_UNAVAILABLE', 409, 'Avatar catalogue item is unavailable.');
+    }
     return { profile, revertedFromRevision: targetRevision, reason };
   })(db);
 }
 
 export async function createAvatar(db: Database.Database, input: AvatarMutation) {
-  const profile = await validatedProfile(input.profile, input.studentId);
+  ownerOr404(db, input);
+  const profile = await validatedProfile(input.profile, input, input.availability ?? availability);
   return mutate(input, 'CREATE', { expectedRevision: input.expectedRevision, profile }, () => ({ profile }))(db);
 }
 export { randomUUID };

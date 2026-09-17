@@ -202,6 +202,12 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .avatar-editor-layout button { margin-top: .4rem; }
 .avatar-fields { display: grid; gap: .6rem; margin-top: 1rem; }
 .avatar-fields label { display: grid; gap: .3rem; }
+.boutique-panel { display: grid; gap: .8rem; margin-top: 1.2rem; padding-top: 1.15rem; border-top: 1px solid var(--line-soft); }
+.boutique-items { display: grid; gap: .65rem; padding: 0; margin: 0; list-style: none; }
+.boutique-items li { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .75rem; background: var(--parchment); border: 1px solid var(--line-soft); border-radius: .45rem; }
+.boutique-items li > div { display: grid; gap: .2rem; }
+.boutique-items li span { display: block; font-size: .86rem; }
+@media (max-width: 600px) { .boutique-items li { align-items: stretch; flex-direction: column; } .boutique-items button { width: 100%; } }
 .avatar-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
 .avatar-history { margin-top: 1rem; }
 .avatar-history-row { display: flex; justify-content: space-between; align-items: center; gap: .5rem; padding: .55rem 0; border-top: 1px solid var(--line-soft); font-size: .72rem; }

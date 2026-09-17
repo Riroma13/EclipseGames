@@ -11,6 +11,12 @@ export const apiErrorCodes = [
   'NOT_FOUND',
   'CONFLICT',
   'BEHAVIOUR_RESTRICTED',
+  'IDEMPOTENCY_CONFLICT',
+  'INSUFFICIENT_EMERALDS',
+  'BOUTIQUE_TERM_UNAVAILABLE',
+  'BOUTIQUE_SESSION_REQUIRED',
+  'DUPLICATE_PURCHASE',
+  'AVATAR_ITEM_UNAVAILABLE',
 ] as const;
 
 export type ApiErrorCode = (typeof apiErrorCodes)[number];
@@ -82,17 +88,32 @@ export type TermCloseDto = { state: 'OPEN'|'CLOSED'|'REOPENED'; revision: number
 export const avatarProfileSchema = z.object({
   faceId: z.enum(['face-human', 'face-fox', 'face-owl', 'face-cat', 'face-wolf']),
   skinToneId: z.enum(['skin-light', 'skin-medium-light', 'skin-medium', 'skin-medium-dark', 'skin-dark']),
-  hairId: z.enum(['hair-none', 'hair-short', 'hair-curly', 'hair-long']),
-  featureId: z.enum(['feature-none', 'feature-glasses', 'feature-freckles']),
-  clothingId: z.enum(['clothing-eclipse', 'clothing-field']),
-  accessoryId: z.enum(['accessory-none', 'accessory-pin']),
-  frameId: z.enum(['frame-none', 'frame-orbit']),
-  backgroundId: z.enum(['background-eclipse', 'background-night']),
+  hairId: z.enum(['hair-none', 'hair-short', 'hair-curly', 'hair-long', 'hair-braids']),
+  featureId: z.enum(['feature-none', 'feature-glasses', 'feature-freckles', 'feature-eclipse-mark']),
+  clothingId: z.enum(['clothing-eclipse', 'clothing-field', 'clothing-orbit']),
+  accessoryId: z.enum(['accessory-none', 'accessory-pin', 'accessory-comet', 'accessory-signal', 'accessory-compass', 'accessory-anchor', 'accessory-alliance']),
+  frameId: z.enum(['frame-none', 'frame-orbit', 'frame-emerald']),
+  backgroundId: z.enum(['background-eclipse', 'background-night', 'background-dawn']),
 }).strict();
 export type AvatarProfile = z.infer<typeof avatarProfileSchema>;
 export type AvatarSpecialtyCategory = XpCategory | null;
-export type AvatarCatalogueCategory = { id: keyof AvatarProfile; label: string; items: Array<{ id: string; label: string }> };
-export type AvatarCatalogueDto = { version: 'm7-v1'; categories: AvatarCatalogueCategory[] };
+export const boutiqueTermSchema = z.enum(['T1', 'T2', 'T3']);
+export const boutiqueAvailabilityStatusSchema = z.enum(['AVAILABLE', 'LOCKED_LEVEL', 'LOCKED_SPECIALTY', 'LOCKED_TERM']);
+export const avatarCatalogueAccessSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('BASE') }).strict(),
+  z.object({ kind: z.literal('BOUTIQUE'), currency: z.literal('EMERALD'), cost: z.union([z.literal(1), z.literal(2), z.literal(3)]), minLevel: z.number().int().positive(), requiredSpecialtyCategory: xpCategorySchema.nullable(), availableFromTerm: boutiqueTermSchema }).strict(),
+]);
+export type AvatarCatalogueAccess = z.infer<typeof avatarCatalogueAccessSchema>;
+export type AvatarCatalogueItem = { id: string; label: string; order: number; access: AvatarCatalogueAccess };
+export type AvatarCatalogueCategory = { id: keyof AvatarProfile; label: string; items: AvatarCatalogueItem[] };
+export type AvatarCatalogueDto = { version: 'm9-v1'; categories: AvatarCatalogueCategory[] };
+export type BoutiqueAvailabilityStatus = z.infer<typeof boutiqueAvailabilityStatusSchema>;
+export const boutiqueItemDtoSchema = z.object({ id: z.string().min(1), category: z.string().min(1), label: z.string(), cost: z.union([z.literal(1), z.literal(2), z.literal(3)]), minLevel: z.number().int().positive(), requiredSpecialtyCategory: xpCategorySchema.nullable(), availableFromTerm: boutiqueTermSchema, owned: z.boolean(), equipped: z.boolean(), status: boutiqueAvailabilityStatusSchema }).strict();
+export const boutiqueStateSchema = z.object({ studentId: z.string().min(1), academicYearId: z.string().min(1), catalogueVersion: z.literal('m9-v1'), currentTerm: boutiqueTermSchema.nullable(), emeraldBalance: z.number().int().nonnegative(), editable: z.boolean(), items: z.array(boutiqueItemDtoSchema) }).strict();
+export type BoutiqueItemDto = z.infer<typeof boutiqueItemDtoSchema>;
+export type BoutiqueStateDto = z.infer<typeof boutiqueStateSchema>;
+export const boutiquePurchaseResponseSchema = z.object({ purchaseId: z.string().min(1), studentId: z.string().min(1), academicYearId: z.string().min(1), itemId: z.string().min(1), currency: z.literal('EMERALD'), cost: z.union([z.literal(1), z.literal(2), z.literal(3)]), emeraldBalance: z.number().int().nonnegative(), purchasedAt: z.string().datetime(), replay: z.boolean() }).strict();
+export type BoutiquePurchaseResponse = z.infer<typeof boutiquePurchaseResponseSchema>;
 export type TeacherAvatarDto = { studentId:string; alias:string; specialty:string|null; specialtyCategory:AvatarSpecialtyCategory; academicYearId:string; annualEffectiveXp:number; level:1|2|3|4|5|6|7|8; progress:XpAnnualSummaryDto['progress']; badges:XpAnnualSummaryDto['badges']; revision:number; profile:AvatarProfile; updatedAt:string; editable:boolean };
 export type RestrictedAvatarDto = { studentId:string; alias:string; specialty:string|null; specialtyCategory:AvatarSpecialtyCategory; level:TeacherAvatarDto['level']; progress:TeacherAvatarDto['progress']; badges:TeacherAvatarDto['badges']; profile:AvatarProfile };
 export type AvatarHistoryDto = { revision:number; operation:'BACKFILL'|'CREATE'|'UPDATE'|'REVERT'; revertedFromRevision:number|null; reason:string|null; actorTeacherId:string|null; createdAt:string; profile:AvatarProfile };

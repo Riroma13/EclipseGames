@@ -16,12 +16,13 @@ async function signIn(page: Page, target = '/#/workspace') {
   await expect(workspace).toBeVisible();
 }
 
-async function seedRoster(page: Page, suffix: string) {
+async function seedRoster(page: Page, suffix: string, currentDateCompatible = false) {
   const login = await page.request.post('/api/v1/auth/session', { data: { email: 'teacher@example.test', password: 'change-me-in-development' } });
   expect(login.status()).toBe(204);
   const cookie = login.headers()['set-cookie']?.split(';')[0];
   const headers = cookie ? { cookie } : undefined;
-  const year = await page.request.post('/api/v1/academic-years', { headers, data: { label: `E2E ${suffix}`, startsOn: '1900-09-01', endsOn: '1901-07-01' } });
+  const yearNumber = currentDateCompatible ? new Date().getUTCFullYear() : 1900;
+  const year = await page.request.post('/api/v1/academic-years', { headers, data: { label: `E2E ${suffix}`, startsOn: currentDateCompatible ? `${yearNumber}-01-01` : '1900-09-01', endsOn: currentDateCompatible ? `${yearNumber}-12-31` : '1901-07-01' } });
   expect(year.status()).toBe(200);
   const yearId = (await year.json()).id as string;
   const group = await page.request.post(`/api/v1/academic-years/${yearId}/groups`, { headers, data: { name: `Group ${suffix}` } });
@@ -31,6 +32,54 @@ async function seedRoster(page: Page, suffix: string) {
   expect(students.status()).toBe(200);
   return { yearId, groupId };
 }
+
+async function closeActiveClassSessions(page: Page) {
+  const login = await page.request.post('/api/v1/auth/session', { data: { email: 'teacher@example.test', password: 'change-me-in-development' } });
+  expect(login.status()).toBe(204);
+  const cookie = login.headers()['set-cookie']?.split(';')[0];
+  const headers = cookie ? { cookie } : undefined;
+  const years = await page.request.get('/api/v1/academic-years?includeArchived=true', { headers });
+  expect(years.status()).toBe(200);
+  for (const year of await years.json() as Array<{ id: string }>) {
+    const groups = await page.request.get(`/api/v1/academic-years/${year.id}/groups?includeArchived=true`, { headers });
+    expect(groups.status()).toBe(200);
+    for (const group of await groups.json() as Array<{ id: string }>) {
+      const status = await page.request.get(`/api/v1/groups/${group.id}/real-class-session-status?academicYearId=${year.id}`, { headers });
+      expect(status.status()).toBe(200);
+      const active = (await status.json()).active as { id: string } | null;
+      if (active) {
+        const ended = await page.request.post(`/api/v1/real-class-sessions/${active.id}/end`, { headers: { ...headers, 'idempotency-key': crypto.randomUUID() }, data: {} });
+        expect([200, 201]).toContain(ended.status());
+      }
+    }
+  }
+  return headers;
+}
+
+async function startActiveClassSession(page: Page, yearId: string, groupId: string, headers: { cookie: string } | undefined) {
+  const today = new Date();
+  const year = today.getUTCFullYear();
+  const calendar = await page.request.put(`/api/v1/academic-years/${yearId}/calendar`, {
+    headers: { ...headers, 'content-type': 'application/json' },
+    data: {
+      timezone: 'UTC',
+      terms: [
+        { code: 'T1', startsOn: `${year}-01-01`, endsOn: `${year}-04-30` },
+        { code: 'T2', startsOn: `${year}-05-01`, endsOn: `${year}-08-31` },
+        { code: 'T3', startsOn: `${year}-09-01`, endsOn: `${year}-12-31` },
+      ],
+      holidays: [],
+      slots: [{ groupId, weekday: today.getUTCDay() || 7, startsAt: '00:00', endsAt: '23:59' }],
+    },
+  });
+  expect(calendar.status()).toBe(200);
+  const started = await page.request.post(`/api/v1/groups/${groupId}/real-class-sessions/start`, {
+    headers: { ...headers, 'idempotency-key': crypto.randomUUID() },
+    data: { academicYearId: yearId },
+  });
+  expect(started.status()).toBe(201);
+}
+
 test('canonical hash route boots from the Fastify root document and renders the canonical roster', async ({ page }) => {
   const login = await page.request.post('/api/v1/auth/session', { data: { email: 'teacher@example.test', password: 'change-me-in-development' } });
   expect(login.status()).toBe(204);
@@ -203,7 +252,9 @@ test('AC-11 tablet dialog traps Tab focus in both directions', async ({ page }) 
 });
 
 test('AC-06 real Register XP path exposes pending, failure, retry, and authoritative success', async ({ page }) => {
-  const { yearId, groupId } = await seedRoster(page, `${Date.now()}-xp-retry`);
+  const { yearId, groupId } = await seedRoster(page, `${Date.now()}-xp-retry`, true);
+  const headers = await closeActiveClassSessions(page);
+  await startActiveClassSession(page, yearId, groupId, headers);
   const xpUrl = `**/api/v1/students/*/xp-evidence`;
   let attempts = 0;
   await page.route(xpUrl, async route => {
@@ -223,7 +274,8 @@ test('AC-06 real Register XP path exposes pending, failure, retry, and authorita
   await expect(page.getByText('No se pudo registrar el XP. Reintentar.')).toBeVisible();
   await page.getByRole('button', { name: '+3' }).click();
   await expect(page.getByText('XP base +3 · XP efectivo +3')).toBeVisible();
-  await expect(page.locator('.student-progress-row')).toContainText('3 XP');
+  const adaCard = page.getByRole('button', { name: /Ada Lovelace, Calculus/ });
+  await expect(adaCard.locator('.student-progress-row')).toContainText('3 XP');
   expect(attempts).toBe(2);
 });
 
