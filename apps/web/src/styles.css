@@ -358,6 +358,17 @@ textarea { min-height: 88px; resize: vertical; }
 
 /* Activity and setup */
 .activity-summary { min-width: 0; padding: 1rem 1.05rem; background: var(--paper); border: 1px solid var(--line); border-radius: .6rem; }
+.history-panel { display: grid; gap: 1rem; margin: 1rem 0; }
+.history-filters { display: grid; grid-template-columns: repeat(6, minmax(8rem, 1fr)); gap: .7rem; align-items: end; }
+.history-filters label { display: grid; gap: .3rem; color: var(--muted); font-size: .78rem; font-weight: 700; }
+.history-filters select, .history-filters input { min-width: 0; }
+.history-list { display: grid; gap: .6rem; margin: 0; padding: 0; list-style: none; }
+.history-item { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; gap: .8rem; align-items: start; padding: .8rem; border: 1px solid var(--line); border-radius: .45rem; background: var(--parchment); }
+.history-item p { margin: .2rem 0; color: var(--muted); }
+.history-item time { color: var(--muted); font-size: .78rem; white-space: nowrap; }
+.history-family { padding: .2rem .35rem; border-radius: .25rem; background: var(--sand); color: var(--walnut); font-size: .68rem; font-weight: 800; letter-spacing: .05em; }
+.history-correction { display: block; color: var(--brass-deep); font-size: .78rem; font-weight: 700; }
+@media (max-width: 760px) { .history-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .history-item { grid-template-columns: 1fr; } .history-item time { white-space: normal; } }
 .activity-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; }
 .activity-heading .eyebrow { margin-bottom: .25rem; }
 .activity-heading h2 { margin: 0; font-size: 1.05rem; }

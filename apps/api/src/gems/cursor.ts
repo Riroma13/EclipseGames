@@ -8,7 +8,7 @@ const purpose = 'gem-ledger-cursor';
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export type CursorScope = { ownerTeacherId:string; studentId:string; academicYearId:string };
 export type CursorTuple = CursorScope & { createdAt:string; id:string };
-type Key = { kid:string; key:Buffer };
+export type CursorKey = { kid:string; key:Buffer };
 export class InvalidGemCursorError extends Error { constructor() { super('Cursor is invalid.'); this.name='InvalidGemCursorError'; } }
 
 function decodeSecret(secret: string) {
@@ -17,14 +17,14 @@ function decodeSecret(secret: string) {
   if (bytes.length !== 32 || bytes.toString('base64url') !== secret) throw new Error('invalid');
   return bytes;
 }
-export function parseCursorKeys(value: string | undefined): readonly Key[] {
+export function parseCursorKeys(value: string | undefined, cursorPurpose = purpose): readonly CursorKey[] {
   if (!value) throw new Error('invalid');
   const seenKids = new Set<string>(); const seenSecrets = new Set<string>();
-  const keys = value.split(',').map(part => { const pieces=part.split(':'); if(pieces.length!==2||!kidPattern.test(pieces[0])) throw new Error('invalid'); const secret=decodeSecret(pieces[1]); if(seenKids.has(pieces[0])||seenSecrets.has(pieces[1])) throw new Error('invalid'); seenKids.add(pieces[0]);seenSecrets.add(pieces[1]); return {kid:pieces[0],key:Buffer.from(hkdfSync('sha256',secret,salt,info,32))}; });
+  const keys = value.split(',').map(part => { const pieces=part.split(':'); if(pieces.length!==2||!kidPattern.test(pieces[0])) throw new Error('invalid'); const secret=decodeSecret(pieces[1]); if(seenKids.has(pieces[0])||seenSecrets.has(pieces[1])) throw new Error('invalid'); seenKids.add(pieces[0]);seenSecrets.add(pieces[1]); const purposeInfo = cursorPurpose === purpose ? info : Buffer.from(`EclipseGames/${cursorPurpose}/aes-256-gcm/v1`); return {kid:pieces[0],key:Buffer.from(hkdfSync('sha256',secret,salt,purposeInfo,32))}; });
   if (!keys.length) throw new Error('invalid'); return keys;
 }
 function aad(scope: CursorScope) { return JSON.stringify({purpose,v:1,ownerTeacherId:scope.ownerTeacherId,studentId:scope.studentId,academicYearId:scope.academicYearId}); }
-export function createCursorCodec(keys: readonly Key[]) {
+export function createCursorCodec(keys: readonly CursorKey[]) {
   if(!keys.length) throw new Error('invalid');
   return {
     encode(tuple: CursorTuple) { const nonce=randomBytes(12); const cipher=createCipheriv('aes-256-gcm',keys[0].key,nonce); const scope={ownerTeacherId:tuple.ownerTeacherId,studentId:tuple.studentId,academicYearId:tuple.academicYearId}; cipher.setAAD(Buffer.from(aad(scope))); const encrypted=Buffer.concat([cipher.update(Buffer.from(JSON.stringify({v:1,...tuple}))),cipher.final()]); return `v1.${keys[0].kid}.${nonce.toString('base64url')}.${encrypted.toString('base64url')}.${cipher.getAuthTag().toString('base64url')}`; },

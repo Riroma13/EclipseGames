@@ -1,0 +1,12 @@
+import { createCipheriv, randomBytes } from 'node:crypto';
+import { describe, expect, it } from 'vitest';
+import { parseCursorKeys } from '../gems/cursor.js';
+import { createHistoryCursorCodec } from './cursor.js';
+const key=Buffer.alloc(32).toString('base64url'); const scope={ownerTeacherId:'00000000-0000-4000-8000-000000000001',groupId:'00000000-0000-4000-8000-000000000002',academicYearId:'00000000-0000-4000-8000-000000000003',filterFingerprint:'filters-v1'}; const cursor={...scope,occurredAt:'2026-09-01T00:00:00.000Z',family:'XP' as const,sourceId:'source-1',itemId:'item-1'};
+const aad=(value:typeof scope)=>JSON.stringify({purpose:'history',v:1,...value});
+function authenticatedToken(payload:Record<string,unknown>){const parsed=parseCursorKeys(`active:${key}`,'history')[0];const nonce=randomBytes(12);const cipher=createCipheriv('aes-256-gcm',parsed.key,nonce);cipher.setAAD(Buffer.from(aad(scope)));const body=Buffer.concat([cipher.update(JSON.stringify(payload)),cipher.final()]);return `v1.${parsed.kid}.${nonce.toString('base64url')}.${body.toString('base64url')}.${cipher.getAuthTag().toString('base64url')}`;}
+describe('history cursor',()=>{
+ it('round-trips the approved public tuple without the internal version marker',()=>{ const codec=createHistoryCursorCodec(parseCursorKeys(`active:${key}`,'history')); const decoded=codec.decode(codec.encode(cursor),scope); expect(decoded).toEqual(cursor); expect(decoded).not.toHaveProperty('v'); expect(Object.keys(decoded)).toEqual(Object.keys(cursor)); });
+  it('rejects scope mismatches and tampering',()=>{ const codec=createHistoryCursorCodec(parseCursorKeys(`active:${key}`,'history')); const token=codec.encode(cursor); expect(()=>codec.decode(token,{...scope,filterFingerprint:'other'})).toThrow('Cursor is invalid.'); const parts=token.split('.'); const tag=Buffer.from(parts[4],'base64url'); const mutatedTag=Buffer.from(tag); mutatedTag[0]^=1; expect(mutatedTag.equals(tag)).toBe(false); const tamperedToken=[...parts.slice(0,4),mutatedTag.toString('base64url')].join('.'); expect(()=>codec.decode(tamperedToken,scope)).toThrow('Cursor is invalid.'); expect(()=>codec.decode(tamperedToken,scope)).toThrow('Cursor is invalid.'); });
+ it('validates the authenticated internal version marker',()=>{ const codec=createHistoryCursorCodec(parseCursorKeys(`active:${key}`,'history')); expect(()=>codec.decode(authenticatedToken({...cursor,v:2}),scope)).toThrow('Cursor is invalid.'); });
+});

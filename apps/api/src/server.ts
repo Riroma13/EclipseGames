@@ -26,6 +26,8 @@ import { sessionStartPort } from './behaviour/service.js';
 import { registerTermCloseRoutes } from './term-close/routes.js';
 import { registerAvatarRoutes } from './avatar-core/routes.js';
 import { registerBoutiqueRoutes } from './boutique/routes.js';
+import { registerHistoryRoutes } from './history/routes.js';
+import { createHistoryCursorCodec } from './history/cursor.js';
 
 type ServerOptions = {
   logger?: boolean;
@@ -69,7 +71,8 @@ export function createServer(databaseUrl = databasePathFromEnv(), options: Serve
     registerTermCloseRoutes(instance, db.database);
     registerAvatarRoutes(instance, db.database);
     registerGemRoutes(instance, db.database, cursorCodec);
-     registerBoutiqueRoutes(instance, db.database);
+      registerBoutiqueRoutes(instance, db.database);
+      registerHistoryRoutes(instance, db.database, createHistoryCursorCodec(parseCursorKeys(process.env.GEM_CURSOR_KEYS, 'history')));
   });
   app.get('/health', async () => ({ status: 'ok' }));
   app.get('/api/v1/health', async () => ({ status: 'ok' }));

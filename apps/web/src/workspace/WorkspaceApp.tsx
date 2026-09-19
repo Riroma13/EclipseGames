@@ -16,6 +16,7 @@ import { BehaviourPanel } from './BehaviourPanel';
 import { QuarterlyRubric } from './QuarterlyRubric';
 import { TermClosePanel } from './TermClosePanel';
 import { ClassroomMode } from './ClassroomMode';
+import { HistoryPanel } from './HistoryPanel';
 
 export function requestedYearRequiresArchivedLookup(requestedYearId: string | null, activeYears: AcademicYear[]) {
   return Boolean(requestedYearId && !activeYears.some(year => year.id === requestedYearId));
@@ -244,6 +245,11 @@ export function WorkspaceApp() {
     if (yearId) next.set('year', yearId);
     if (groupId) next.set('group', groupId);
     if (state.selectedStudentId) next.set('student', state.selectedStudentId);
+    const currentUrlParams = new URLSearchParams(location.hash.split('?')[1] ?? location.search);
+    for (const key of ['historyStudent', 'historyTerm', 'historyFamily', 'historyFrom', 'historyTo']) {
+      const value = currentUrlParams.get(key);
+      if (value) next.set(key, value);
+    }
     const target = `#/workspace${next.toString() ? `?${next}` : ''}`;
     if (window.location.hash !== target) window.history.replaceState(null, '', `/${target}`);
   }, [auth, yearId, groupId, state.selectedStudentId]);
@@ -326,10 +332,10 @@ export function WorkspaceApp() {
      {groupId && summary}
       {currentYear && currentGroup && <CalendarControls year={currentYear} group={currentGroup} onSessionChange={setActiveSession} />}
       {currentGroup && <RtGrid group={currentGroup} session={activeSession} students={students} />}
+      {currentYear && currentGroup && <HistoryPanel group={currentGroup} year={currentYear} students={students} onSessionExpired={clearPrivateState} />}
       {currentYear && currentGroup && <TermClosePanel context={{ academicYearId:currentYear.id, groupId:currentGroup.id, readOnly:currentYearIsHistorical }} onSelectStudent={id => { originRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; dispatch({ type:'select', studentId:id }); }} onSessionExpired={clearPrivateState} />}
      {!groups.length && !error ? <p className="empty-state">No groups in this year.</p> : <div className="workspace-grid">
        <section className="roster-section"><div className="section-heading"><div><p className="eyebrow">ACADEMY ROSTER</p><h2 className="section-title">Roster <span>{visibleStudents.length}</span></h2></div><span className="section-note">Select a character to open their sheet</span></div><StudentRoster students={visibleStudents} summaries={summaries} avatarProfiles={avatarProfiles} selectedId={state.selectedStudentId} query={state.search} onSelect={id => { originRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; dispatch({ type: 'select', studentId: id }); }} /></section>
-      <ActivitySummary activity={activity} onRetry={() => { if (selected) workspaceApi.xpEvidence(selected.id, yearId!, 3).then(result => setActivity(activityState(result))).catch(() => setActivity(activityState(null))); }} />
          <StudentPanel student={selected} context={context} historical={currentYearIsHistorical} feedback={state.feedback} undo={state.undo} onClose={() => dispatch({ type: 'select', studentId: '' })} originRef={originRef} onUndoResult={message => dispatch({ type: 'undo-result', message })} summary={selected ? summaries[selected.id] ?? null : null} onSummary={setSummary} onFeedback={message => dispatch({ type: 'action-result', message, undo: null })} onUndo={registerUndo} />
          {selected && context && <AvatarWorkflow student={selected} context={context} readOnly={currentYearIsHistorical || Boolean(selected.archivedAt)} onProfileState={profile => setAvatarProfiles(current => ({ ...current, [selected.id]: profile }))} />}
         {selected && context && <QuarterlyRubric key={`${context.academicYearId}:${context.groupId}:${context.studentId}`} context={context} onSessionExpired={clearPrivateState} />}
