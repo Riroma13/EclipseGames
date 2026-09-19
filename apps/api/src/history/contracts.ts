@@ -1,0 +1,12 @@
+import { z } from 'zod';
+import { historyFamilies, type HistoryFamily, type HistoryItemDto } from '@eclipse/contracts';
+export { historyFamilies };
+export type { HistoryFamily, HistoryItemDto };
+const uuid = z.string().uuid();
+const utc = z.string().datetime({ offset: true }).transform(value => new Date(value).toISOString());
+export const historyQuerySchema = z.object({ academicYearId: uuid, studentId: uuid.optional(), termId: uuid.optional(), family: z.enum(historyFamilies).optional(), from: utc.optional(), to: utc.optional(), limit: z.coerce.number().int().min(1).max(50).default(25), cursor: z.string().min(1).max(1024).optional() }).strict().refine(value => !value.from || !value.to || value.from < value.to, { message: 'Invalid date range.' });
+export type HistoryQuery = z.infer<typeof historyQuerySchema>;
+export const historyFactsSchema = z.object({ value:z.string().nullable(), amount:z.number().nullable(), currency:z.enum(['EMERALD','RUBY','DIAMOND','COIN']).nullable(), state:z.string().nullable(), revision:z.number().int().nullable() }).strict();
+export const historyItemSchema = z.object({ id:uuid, family:z.enum(historyFamilies), kind:z.string(), occurredAt:z.string().datetime(), student:z.object({ id:uuid, realName:z.string(), alias:z.string() }).strict().nullable(), termId:uuid.nullable(), sessionId:uuid.nullable(), title:z.string(), summary:z.string(), facts:historyFactsSchema, correction:z.object({ state:z.enum(['ACTIVE','CORRECTED','REVERSED']), relatedId:uuid.nullable() }).strict().nullable() }).strict();
+export const historyPageSchema = z.object({ items:z.array(historyItemSchema), nextCursor:z.string().nullable() }).strict();
+export const historyDtoKeys = ['id','family','kind','occurredAt','student','termId','sessionId','title','summary','facts','correction'] as const;

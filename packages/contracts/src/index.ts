@@ -117,6 +117,11 @@ export type BoutiquePurchaseResponse = z.infer<typeof boutiquePurchaseResponseSc
 export type TeacherAvatarDto = { studentId:string; alias:string; specialty:string|null; specialtyCategory:AvatarSpecialtyCategory; academicYearId:string; annualEffectiveXp:number; level:1|2|3|4|5|6|7|8; progress:XpAnnualSummaryDto['progress']; badges:XpAnnualSummaryDto['badges']; revision:number; profile:AvatarProfile; updatedAt:string; editable:boolean };
 export type RestrictedAvatarDto = { studentId:string; alias:string; specialty:string|null; specialtyCategory:AvatarSpecialtyCategory; level:TeacherAvatarDto['level']; progress:TeacherAvatarDto['progress']; badges:TeacherAvatarDto['badges']; profile:AvatarProfile };
 export type AvatarHistoryDto = { revision:number; operation:'BACKFILL'|'CREATE'|'UPDATE'|'REVERT'; revertedFromRevision:number|null; reason:string|null; actorTeacherId:string|null; createdAt:string; profile:AvatarProfile };
+export const historyFamilies = ['SESSION','XP','RT','GEM','LEGACY_COIN','BEHAVIOUR','RUBRIC','TERM_CLOSE','AVATAR','BOUTIQUE','CLASSROOM_EVENT','CHALLENGE','MINIGAME'] as const;
+export type HistoryFamily = typeof historyFamilies[number];
+export type HistoryFactsDto = { value:string|null; amount:number|null; currency:'EMERALD'|'RUBY'|'DIAMOND'|'COIN'|null; state:string|null; revision:number|null };
+export type HistoryItemDto = { id:string; family:HistoryFamily; kind:string; occurredAt:string; student:{ id:string; realName:string; alias:string }|null; termId:string|null; sessionId:string|null; title:string; summary:string; facts:HistoryFactsDto; correction:{ state:'ACTIVE'|'CORRECTED'|'REVERSED'; relatedId:string|null }|null };
+export type HistoryPageDto = { items:HistoryItemDto[]; nextCursor:string|null };
 
 export type ClassroomEnergyState = 'CRITICAL'|'LOW'|'STABLE'|'HIGH'|'MAXIMUM';
 export type ClassroomBehaviourState = 'NORMAL'|'VIGILANCE'|'ALERT'|'RED_CODE';

@@ -6,6 +6,12 @@ import { isSelectedYearHistorical, requestedYearNeedsAuthoritativeLookup, reques
 afterEach(() => vi.restoreAllMocks());
 
 describe('workspace XP idempotency', () => {
+  it('maps the private history filters directly to the closed API contract', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ items: [], nextCursor: null }), { status: 200 }));
+    await workspaceApi.history('group', { academicYearId: 'year', studentId: 'student', termId: 'term', family: 'XP', from: '2026-09-01T00:00:00.000Z', to: '2026-10-01T00:00:00.000Z', limit: 25, cursor: 'opaque' });
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/groups/group/history?academicYearId=year&limit=25&studentId=student&termId=term&family=XP&from=2026-09-01T00%3A00%3A00.000Z&to=2026-10-01T00%3A00%3A00.000Z&cursor=opaque');
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ cache: 'no-store' });
+  });
   it('loads boutique state privately and sends the purchase key/session tuple', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       if (String(input).includes('/boutique-purchases')) return new Response(JSON.stringify({ purchaseId: 'purchase', studentId: 'student', academicYearId: 'year', itemId: 'hair-braids', currency: 'EMERALD', cost: 1, emeraldBalance: 1, purchasedAt: '2026-09-17T08:00:00.000Z', replay: false }), { status: 201 });
