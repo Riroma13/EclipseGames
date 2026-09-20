@@ -20,9 +20,12 @@ function database() {
 describe('group term-close persistence foundation', () => {
   it('registers 0016 after 0015 and creates exactly the six persistence tables without backfill', () => {
     const db = database();
-    expect(migrations.map(migration => migration.id).slice(-2)).toEqual([
-      '0017_avatar_core',
-      '0018_m9_boutique',
+    const migrationIds = migrations.map(migration => migration.id);
+    const quarterlyRubricIndex = migrationIds.indexOf('0015_quarterly_observation_rubric');
+    const termCloseIndex = migrationIds.indexOf('0016_group_term_close_xlsx');
+    expect(migrationIds.slice(quarterlyRubricIndex, termCloseIndex + 1)).toEqual([
+      '0015_quarterly_observation_rubric',
+      '0016_group_term_close_xlsx',
     ]);
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('group_term_closures','group_term_close_snapshots','group_term_close_students','group_term_close_rt_evidence','group_term_close_lifecycle_events','group_term_close_requests') ORDER BY name").all()).toEqual([
       { name: 'group_term_close_lifecycle_events' },

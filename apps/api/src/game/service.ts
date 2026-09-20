@@ -627,12 +627,12 @@ export async function projectionControl(db: Database.Database, teacherId: string
   return { scene: resolved.scene, resourceId: resource?.id ?? null, title: resource?.title ?? resolved.narrative?.title ?? null, kind: state.minigame?.kind ?? null, display: resolved };
 }
 
-export function clearProjection(db: Database.Database, teacherId: string, groupId: string) {
+export async function clearProjection(db: Database.Database, teacherId: string, groupId: string) {
   const state = projectionState(db, teacherId, groupId);
   writable(state.group);
-  return db.transaction(() => {
+  db.transaction(() => {
     if (state.minigame) repository.updateMinigame(db, state.minigame.id, { status: 'ENDED', remainingSeconds: state.minigame.remainingSeconds, startedAt: null, pausedAt: null, updatedAt: now() });
     repository.clearProjectionContent(db, teacherId, groupId, now());
-    return projectionControl(db, teacherId, groupId);
   })();
+  return await projectionControl(db, teacherId, groupId);
 }
