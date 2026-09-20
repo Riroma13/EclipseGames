@@ -76,4 +76,8 @@ export const migrations: Migration[] = [
     id: '0018_m9_boutique',
     sql: readFileSync(fileURLToPath(new URL('../../drizzle/0018_m9_boutique.sql', import.meta.url)), 'utf8'),
   },
+  {
+    id: '0019_m11_narrative_progress',
+    sql: readFileSync(fileURLToPath(new URL('../../drizzle/0019_m11_narrative_progress.sql', import.meta.url)), 'utf8'),
+  },
 ];

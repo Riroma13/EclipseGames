@@ -2,7 +2,7 @@ import type { ApiFailure } from '../workspace/workspace-api';
 export type RestrictedAvatar = { studentId: string; alias: string; specialty: string | null; specialtyCategory: string | null; level: number; progress: { progressPercent: number }; badges: Array<{ label: string }>; profile: Record<string, string> };
 export type ClassroomStudentDto = { avatar: RestrictedAvatar; energy: 'CRITICAL'|'LOW'|'STABLE'|'HIGH'|'MAXIMUM'|null; gems: { EMERALD: number; RUBY: number; DIAMOND: number } };
 export type ShowStudentDto = { kind: 'SHOW_STUDENT'; expiresAt: string; student: ClassroomStudentDto; behaviour: { state: 'NORMAL'|'VIGILANCE'|'ALERT'|'RED_CODE' } | null };
-export type ClassroomDisplayDto = { scene: 'IDLE'|'EVENT'|'CHALLENGE'|'MINIGAME'|'SHOW_STUDENT'; showStudent: ShowStudentDto | null };
+export type ClassroomDisplayDto = { scene: 'IDLE'|'EVENT'|'CHALLENGE'|'MINIGAME'|'NARRATIVE'|'SHOW_STUDENT'; showStudent: ShowStudentDto | null };
 
 export type EventStatus = 'DRAFT' | 'ACTIVE' | 'COMPLETED';
 export type EventTheme = 'MISSION' | 'NARRATIVE' | 'CELEBRATION';
@@ -17,7 +17,8 @@ export type MinigameSession = { id: string; groupId: string; kind: MinigameKind;
 export type MinigamePreset = { id: string; title: string; prompt: string; durationSeconds: number; archivedAt: string | null; createdAt: string; updatedAt: string };
 export type PromptDeck = { id: string; title: string; prompts: string[]; archivedAt: string | null; createdAt: string; updatedAt: string };
 export type ProjectionStudent = { avatar: string; alias: string; specialty: string | null; xpLevel: number; progressToNextLevel: number; unlockedBadge: string | null };
-export type ProjectionDisplay = { scene: 'MINIGAME' | 'CHALLENGE' | 'EVENT' | 'IDLE' | 'SHOW_STUDENT'; group: { id: string; name: string }; activeEvent: { title: string; description: string; theme: EventTheme; status: 'ACTIVE' | 'COMPLETED' } | null; activeChallenge: { title: string; description: string; target: number; progress: number; status: 'ACTIVE' | 'COMPLETED' } | null; minigame: { kind: MinigameKind; title: string; prompt: string; status: Exclude<MinigameStatus, 'ENDED'>; durationSeconds: number; remainingSeconds: number; startedAt: string | null; selectedAlias: string | null; teamCount?: number; teams?: Array<{ team: number; aliases: string[] }>; promptRevealed?: boolean } | null; students: ProjectionStudent[]; showStudent?: ShowStudentDto | null };
+export type NarrativeProjection = { title: string; term: 'T1' | 'T2' | 'T3'; ordinal: number; completedCount: number; totalCount: 9; completed?: true; revealedClues?: string[] };
+export type ProjectionDisplay = { scene: 'MINIGAME' | 'CHALLENGE' | 'EVENT' | 'IDLE' | 'NARRATIVE' | 'SHOW_STUDENT'; group: { id: string; name: string }; activeEvent: { title: string; description: string; theme: EventTheme; status: 'ACTIVE' | 'COMPLETED' } | null; activeChallenge: { title: string; description: string; target: number; progress: number; status: 'ACTIVE' | 'COMPLETED' } | null; narrative: NarrativeProjection | null; minigame: { kind: MinigameKind; title: string; prompt: string; status: Exclude<MinigameStatus, 'ENDED'>; durationSeconds: number; remainingSeconds: number; startedAt: string | null; selectedAlias: string | null; teamCount?: number; teams?: Array<{ team: number; aliases: string[] }>; promptRevealed?: boolean } | null; students: ProjectionStudent[]; showStudent?: ShowStudentDto | null };
 export type ShowStudentCreation = { accessCode: string; accessUrl: string; expiresAt: string; showStudent: ShowStudentDto };
 export type ProjectionControl = { scene: ProjectionDisplay['scene']; resourceId: string | null; title: string | null; kind: MinigameKind | null; display: ProjectionDisplay };
 

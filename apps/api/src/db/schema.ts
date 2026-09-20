@@ -179,3 +179,47 @@ export const boutiquePurchaseRequests = sqliteTable('boutique_purchase_requests'
 export const boutiqueSpendAllocations = sqliteTable('boutique_spend_allocations', {
   id: text('id').primaryKey(), purchaseId: text('purchase_id').notNull().references(() => boutiquePurchases.id), fundingMovementId: text('funding_movement_id').notNull().references(() => gemLedger.id), spendMovementId: text('spend_movement_id').notNull().references(() => gemLedger.id), createdAt: text('created_at').notNull(),
 }, (table) => [uniqueIndex('uq_boutique_spend_allocations_purchase_funding').on(table.purchaseId, table.fundingMovementId), uniqueIndex('uq_boutique_spend_allocations_funding').on(table.fundingMovementId), uniqueIndex('uq_boutique_spend_allocations_spend').on(table.spendMovementId), index('idx_boutique_spend_allocations_funding').on(table.fundingMovementId)]);
+
+export const narrativeGroupState = sqliteTable('narrative_group_state', {
+  groupId: text('group_id').notNull(), academicYearId: text('academic_year_id').notNull(), ownerTeacherId: text('owner_teacher_id').notNull(),
+  revision: integer('revision').notNull().default(0), createdAt: text('created_at').notNull(), updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.groupId, table.academicYearId] }),
+  uniqueIndex('uq_narrative_group_state_lineage').on(table.groupId, table.academicYearId, table.ownerTeacherId),
+  index('idx_narrative_group_state_owner_year').on(table.ownerTeacherId, table.academicYearId, table.groupId),
+  foreignKey({ columns: [table.groupId, table.academicYearId, table.ownerTeacherId], foreignColumns: [groups.id, groups.academicYearId, groups.ownerTeacherId], name: 'fk_narrative_group_state_group_lineage' }),
+  check('ck_narrative_group_state_revision', sql`${table.revision} >= 0`),
+]);
+
+export const narrativeGroupEvents = sqliteTable('narrative_group_events', {
+  id: text('id').primaryKey(), groupId: text('group_id').notNull(), academicYearId: text('academic_year_id').notNull(), ownerTeacherId: text('owner_teacher_id').notNull(),
+  eventKey: text('event_key').notNull(), ordinal: integer('ordinal').notNull(), term: text('term').notNull(), startedAt: text('started_at').notNull(), completedAt: text('completed_at'),
+  revealedClueCount: integer('revealed_clue_count').notNull().default(0), mechanicKind: text('mechanic_kind'), mechanicId: text('mechanic_id'), revision: integer('revision').notNull(), updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  uniqueIndex('uq_narrative_group_events_key').on(table.ownerTeacherId, table.groupId, table.academicYearId, table.eventKey),
+  uniqueIndex('uq_narrative_group_events_ordinal').on(table.ownerTeacherId, table.groupId, table.academicYearId, table.ordinal),
+  index('idx_narrative_group_events_lineage').on(table.ownerTeacherId, table.groupId, table.academicYearId, table.ordinal),
+  index('idx_narrative_group_events_revision').on(table.ownerTeacherId, table.groupId, table.academicYearId, table.revision),
+  foreignKey({ columns: [table.groupId, table.academicYearId, table.ownerTeacherId], foreignColumns: [narrativeGroupState.groupId, narrativeGroupState.academicYearId, narrativeGroupState.ownerTeacherId], name: 'fk_narrative_group_events_state_lineage' }),
+  check('ck_narrative_group_events_ordinal', sql`${table.ordinal} BETWEEN 1 AND 9`),
+  check('ck_narrative_group_events_term', sql`${table.term} IN ('T1', 'T2', 'T3')`),
+  check('ck_narrative_group_events_clues', sql`${table.revealedClueCount} >= 0`),
+  check('ck_narrative_group_events_revision', sql`${table.revision} >= 0`),
+  check('ck_narrative_group_events_mechanic_kind', sql`${table.mechanicKind} IS NULL OR ${table.mechanicKind} IN ('CHALLENGE', 'MINIGAME')`),
+  check('ck_narrative_group_events_mechanic_pair', sql`(${table.mechanicKind} IS NULL AND ${table.mechanicId} IS NULL) OR (${table.mechanicKind} IS NOT NULL AND ${table.mechanicId} IS NOT NULL)`),
+]);
+
+export const narrativeCommandRequests = sqliteTable('narrative_command_requests', {
+  id: text('id').primaryKey(), groupId: text('group_id').notNull(), academicYearId: text('academic_year_id').notNull(), ownerTeacherId: text('owner_teacher_id').notNull(),
+  command: text('command').notNull(), idempotencyKey: text('idempotency_key').notNull(), requestFingerprint: text('request_fingerprint').notNull(), eventKey: text('event_key').notNull(),
+  resultingRevision: integer('resulting_revision').notNull(), responseStatus: integer('response_status').notNull(), responseBodyJson: text('response_body_json').notNull(), createdAt: text('created_at').notNull(),
+}, (table) => [
+  uniqueIndex('uq_narrative_command_requests_scope').on(table.ownerTeacherId, table.groupId, table.academicYearId, table.command, table.idempotencyKey),
+  index('idx_narrative_command_requests_event').on(table.ownerTeacherId, table.groupId, table.academicYearId, table.eventKey, table.createdAt),
+  foreignKey({ columns: [table.groupId, table.academicYearId, table.ownerTeacherId], foreignColumns: [narrativeGroupState.groupId, narrativeGroupState.academicYearId, narrativeGroupState.ownerTeacherId], name: 'fk_narrative_command_requests_state_lineage' }),
+  check('ck_narrative_command_requests_command', sql`${table.command} IN ('START', 'REVEAL_NEXT_CLUE', 'LINK', 'COMPLETE')`),
+  check('ck_narrative_command_requests_key', sql`length(trim(${table.idempotencyKey})) > 0`),
+  check('ck_narrative_command_requests_fingerprint', sql`length(${table.requestFingerprint}) = 64`),
+  check('ck_narrative_command_requests_revision', sql`${table.resultingRevision} >= 0`),
+  check('ck_narrative_command_requests_status', sql`${table.responseStatus} BETWEEN 200 AND 299`),
+]);

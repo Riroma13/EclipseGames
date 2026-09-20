@@ -3,7 +3,7 @@ import { gameApi, type ProjectionControl } from '../game/game-api';
 import { displayStatus } from '../app/display-status';
 import { ClassroomSetup } from './ClassroomSetup';
 
-export type WorkspaceRoute = 'home' | 'classroom' | 'events' | 'challenges' | 'minigames';
+export type WorkspaceRoute = 'home' | 'classroom' | 'events' | 'challenges' | 'minigames' | 'narrative';
 
 function contextQuery() {
   const source = window.location.hash.split('?')[1] ?? window.location.search;
@@ -22,6 +22,7 @@ const routePaths: Record<WorkspaceRoute, string> = {
   events: '/events',
   challenges: '/challenges',
   minigames: '/minigames',
+  narrative: '/narrative',
 };
 
 function routeHref(route: WorkspaceRoute) {
@@ -90,7 +91,8 @@ const navigation: Array<{ route: WorkspaceRoute; label: string; caption: string;
   { route: 'events', label: 'Events', caption: 'Class moments', glyph: '◇' },
   { route: 'challenges', label: 'Challenges', caption: 'Collective goals', glyph: '✦' },
   { route: 'minigames', label: 'Minigames', caption: 'Quick activities', glyph: '⊕' },
-];
+  { route: 'narrative', label: 'Narrativa', caption: 'Secuencia Éclipse', glyph: '◈' },
+]; 
 
 export function WorkspaceShell({ children, activeRoute = 'classroom' }: { children: ReactNode; activeRoute?: WorkspaceRoute }) {
   return <div className="workspace-frame">

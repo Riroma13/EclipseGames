@@ -101,7 +101,7 @@ describe('collective challenge pause workflow', () => {
     expect(paused.json()).toMatchObject({ status: 'PAUSED', progress: 0, showOnProjection: true });
     const blockedProgress = await app.inject({ method: 'POST', url: `/api/v1/challenges/${challengeId}/progress`, headers, payload: { delta: 1 } });
     expect(blockedProgress.statusCode).toBe(422);
-    expect((await app.inject({ method: 'GET', url: `/api/v1/projection/groups/${groupId}/display`, headers })).json()).toMatchObject({ scene: 'IDLE', activeChallenge: null });
+    expect((await app.inject({ method: 'GET', url: `/api/v1/projection/groups/${groupId}/display`, headers })).json()).toMatchObject({ scene: 'NARRATIVE', activeChallenge: null });
 
     expect((await app.inject({ method: 'POST', url: `/api/v1/challenges/${challengeId}/resume`, headers })).json()).toMatchObject({ status: 'ACTIVE' });
     const increments = await Promise.all([1, 2].map(() => app.inject({ method: 'POST', url: `/api/v1/challenges/${challengeId}/progress`, headers, payload: { delta: 1 } })));
@@ -186,7 +186,7 @@ describe('team draw, prompt decks, and projection controls', () => {
 
     const cleared = await app.inject({ method: 'POST', url: `/api/v1/teacher/groups/${groupId}/display/clear`, headers });
     expect(cleared.statusCode).toBe(200);
-    expect(cleared.json()).toMatchObject({ scene: 'IDLE', resourceId: null });
+    expect(cleared.json()).toMatchObject({ scene: 'NARRATIVE', resourceId: null });
     expect((await app.inject({ method: 'GET', url: `/api/v1/groups/${groupId}/minigames/current`, headers })).json()).toBeNull();
     expect((await app.inject({ method: 'POST', url: `/api/v1/minigames/${minigameId}/end`, headers })).statusCode).toBe(422);
   });
@@ -235,8 +235,8 @@ describe('team draw, prompt decks, and projection controls', () => {
     expect(control.json()).toMatchObject({ scene: 'MINIGAME', resourceId: sessionId, display: { scene: 'MINIGAME' } });
     expect(JSON.stringify(control.json())).not.toMatch(/realName|Private|rtAverage|comments|ownerTeacherId/);
     const cleared = await app.inject({ method: 'POST', url: `/api/v1/teacher/groups/${groupId}/display/clear`, headers });
-    expect(cleared.json()).toMatchObject({ scene: 'IDLE', resourceId: null, display: { scene: 'IDLE', activeEvent: null, activeChallenge: null, minigame: null } });
-    expect((await app.inject({ method: 'GET', url: `/api/v1/projection/groups/${groupId}/display`, headers })).json()).toMatchObject({ scene: 'IDLE', activeEvent: null, activeChallenge: null, minigame: null });
+    expect(cleared.json()).toMatchObject({ scene: 'NARRATIVE', resourceId: null, display: { scene: 'NARRATIVE', activeEvent: null, activeChallenge: null, minigame: null } });
+    expect((await app.inject({ method: 'GET', url: `/api/v1/projection/groups/${groupId}/display`, headers })).json()).toMatchObject({ scene: 'NARRATIVE', activeEvent: null, activeChallenge: null, minigame: null });
     expect((await app.inject({ method: 'GET', url: `/api/v1/groups/${groupId}/minigames/current`, headers })).json()).toBeNull();
     expect((await app.inject({ method: 'POST', url: `/api/v1/minigames/${sessionId}/end`, headers })).statusCode).toBe(422);
     expect((await app.inject({ method: 'GET', url: `/api/v1/groups/${groupId}/events`, headers })).json()).toEqual([expect.objectContaining({ id: event.json().id, status: 'ACTIVE', showOnProjection: false })]);
