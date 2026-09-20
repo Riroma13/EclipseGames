@@ -136,7 +136,19 @@ export type ShowStudentDto = {
   student: ClassroomStudentDto;
   behaviour: { state: ClassroomBehaviourState } | null;
 };
-export type DisplayScene = 'IDLE'|'EVENT'|'CHALLENGE'|'MINIGAME'|'SHOW_STUDENT';
+export type DisplayScene = 'IDLE'|'EVENT'|'CHALLENGE'|'MINIGAME'|'NARRATIVE'|'SHOW_STUDENT';
+export type NarrativeProjectionDto = { title: string; term: 'T1'|'T2'|'T3'; ordinal: number; completedCount: number; totalCount: 9; completed?: true; revealedClues?: string[] };
 export type ClassroomDisplayDto = { scene: DisplayScene; showStudent: ShowStudentDto|null };
+
+export type NarrativeState = 'BLOCKED' | 'AVAILABLE' | 'COMPLETED';
+export type NarrativeMechanicKind = 'CHALLENGE' | 'MINIGAME';
+export type NarrativeClueDto = { ordinal: number; text: string; revealed: boolean };
+export type NarrativeEventDto = {
+  key: string; ordinal: number; title: string; term: 'T1' | 'T2' | 'T3'; state: NarrativeState;
+  startedAt: string | null; mechanicKind: NarrativeMechanicKind | null; mechanicId: string | null; clues: NarrativeClueDto[];
+};
+export type NarrativeStateDto = {
+  revision: number; currentTerm: 'T1' | 'T2' | 'T3'; completedCount: number; archived: boolean; events: NarrativeEventDto[];
+};
 
 export { z };

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { composeNarrative, createNarrativeCompositionPorts, projectionScene, type NarrativeProjectionDto } from '../projection/narrative-composer.js';
 import type Database from 'better-sqlite3';
 import { ApiError } from '../http/errors.js';
 import { runImmediateTransaction } from '../services/transactions.js';
@@ -582,9 +583,9 @@ export function endMinigame(db: Database.Database, teacherId: string, minigameId
   return minigameDto(db, repository.findMinigame(db, teacherId, current.id)!, true);
 }
 
-function projectionState(db: Database.Database, teacherId: string, groupId: string) {
+function projectionState(db: Database.Database, teacherId: string, groupId: string, showStudent: ShowStudentDto | null = null) {
   const group = repository.groupContext(db, teacherId, groupId) ?? notFound('Group not found.');
-  return { teacherId, group, event: repository.projectionEvent(db, teacherId, group.id), challenge: repository.projectionChallenge(db, teacherId, group.id), minigame: currentOpenMinigame(db, teacherId, group.id) };
+  return { teacherId, group, showStudent, event: repository.projectionEvent(db, teacherId, group.id) ?? null, challenge: repository.projectionChallenge(db, teacherId, group.id) ?? null, minigame: currentOpenMinigame(db, teacherId, group.id), narrative: null as NarrativeProjectionDto | null };
 }
 
 function safeTeamAssignments(db: Database.Database, value: repository.MinigameRecord) {
@@ -595,32 +596,35 @@ function safeTeamAssignments(db: Database.Database, value: repository.MinigameRe
   }));
 }
 
-function projectionPayload(db: Database.Database, state: ReturnType<typeof projectionState>, showStudent: ShowStudentDto|null = null) {
+async function projectionPayload(db: Database.Database, state: ReturnType<typeof projectionState>) {
   const safeStudents = repository.listSafeStudents(db, state.group.id);
   const summaries = xp.groupSummaries(db, state.teacherId, state.group.id, state.group.academicYearId).summaries;
   const summaryByStudent = new Map(summaries.map(item => [item.studentId, item.summary]));
   const promptRevealed = state.minigame?.kind !== 'PROMPT_DECK' || state.minigame.promptRevealed === 1;
-    const scene = showStudent !== null ? 'SHOW_STUDENT' as const : state.minigame ? 'MINIGAME' as const : state.challenge ? 'CHALLENGE' as const : state.event ? 'EVENT' as const : 'IDLE' as const;
-  return {
+   state.narrative = await composeNarrative({ groupId: state.group.id, academicYearId: state.group.academicYearId }, createNarrativeCompositionPorts(db, state.teacherId));
+      const scene = projectionScene(state);
+   return {
      scene,
-     showStudent,
+     showStudent: state.showStudent,
     group: { id: state.group.id, name: state.group.name },
     activeEvent: state.event ? { title: state.event.title, description: state.event.description, theme: state.event.theme, status: state.event.status } : null,
-    activeChallenge: state.challenge ? { title: state.challenge.title, description: state.challenge.description, target: state.challenge.target, progress: state.challenge.progress, status: state.challenge.status } : null,
+     activeChallenge: state.challenge ? { title: state.challenge.title, description: state.challenge.description, target: state.challenge.target, progress: state.challenge.progress, status: state.challenge.status } : null,
+     narrative: state.narrative,
      minigame: state.minigame ? { kind: state.minigame.kind, title: state.minigame.title, prompt: state.minigame.kind === 'PROMPT_DECK' && !promptRevealed ? 'Prompt ready.' : state.minigame.prompt, status: state.minigame.status, durationSeconds: state.minigame.durationSeconds, remainingSeconds: state.minigame.remainingSeconds, startedAt: state.minigame.startedAt, selectedAlias: state.minigame.selectedStudentId ? repository.findSafeStudent(db, state.group.id, state.minigame.selectedStudentId)?.alias ?? null : null, ...(state.minigame.kind === 'TEAM_DRAW' ? { teamCount: state.minigame.teamCount, teams: safeTeamAssignments(db, state.minigame) } : {}), ...(state.minigame.kind === 'PROMPT_DECK' ? { promptRevealed } : {}) } : null,
     students: safeStudents.map(student => { const summary = summaryByStudent.get(student.id); return { avatar: student.avatar, alias: student.alias, specialty: student.specialty, xpLevel: summary?.level ?? 1, progressToNextLevel: summary?.progress.current ?? 0, unlockedBadge: summary?.badges[0]?.label ?? null }; }),
   };
 }
 
-export function projectionDisplay(db: Database.Database, teacherId: string, groupId: string, showStudent: ShowStudentDto|null = null) {
-  return projectionPayload(db, projectionState(db, teacherId, groupId), showStudent);
+export async function projectionDisplay(db: Database.Database, teacherId: string, groupId: string, showStudent: ShowStudentDto|null = null) {
+  return projectionPayload(db, projectionState(db, teacherId, groupId, showStudent));
 }
 
-export function projectionControl(db: Database.Database, teacherId: string, groupId: string, showStudent: ShowStudentDto|null = null) {
-  const state = projectionState(db, teacherId, groupId);
-  const display = projectionPayload(db, state, showStudent);
+export async function projectionControl(db: Database.Database, teacherId: string, groupId: string, showStudent: ShowStudentDto|null = null) {
+  const state = projectionState(db, teacherId, groupId, showStudent);
+  const display = projectionPayload(db, state);
   const resource = state.minigame ?? state.challenge ?? state.event;
-  return { scene: display.scene, resourceId: resource?.id ?? null, title: resource?.title ?? null, kind: state.minigame?.kind ?? null, display };
+  const resolved = await display;
+  return { scene: resolved.scene, resourceId: resource?.id ?? null, title: resource?.title ?? resolved.narrative?.title ?? null, kind: state.minigame?.kind ?? null, display: resolved };
 }
 
 export function clearProjection(db: Database.Database, teacherId: string, groupId: string) {

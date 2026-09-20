@@ -28,6 +28,7 @@ import { registerAvatarRoutes } from './avatar-core/routes.js';
 import { registerBoutiqueRoutes } from './boutique/routes.js';
 import { registerHistoryRoutes } from './history/routes.js';
 import { createHistoryCursorCodec } from './history/cursor.js';
+import { registerNarrativeRoutes } from './narrative/routes.js';
 
 type ServerOptions = {
   logger?: boolean;
@@ -73,6 +74,7 @@ export function createServer(databaseUrl = databasePathFromEnv(), options: Serve
     registerGemRoutes(instance, db.database, cursorCodec);
       registerBoutiqueRoutes(instance, db.database);
       registerHistoryRoutes(instance, db.database, createHistoryCursorCodec(parseCursorKeys(process.env.GEM_CURSOR_KEYS, 'history')));
+     registerNarrativeRoutes(instance, db.database);
   });
   app.get('/health', async () => ({ status: 'ok' }));
   app.get('/api/v1/health', async () => ({ status: 'ok' }));

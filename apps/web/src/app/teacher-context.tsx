@@ -57,8 +57,8 @@ export function useTeacherContext(): TeacherContext {
       && contextFromUrl().yearId === requestContext.yearId
       && contextFromUrl().groupId === requestContext.groupId;
     setLoading(true);
-    workspaceApi.years(false, controller.signal).then(async values => {
-      const available = values.length ? values : await workspaceApi.years(true, controller.signal);
+    workspaceApi.years(Boolean(requestContext.yearId), controller.signal).then(values => {
+      const available = values;
       if (!isCurrent()) return;
       setYears(available);
       const chosen = available.find(value => value.id === requestContext.yearId) ?? available[0] ?? null;

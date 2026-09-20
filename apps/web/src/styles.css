@@ -27,6 +27,27 @@
 
 * { box-sizing: border-box; }
 body { min-width: 320px; margin: 0; background: var(--ivory); color: var(--ink); }
+
+.narrative-workspace { display: grid; gap: 1.25rem; }
+.narrative-progress { display: flex; align-items: end; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--line); padding-bottom: 1.25rem; }
+.narrative-progress h1 { font-size: clamp(2rem, 5vw, 3.6rem); }
+.narrative-progress > strong { color: var(--brass-deep); font-size: 2rem; }
+.narrative-current { display: grid; gap: .8rem; border-left: 4px solid var(--brass); }
+.narrative-current h2 { font-size: 1.8rem; }
+.narrative-mechanic { color: var(--brass-deep); font-weight: 750; }
+.narrative-controls { display: grid; gap: 1rem; }
+.narrative-controls label { display: grid; gap: .35rem; max-width: 34rem; font-weight: 700; }
+.narrative-controls input { min-width: 0; padding: .65rem; border: 1px solid var(--line); border-radius: .35rem; background: var(--paper); }
+.narrative-clues { display: grid; gap: .45rem; padding: .8rem; background: var(--parchment); border-radius: .35rem; }
+.narrative-clues h3, .narrative-clues p { margin: 0; }
+.narrative-timeline { display: grid; gap: .55rem; }
+.narrative-event { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .8rem 1rem; border: 1px solid var(--line); border-radius: .4rem; background: var(--paper); }
+.narrative-event > div { display: flex; align-items: center; gap: .8rem; }
+.narrative-event h3, .narrative-event p { margin: 0; }
+.narrative-event p { color: var(--muted); font-size: .85rem; }
+.narrative-ordinal { display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 50%; background: var(--eclipse); color: white; font-weight: 800; }
+.narrative-event.is-blocked { opacity: .62; }
+.narrative-event.is-completed { border-color: var(--success); }
 button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 
